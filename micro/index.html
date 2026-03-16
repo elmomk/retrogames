@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Micro Mages JS Preview</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #0f0f19; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; font-family: 'Courier New', Courier, monospace; touch-action: none; }
+        canvas { background-color: #0f0f19; box-shadow: 0 0 20px rgba(0,0,0,0.8); image-rendering: pixelated; max-width: 100%; max-height: 100vh; }
+        .controls { position: absolute; bottom: 20px; display: flex; width: 100%; max-width: 640px; justify-content: space-between; align-items: flex-end; padding: 0 30px; box-sizing: border-box; pointer-events: none; }
+        #joystickZone { position: absolute; top: 0; left: 0; width: 50vw; height: 100vh; z-index: 10; }
+        #joystickBase { position: absolute; width: 100px; height: 100px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.3); display: none; pointer-events: none; transform: translate(-50%, -50%); }
+        #joystickStick { position: absolute; width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.5); top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        .action-btns { display: flex; gap: 15px; pointer-events: auto; z-index: 11; margin-bottom: 10px; }
+        .btn { background: rgba(255, 255, 255, 0.2); border: 2px solid rgba(255, 255, 255, 0.5); color: white; font-size: 24px; width: 60px; height: 60px; border-radius: 30px; display: flex; align-items: center; justify-content: center; user-select: none; font-weight: bold; }
+        .btn:active { background: rgba(255, 255, 255, 0.5); }
+        #btnB { background: rgba(100, 255, 100, 0.4); margin-top: 20px; } 
+        #btnA { background: rgba(255, 100, 100, 0.4); }
+        @media (hover: hover) and (pointer: fine) { .controls { display: none; } #joystickZone { display: none; } }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas" width="640" height="480"></canvas>
+    <div id="joystickZone"><div id="joystickBase"><div id="joystickStick"></div></div></div>
+    <div class="controls"><div></div><div class="action-btns"><div class="btn" id="btnB">B</div><div class="btn" id="btnA">A</div></div></div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+
+        // --- CONSTANTS ---
+        const GRAVITY = 0.35; const MAX_FALL_SPEED = 7.0; const WALL_SLIDE_SPEED = 1.5;
+        const MOVE_SPEED = 3.5; const JUMP_FORCE = -7.0; const BOUNCE_FORCE = -6.0;
+        const WALL_JUMP_Y = -6.5; const WALL_JUMP_X = 6.0; const LAVA_SPEED = 0.3; 
+        const BULLET_SPEED = 10; const ENEMY_BULLET_SPEED = 4.0; const ANCHOR_SPEED = 15; const CLIMB_SPEED = 3.0;
+        const TILE_SIZE = 20;
+
+        // --- ASSETS ---
+        function createSprite(art, colors) {
+            const size = 8; const offscreen = document.createElement('canvas'); offscreen.width = size; offscreen.height = size; const octx = offscreen.getContext('2d');
+            for (let y = 0; y < size; y++) { for (let x = 0; x < size; x++) {
+                const ch = art[y][x]; if (ch !== '.') { octx.fillStyle = colors[parseInt(ch, 10) - 1]; octx.fillRect(x, y, 1, 1); }
+            }} return offscreen;
+        }
+
+        const mageTex = createSprite(["..1111..",".122221.","13122131","13322331",".122221.","..1111..",".121121.","12211221"], ['#000000', '#00FFFF', '#FFFFFF']);
+        const brickTex = createSprite(["22222221","33333331","33333331","11111111","22212222","33313333","33313333","11111111"], ['rgb(30,30,50)', 'rgb(100,100,140)', 'rgb(70,70,100)']);
+        const stoneTex = createSprite(["12222221","23313332","23133132","21333312","23313332","23133132","23333332","12222221"], ['#333333', '#555555', '#777777']);
+        const chestTex = createSprite(["11111111","12222221","12122121","12222221","11111111","12222221","12222221","11111111"], ['#000000', '#8B4513']);
+        const bgTex = createSprite(["1.......","......2.","...1....","........","......1.",".2......","........","....1..."], ['rgb(40,40,60)', 'rgb(60,60,80)']);
+        
+        const bulletTex = createSprite(["........","...11...","..1221..",".123321.","..1221..","...11...","........","........"], ['#ff0000', '#ffaa00', '#ffffff']);
+        const enemyBulletTex = createSprite(["........","...11...","..1221..",".122221.","..1221..","...11...","........","........"], ['#aa00ff', '#ffffff']);
+        const anchorTex = createSprite(["...11...","..1221..",".122221.","12222221",".122221.","..1221..","...11...","........"], ['#ffffff', '#aaaaaa']);
+        
+        const patrolTex = createSprite(["..1111..",".122221.","12322321","12222221","12211221","121..121","11....11","........"], ['#000000', '#ff00ff', '#ffffff']);
+        const batTex = createSprite(["1......1","11....11","121..121",".111111.","..1111..",".1.11.1.","1......1","........"], ['#000000', '#ff2222']);
+        const turretTex = createSprite(["..1111..",".122221.",".131131.","11333311",".122221.",".122221.",".111111.","11111111"], ['#000000', '#22ff22', '#ff0000']);
+        
+        const goalTex = createSprite(["...11...","..1221..",".123321.","12333321","12333321",".123321.","..1221..","...11..."], ['#ffaa00', '#ffff00', '#ffffff']);
+        const gemTex = createSprite(["........",".111111.","11222211","12233221",".122221.","..1221..","...11...","........"], ['#000000', '#00ffff', '#ffffff']);
+
+        // --- GAME STATE ---
+        let gameState = 'START'; 
+        let score = 0;
+        let currentLevel = 0;
+        
+        let player, bullets, enemyBullets, enemies, gems, lavaY, cameraY, platforms, anchor, particles, popups;
+        let coyoteFrames = 0; let jumpBufferFrames = 0;
+
+        // Tilemap Strings (.=empty, #=brick, %=stone, C=chest, G=gem, P=Patrol, B=Bat, T=Turret)
+        const levelMaps = [
+            [   // LEVEL 1
+                "################################",
+                "#..............................#",
+                "#.............Goal.............#",
+                "#.............####.............#",
+                "#..............................#",
+                "#......####..........####......#",
+                "#%%%............B...........%%%#",
+                "#%%%........................%%%#",
+                "#............######............#",
+                "#......###............###......#",
+                "#........T.......C.............#",
+                "#............######............#",
+                "#.......G......................#",
+                "#......####..........####......#",
+                "################################",
+                "#%%%........................%%%#",
+                "#%%%.....C......B...........%%%#",
+                "#%%%........................%%%#",
+                "#...........########...........#",
+                "#.........P..........P.........#",
+                "#..............................#",
+                "#....#####............#####....#",
+                "#..........................G...#",
+                "#%%%........................%%%#",
+                "#%%%..................C.....%%%#",
+                "#%%%........................%%%#",
+                "#...........########...........#",
+                "#................T.............#",
+                "#..............................#",
+                "#..........P...................#",
+                "#..............................#",
+                "################################"
+            ],
+            [   // LEVEL 2
+                "################################",
+                "#..............................#",
+                "#.............Goal.............#",
+                "#.............####.............#",
+                "#..............................#",
+                "#........B............B........#",
+                "#..####........C.........####..#",
+                "#..............................#",
+                "#........T............T........#",
+                "#......######......######......#",
+                "#..............................#",
+                "#..G...C.......P.......C...G...#",
+                "#...#######..........#######...#",
+                "#..............................#",
+                "#%%%........................%%%#",
+                "#%%%...........B............%%%#",
+                "#%%%........................%%%#",
+                "#...........########...........#",
+                "#..............................#",
+                "#..............................#",
+                "#....#####............#####....#",
+                "#...........G......G...........#",
+                "#...T......##########......T...#",
+                "#..............................#",
+                "#.........P..........P.........#",
+                "#..............................#",
+                "################################"
+            ]
+        ];
+
+        function resetGame(fullReset = false) {
+            if (fullReset) { score = 0; currentLevel = 0; }
+            
+            player = { x: 300, y: 0, w: 24, h: 24, vx: 0, vy: 0, onGround: false, wallDir: 0, facingRight: true, jumps: 0, maxJumps: 2 };
+            bullets = []; enemyBullets = []; particles = []; popups = []; gems = [];
+            anchor = { active: false, isAttached: false, x: 0, y: 0, vx: 0, vy: 0, length: 0, w: 16, h: 16 };
+            keys.anchor_fired = false;
+            
+            platforms = []; enemies = [];
+            
+            const mapStr = levelMaps[currentLevel];
+            const mapHeight = mapStr.length;
+            const startY = - (mapHeight * TILE_SIZE) + 480; 
+            
+            for (let row = 0; row < mapHeight; row++) {
+                for (let col = 0; col < 32; col++) {
+                    const char = mapStr[row][col];
+                    const px = col * TILE_SIZE; const py = startY + (row * TILE_SIZE);
+                    
+                    if (char === '#') platforms.push({ x: px, y: py, w: TILE_SIZE, h: TILE_SIZE, type: 'brick' });
+                    else if (char === '%') platforms.push({ x: px, y: py, w: TILE_SIZE, h: TILE_SIZE, type: 'stone' });
+                    else if (char === 'C') platforms.push({ x: px, y: py, w: TILE_SIZE, h: TILE_SIZE, type: 'chest' });
+                    else if (char === 'P') enemies.push({ type: 'patrol', x: px, y: py, w: TILE_SIZE, h: TILE_SIZE, vx: 1.5, startX: px, range: 40 });
+                    else if (char === 'B') enemies.push({ type: 'bat', x: px, y: py, w: TILE_SIZE, h: TILE_SIZE, vx: 0, vy: 0 });
+                    else if (char === 'T') enemies.push({ type: 'turret', x: px, y: py, w: TILE_SIZE, h: TILE_SIZE, shootTimer: Math.random() * 60 });
+                    else if (char === 'G') gems.push({ x: px + 2, y: py + 2, w: 16, h: 16, vx: 0, vy: 0 });
+                }
+            }
+
+            player.y = startY + (mapHeight * TILE_SIZE) - 60;
+            lavaY = player.y + 400; cameraY = player.y - 200;
+            gameState = 'PLAYING';
+        }
+
+        function addScore(amount, x, y) {
+            score += amount;
+            popups.push({ text: `+${amount}`, x: x, y: y, life: 30 });
+        }
+
+        // --- INPUT HANDLING ---
+        const keys = { right: false, left: false, up: false, down: false, jumpPressed: false, shootPressed: false, b_down: false, b_time: 0, anchor_fired: false };
+
+        function pressB() { if (!keys.b_down) { keys.b_down = true; keys.b_time = Date.now(); jumpBufferFrames = 6; } }
+        function releaseB() { keys.b_down = false; }
+        function pressA() { keys.shootPressed = true; }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = true;
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = true;
+            if (e.code === 'ArrowUp' || e.code === 'KeyW') keys.up = true;
+            if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.down = true;
+            if (e.code === 'Space' || e.code === 'KeyZ' || e.code === 'KeyK') pressB();
+            if (e.code === 'KeyX' || e.code === 'KeyJ' || e.code === 'ShiftLeft') pressA();
+        });
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') keys.right = false;
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') keys.left = false;
+            if (e.code === 'ArrowUp' || e.code === 'KeyW') keys.up = false;
+            if (e.code === 'ArrowDown' || e.code === 'KeyS') keys.down = false;
+            if (e.code === 'Space' || e.code === 'KeyZ' || e.code === 'KeyK') releaseB();
+        });
+
+        // Touch Setup
+        const joyZone = document.getElementById('joystickZone'); const joyBase = document.getElementById('joystickBase'); const joyStick = document.getElementById('joystickStick');
+        let joyActive = false; let joyStart = { x: 0, y: 0 };
+        joyZone.addEventListener('touchstart', (e) => { e.preventDefault(); joyActive = true; const touch = e.changedTouches[0]; joyStart = { x: touch.clientX, y: touch.clientY }; joyBase.style.display = 'block'; joyBase.style.left = joyStart.x + 'px'; joyBase.style.top = joyStart.y + 'px'; joyStick.style.transform = `translate(-50%, -50%)`; });
+        joyZone.addEventListener('touchmove', (e) => { if (!joyActive) return; e.preventDefault(); const touch = e.changedTouches[0]; const dx = touch.clientX - joyStart.x; const dy = touch.clientY - joyStart.y; const distance = Math.min(Math.sqrt(dx*dx + dy*dy), 40); const angle = Math.atan2(dy, dx); joyStick.style.transform = `translate(calc(-50% + ${Math.cos(angle)*distance}px), calc(-50% + ${Math.sin(angle)*distance}px))`; const deadzone = 15; keys.right = dx > deadzone; keys.left = dx < -deadzone; keys.down = dy > deadzone; keys.up = dy < -deadzone; });
+        const resetJoy = () => { joyActive = false; joyBase.style.display = 'none'; keys.right = keys.left = keys.up = keys.down = false; }; joyZone.addEventListener('touchend', resetJoy); joyZone.addEventListener('touchcancel', resetJoy);
+        document.getElementById('btnB').addEventListener('touchstart', (e) => { e.preventDefault(); pressB(); }); document.getElementById('btnB').addEventListener('touchend', (e) => { e.preventDefault(); releaseB(); }); document.getElementById('btnA').addEventListener('touchstart', (e) => { e.preventDefault(); pressA(); });
+
+        function overlaps(r1, r2) { return r1.x < r2.x + r2.w && r1.x + r1.w > r2.x && r1.y < r2.y + r2.h && r1.y + r1.h > r2.y; }
+        function getTrajectory(speed) {
+            let vx = 0; let vy = 0;
+            if (keys.up && keys.right) { vx = speed; vy = -speed; } else if (keys.up && keys.left) { vx = -speed; vy = -speed; } else if (keys.down && keys.right) { vx = speed; vy = speed; } else if (keys.down && keys.left) { vx = -speed; vy = speed; } else if (keys.up) { vx = 0; vy = -speed; } else if (keys.down) { vx = 0; vy = speed; } else if (keys.right) { vx = speed; vy = 0; } else if (keys.left) { vx = -speed; vy = 0; } else { vx = player.facingRight ? speed : -speed; vy = 0; } return {vx, vy};
+        }
+
+        let lastTime = 0; const TIME_STEP = 1000 / 60; let accumulator = 0;
+        function gameLoop(timestamp) {
+            let dt = timestamp - lastTime; lastTime = timestamp; if (dt > 250) dt = 250; accumulator += dt;
+            while (accumulator >= TIME_STEP) {
+                if (gameState === 'PLAYING') updatePhysics();
+                else if (jumpBufferFrames > 0 || keys.shootPressed) { resetGame(gameState === 'GAMEOVER' || gameState === 'WIN'); jumpBufferFrames = 0; keys.shootPressed = false; }
+                accumulator -= TIME_STEP;
+            }
+            draw(); requestAnimationFrame(gameLoop);
+        }
+
+        function updatePhysics() {
+            if (player.onGround) coyoteFrames = 6; else coyoteFrames--;
+            if (jumpBufferFrames > 0) jumpBufferFrames--;
+
+            // --- ANCHOR LOGIC ---
+            if (keys.b_down && !anchor.active && !keys.anchor_fired && (Date.now() - keys.b_time > 150)) {
+                let traj = getTrajectory(ANCHOR_SPEED); anchor.active = true; anchor.isAttached = false; keys.anchor_fired = true;
+                anchor.x = player.x + player.w / 2 - anchor.w / 2; anchor.y = player.y + player.h / 2 - anchor.h / 2;
+                anchor.vx = traj.vx; anchor.vy = traj.vy;
+            }
+            if (!keys.b_down) {
+                keys.anchor_fired = false;
+                if (anchor.active) { anchor.active = false; if (anchor.isAttached) { player.vy = JUMP_FORCE * 0.8; player.jumps = 1; anchor.isAttached = false; coyoteFrames = 0; } }
+            }
+
+            if (anchor.active && !anchor.isAttached) {
+                anchor.x += anchor.vx; anchor.y += anchor.vy;
+                let hitSolid = false;
+                for (let i = platforms.length - 1; i >= 0; i--) {
+                    let p = platforms[i];
+                    if (overlaps(anchor, p)) {
+                        if (p.type === 'stone' || p.type === 'chest') { 
+                            if (p.type === 'chest') {
+                                // Chests drop gems!
+                                gems.push({ x: p.x + 2, y: p.y, w: 16, h: 16, vx: (Math.random()-0.5)*4, vy: -5 });
+                            }
+                            platforms.splice(i, 1); 
+                            for(let k=0; k<6; k++) particles.push({ x: p.x+10, y: p.y+10, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, life: 15+Math.random()*15, color: p.type === 'chest' ? '#8B4513' : '#777777' });
+                            anchor.active = false;
+                        } 
+                        else {
+                            hitSolid = true; anchor.isAttached = true; 
+                            anchor.length = Math.sqrt(Math.pow((player.x + player.w/2) - anchor.x, 2) + Math.pow((player.y + player.h/2) - anchor.y, 2));
+                            break;
+                        }
+                    }
+                }
+                if (!hitSolid && Math.sqrt(Math.pow((player.x + player.w/2) - anchor.x, 2) + Math.pow((player.y + player.h/2) - anchor.y, 2)) > 300) anchor.active = false; 
+            }
+
+            // --- ITEMS / PARTICLES ---
+            for(let i=particles.length-1; i>=0; i--) {
+                let p = particles[i]; p.x += p.vx; p.y += p.vy; p.vy += GRAVITY; p.life--;
+                if(p.life <= 0) particles.splice(i, 1);
+            }
+            
+            for(let i=popups.length-1; i>=0; i--) {
+                let p = popups[i]; p.y -= 1; p.life--;
+                if (p.life <= 0) popups.splice(i, 1);
+            }
+  // --- PLAYER MOVEMENT ---
+            let targetVx = 0;
+            if (keys.right) { targetVx = MOVE_SPEED; player.facingRight = true; }
+            if (keys.left) { targetVx = -MOVE_SPEED; player.facingRight = false; }
+            if (anchor.isAttached) {
+                player.vx += targetVx * 0.05; 
+                if (keys.up && anchor.length > 20) anchor.length -= CLIMB_SPEED;
+                if (keys.down && anchor.length < 300) anchor.length += CLIMB_SPEED;
+            } else { player.vx = player.onGround ? targetVx : player.vx * 0.8 + targetVx * 0.2; }
+
+            player.x += player.vx; player.wallDir = 0;
+            for (let p of platforms) {
+                if (overlaps(player, p)) {
+                    if (player.vx > 0) { player.x = p.x - player.w; player.vx = 0; player.wallDir = 1; } 
+                    else if (player.vx < 0) { player.x = p.x + p.w; player.vx = 0; player.wallDir = -1; }
+                }
+            }
+            if (player.x > canvas.width) player.x = -player.w; if (player.x < -player.w) player.x = canvas.width;
+
+            player.vy += GRAVITY;
+            if (player.wallDir !== 0 && player.vy > 0 && !anchor.isAttached) {
+                if (player.vy > WALL_SLIDE_SPEED) player.vy = WALL_SLIDE_SPEED;
+            } else { if (player.vy > MAX_FALL_SPEED) player.vy = MAX_FALL_SPEED; }
+
+            player.y += player.vy; player.onGround = false;
+            for (let p of platforms) {
+                if (overlaps(player, p)) {
+                    if (player.vy > 0) { player.y = p.y - player.h; player.vy = 0; player.onGround = true; player.jumps = 0; } 
+                    else if (player.vy < 0) { player.y = p.y + p.h; player.vy = 0; }
+                }
+            }
+
+            if (anchor.isAttached) {
+                let dx = (player.x + player.w/2) - anchor.x; let dy = (player.y + player.h/2) - anchor.y; let dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist > anchor.length) {
+                    let diff = dist - anchor.length; let nx = dx / dist; let ny = dy / dist;
+                    player.x -= nx * diff; player.y -= ny * diff;
+                    let dot = player.vx * nx + player.vy * ny; player.vx -= dot * nx; player.vy -= dot * ny;
+                    player.vx *= 0.99; player.vy *= 0.99; 
+                }
+            }
+
+            if (jumpBufferFrames > 0) {
+                if (anchor.isAttached) { }
+                else if (coyoteFrames > 0) { player.vy = JUMP_FORCE; player.jumps = 1; coyoteFrames = 0; jumpBufferFrames = 0; } 
+                else if (player.wallDir !== 0) { player.vy = WALL_JUMP_Y; player.vx = -player.wallDir * WALL_JUMP_X; player.facingRight = player.wallDir === -1; player.jumps = 1; jumpBufferFrames = 0; } 
+                else if (player.jumps < player.maxJumps) { player.vy = JUMP_FORCE; player.jumps++; jumpBufferFrames = 0; }
+            }
+            // --- SHOOTING ---
+            if (keys.shootPressed) {
+                let traj = getTrajectory(BULLET_SPEED); bullets.push({ x: player.x + player.w/2 - 4, y: player.y + player.h/2 - 4, vx: traj.vx, vy: traj.vy, w: 8, h: 8 }); keys.shootPressed = false;
+            }
+
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                let b = bullets[i]; b.x += b.vx; b.y += b.vy; let hit = false;
+                for (let p of platforms) { if (overlaps(b, p) && p.type !== 'stone' && p.type !== 'chest') { hit = true; break; } }
+                
+                let hitEnemy = false;
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    if (overlaps(b, enemies[j])) {
+                        let e = enemies[j];
+                        enemies.splice(j, 1); hitEnemy = true;
+                        addScore(100, e.x, e.y); // POINTS!
+                        for(let k=0; k<5; k++) particles.push({ x: b.x, y: b.y, vx: (Math.random()-0.5)*6, vy: (Math.random()-0.5)*6, life: 15, color: '#ff00ff' });
+                        break; 
+                    }
+                }
+                if (hit || hitEnemy || b.x > canvas.width || b.x < -b.w || b.y < cameraY - 100 || b.y > cameraY + canvas.height + 100) bullets.splice(i, 1);
+            }
+
+            // --- ENEMY LOGIC ---
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                let e = enemies[i];
+                if (e.type === 'patrol') {
+                    e.x += e.vx; if (e.x > e.startX + e.range || e.x < e.startX - e.range) e.vx *= -1; 
+                } 
+                else if (e.type === 'bat') {
+                    let dx = player.x - e.x; let dy = player.y - e.y; let dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist < 250) { e.x += (dx / dist) * 1.2; e.y += (dy / dist) * 1.2; }
+                }
+                else if (e.type === 'turret') {
+                    e.shootTimer++;
+                    if (e.shootTimer > 90) {
+                        let dx = player.x - e.x; let dy = player.y - e.y; let dist = Math.sqrt(dx*dx + dy*dy);
+                        if (dist < 300) enemyBullets.push({ x: e.x + e.w/2 - 4, y: e.y + e.h/2 - 4, vx: (dx / dist) * ENEMY_BULLET_SPEED, vy: (dy / dist) * ENEMY_BULLET_SPEED, w: 8, h: 8 });
+                        e.shootTimer = 0;
+                    }
+                }
+
+                if (overlaps(player, e)) {
+                    if (player.vy > 0 && player.y + player.h < e.y + e.h / 2 + 5 && e.type !== 'turret') {
+                        player.vy = BOUNCE_FORCE; player.jumps = 1; enemies.splice(i, 1); 
+                        addScore(100, e.x, e.y); // POINTS!
+                        for(let k=0; k<5; k++) particles.push({ x: e.x+10, y: e.y+10, vx: (Math.random()-0.5)*6, vy: (Math.random()-0.5)*6, life: 15, color: '#ff00ff' });
+                    } else {
+                        gameState = 'GAMEOVER';
+                    }
+                }
+            }
+
+            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                let b = enemyBullets[i]; b.x += b.vx; b.y += b.vy; let hitWall = false;
+                for (let p of platforms) { if (overlaps(b, p) && p.type !== 'stone' && p.type !== 'chest') { hitWall = true; break; } }
+                if (overlaps(b, player)) gameState = 'GAMEOVER';
+                if (hitWall || b.x > canvas.width || b.x < -b.w || b.y < cameraY - 100 || b.y > cameraY + canvas.height + 100) enemyBullets.splice(i, 1);
+            }
+
+            lavaY -= LAVA_SPEED;
+            if (player.y + player.h > lavaY) gameState = 'GAMEOVER'; 
+            
+            // GOAL COLLISION & LEVEL TRANSITION
+            const mapHeight = levelMaps[currentLevel].length;
+            const startY = - (mapHeight * TILE_SIZE) + 480; 
+            const goalRect = { x: 280, y: startY + (2 * TILE_SIZE), w: 30, h: 30 }; // Match goal position in map
+            
+            if (overlaps(player, goalRect)) {
+                currentLevel++;
+                if (currentLevel >= levelMaps.length) {
+                    gameState = 'WIN';
+                } else {
+                    resetGame(false); // Reset level physics but keep score
+                }
+            }
+
+            const targetCameraY = player.y - canvas.height * 0.6; cameraY += (targetCameraY - cameraY) * 0.1;
+            if (cameraY > lavaY - canvas.height + 100) cameraY = lavaY - canvas.height + 100;
+        }
+        function draw() {
+            ctx.fillStyle = 'rgb(15, 15, 25)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            const bgSize = 64; const startYBg = Math.floor((cameraY * 0.5) / bgSize) - 1;
+            for (let y = startYBg; y < startYBg + 12; y++) { for (let x = 0; x < 12; x++) { ctx.drawImage(bgTex, x * bgSize, (y * bgSize) - (cameraY * 0.5), bgSize, bgSize); } }
+
+            for (let p of platforms) {
+                if (p.y > cameraY - TILE_SIZE && p.y < cameraY + canvas.height + TILE_SIZE) {
+                    let tex = brickTex;
+                    if (p.type === 'stone') tex = stoneTex;
+                    if (p.type === 'chest') tex = chestTex;
+                    ctx.drawImage(tex, p.x, p.y - cameraY, TILE_SIZE, TILE_SIZE);
+                }
+            }
+            
+            for(let p of particles) { ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y - cameraY, 4, 4); }
+            for(let g of gems) { ctx.drawImage(gemTex, g.x, g.y - cameraY, g.w, g.h); }
+
+            for (let b of bullets) { ctx.save(); ctx.translate(b.x + b.w/2, b.y - cameraY + b.h/2); ctx.rotate(Math.atan2(b.vy, b.vx)); ctx.drawImage(bulletTex, -b.w/2, -b.h/2, b.w, b.h); ctx.restore(); }
+            for (let b of enemyBullets) { ctx.save(); ctx.translate(b.x + b.w/2, b.y - cameraY + b.h/2); ctx.rotate(Math.atan2(b.vy, b.vx)); ctx.drawImage(enemyBulletTex, -b.w/2, -b.h/2, b.w, b.h); ctx.restore(); }
+
+            for (let e of enemies) {
+                ctx.save(); ctx.translate(e.x + e.w/2, e.y - cameraY + e.h/2);
+                let tex = patrolTex; if (e.type === 'bat') tex = batTex; if (e.type === 'turret') tex = turretTex;
+                if (e.vx > 0 || (e.type==='bat' && player.x > e.x)) ctx.scale(-1, 1); 
+                ctx.drawImage(tex, -e.w/2, -e.h/2, e.w, e.h); ctx.restore();
+            }
+
+            if (anchor.active || anchor.isAttached) { ctx.beginPath(); ctx.moveTo(player.x + player.w/2, player.y + player.h/2 - cameraY); ctx.lineTo(anchor.x + anchor.w/2, anchor.y + anchor.h/2 - cameraY); ctx.strokeStyle = "rgba(255, 255, 255, 0.5)"; ctx.lineWidth = 2; ctx.stroke(); ctx.drawImage(anchorTex, anchor.x, anchor.y - cameraY, anchor.w, anchor.h); }
+            if (gameState === 'PLAYING' || gameState === 'WIN') { ctx.save(); ctx.translate(player.x + player.w/2, player.y - cameraY + player.h/2); if (!player.facingRight) ctx.scale(-1, 1); ctx.drawImage(mageTex, -player.w/2, -player.h/2, player.w, player.h); ctx.restore(); }
+
+            // Draw Goal Portal
+            const mapHeight = levelMaps[currentLevel].length;
+            const startY = - (mapHeight * TILE_SIZE) + 480; 
+            ctx.drawImage(goalTex, 280, startY + (2 * TILE_SIZE) - cameraY, 30, 30);
+
+            ctx.fillStyle = 'rgba(255, 60, 0, 0.85)'; ctx.fillRect(0, lavaY - cameraY, canvas.width, canvas.height); ctx.fillStyle = 'rgba(255, 150, 0, 0.9)'; ctx.fillRect(0, lavaY - cameraY, canvas.width, 10);
+            
+            // HUD (Score, Level, Popups)
+            for(let p of popups) {
+                ctx.fillStyle = `rgba(255, 255, 255, ${p.life / 30})`;
+                ctx.font = 'bold 16px monospace';
+                ctx.fillText(p.text, p.x + 10, p.y - cameraY);
+            }
+
+            ctx.fillStyle = 'white'; 
+            if (gameState === 'PLAYING') {
+                ctx.textAlign = 'left'; ctx.font = 'bold 20px monospace';
+                ctx.fillText(`SCORE: ${score}`, 20, 40);
+                ctx.textAlign = 'right';
+                ctx.fillText(`LEVEL: ${currentLevel + 1}`, canvas.width - 20, 40);
+            }
+
+            // Screen Overlays
+            ctx.textAlign = 'center';
+            if (gameState === 'START') { ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = 'white'; ctx.font = 'bold 36px monospace'; ctx.fillText("MICRO MAGES PROTOTYPE", canvas.width/2, canvas.height/2 - 20); ctx.font = '20px monospace'; ctx.fillText("Press B/Z/Space to Start", canvas.width/2, canvas.height/2 + 30); ctx.fillText("A(X)=Fire | B(Z)=Jump | Hold B=Rope", canvas.width/2, canvas.height/2 + 70); } 
+            else if (gameState === 'GAMEOVER') { ctx.fillStyle = 'rgba(200, 0, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = 'white'; ctx.font = 'bold 48px monospace'; ctx.fillText("YOU DIED", canvas.width/2, canvas.height/2 - 20); ctx.font = '24px monospace'; ctx.fillText(`FINAL SCORE: ${score}`, canvas.width/2, canvas.height/2 + 30); ctx.fillText("Press B/Z to Restart", canvas.width/2, canvas.height/2 + 70); }
+            else if (gameState === 'WIN') { ctx.fillStyle = 'rgba(0, 200, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = 'white'; ctx.font = 'bold 48px monospace'; ctx.fillText("YOU SURVIVED!", canvas.width/2, canvas.height/2 - 20); ctx.font = '24px monospace'; ctx.fillText(`FINAL SCORE: ${score}`, canvas.width/2, canvas.height/2 + 30); ctx.fillText("Press B/Z to Play Again", canvas.width/2, canvas.height/2 + 70); }
+        }
+
+        resetGame(true); requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
+
+
+
+            for(let i=gems.length-1; i>=0; i--) {
+                let g = gems[i]; g.vy += GRAVITY; g.x += g.vx; g.y += g.vy;
+                for(let p of platforms) {
+                    if (overlaps(g, p) && p.type !== 'stone' && p.type !== 'chest') {
+                        if (g.vy > 0 && g.y < p.y) { g.y = p.y - g.h; g.vy = -g.vy * 0.5; g.vx *= 0.8; }
+                    }
+                }
+                if (overlaps(player, g)) {
+                    addScore(50, g.x, g.y);
+                    gems.splice(i, 1);
+                }
+            }
+
+  
