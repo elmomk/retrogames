@@ -1,0 +1,214 @@
+name: Build and Publish Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+    paths:
+      - 'miyoo/**'
+  workflow_dispatch:
+
+jobs:
+  check-miyoo-changes:
+    name: Check Miyoo Changes
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.filter.outputs.should_run }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect Miyoo Changes
+        id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA")"
+          if grep -q '^miyoo/' <<< "$changed_files"; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "No miyoo/ changes detected for $GITHUB_SHA"
+          echo "should_run=false" >> "$GITHUB_OUTPUT"
+
+  discover-games:
+    name: Discover Miyoo Games
+    runs-on: ubuntu-latest
+    needs: check-miyoo-changes
+    if: needs.check-miyoo-changes.outputs.should_run == 'true'
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
+      game_count: ${{ steps.discover.outputs.game_count }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Discover Game Directories
+        id: discover
+        shell: bash
+        run: |
+          python3 <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import pathlib
+          import sys
+
+          miyoo_root = pathlib.Path("miyoo")
+          if not miyoo_root.is_dir():
+              print("::error::Expected a miyoo directory containing one subdirectory per game.")
+              sys.exit(1)
+
+          games = sorted(path.name for path in miyoo_root.iterdir() if path.is_dir())
+          if not games:
+              print("::error::No game directories found under miyoo/.")
+              sys.exit(1)
+
+          print(f"matrix={json.dumps({'game': games})}")
+          print(f"game_count={len(games)}")
+          PY
+
+  build-miyoo:
+    name: Build ${{ matrix.game }} Miyoo Binary
+    runs-on: ubuntu-latest
+    needs: discover-games
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.discover-games.outputs.matrix) }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: armv7-unknown-linux-gnueabihf
+
+      - name: Install ARM Cross-Compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-linux-gnueabihf
+
+      - name: Build Release Binary
+        id: package
+        shell: bash
+        env:
+          GAME_NAME: ${{ matrix.game }}
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+        run: |
+          set -euo pipefail
+
+          game_dir="miyoo/$GAME_NAME"
+          if [[ ! -f "$game_dir/Cargo.toml" ]]; then
+            echo "::error::Expected $game_dir/Cargo.toml for game $GAME_NAME"
+            exit 1
+          fi
+
+          pushd "$game_dir" > /dev/null
+          cargo build --release --target armv7-unknown-linux-gnueabihf
+
+          metadata_file="$(mktemp)"
+          cargo metadata --format-version 1 --no-deps > "$metadata_file"
+          binary_name="$(python3 - "$metadata_file" <<'PY'
+          import json
+          import os
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              data = json.load(handle)
+
+          manifest_path = os.path.normpath(os.path.join(os.getcwd(), "Cargo.toml"))
+          package = next(
+              (pkg for pkg in data["packages"] if os.path.normpath(pkg["manifest_path"]) == manifest_path),
+              None,
+          )
+          if package is None:
+              if len(data["packages"]) == 1:
+                  package = data["packages"][0]
+              else:
+                  raise SystemExit("Unable to determine which package to release from this game directory.")
+
+          binary_targets = [target["name"] for target in package["targets"] if "bin" in target["kind"]]
+          if len(binary_targets) != 1:
+              raise SystemExit(
+                  f"Expected exactly one binary target in {package['name']}, found {len(binary_targets)}."
+              )
+
+          print(binary_targets[0])
+          PY
+          )"
+          rm -f "$metadata_file"
+
+          built_binary="target/armv7-unknown-linux-gnueabihf/release/$binary_name"
+          if [[ ! -f "$built_binary" ]]; then
+            echo "::error::Built binary not found at $game_dir/$built_binary"
+            exit 1
+          fi
+
+          staged_dir="$RUNNER_TEMP/release-assets"
+          staged_binary="$staged_dir/${GAME_NAME}_miyoo"
+          mkdir -p "$staged_dir"
+          cp "$built_binary" "$staged_binary"
+          popd > /dev/null
+
+          echo "artifact_path=$staged_binary" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: miyoo-${{ matrix.game }}
+          path: ${{ steps.package.outputs.artifact_path }}
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-miyoo
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: miyoo-*
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Collect Release Files
+        id: collect
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          files=(release-artifacts/*)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "::error::No release artifacts were downloaded."
+            exit 1
+          fi
+
+          {
+            echo 'files<<EOF'
+            printf '%s\n' "${files[@]}"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.collect.outputs.files }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
