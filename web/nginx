@@ -1,0 +1,13 @@
+server {
+    listen 8080;
+    server_name localhost;
+
+    # Replace this with the ACTUAL absolute path to your repo's /web folder
+    root /home/username/projects/miyoo/web;
+    index index.html;
+
+    location / {
+        # This tells Nginx to serve the file, or throw a 404 if it doesn't exist
+        try_files $uri $uri/ =404;
+    }
+}

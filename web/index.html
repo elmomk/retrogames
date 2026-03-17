@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retro Game Launcher</title>
+    <style>
+        body {
+            background-color: #0f0f19;
+            color: white;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 50px;
+        }
+        h1 {
+            color: #ffaa00;
+            text-shadow: 2px 2px 0px #ff0000;
+            font-size: 3rem;
+            margin-bottom: 40px;
+        }
+        .game-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 800px;
+        }
+        .game-card {
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            text-decoration: none;
+            color: white;
+            display: block;
+        }
+        .game-card:hover {
+            transform: scale(1.05);
+            background: rgba(255, 255, 255, 0.2);
+            border-color: #00ffff;
+        }
+        .game-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .game-desc {
+            font-size: 0.9rem;
+            color: #aaaaaa;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>ARCADE LAUNCHER</h1>
+
+    <div class="game-grid">
+        <!-- Link out to your micro mages index.html -->
+        <a href="micro/index.html" class="game-card">
+            <div class="game-title">Micro Mages (JS)</div>
+            <div class="game-desc">Browser prototype of the Miyoo platformer.</div>
+        </a>
+
+        <!-- Add future games here -->
+        <a href="#" class="game-card" style="opacity: 0.5; cursor: not-allowed;">
+            <div class="game-title">Project 2</div>
+            <div class="game-desc">Coming soon...</div>
+        </a>
+    </div>
+
+</body>
+</html>
