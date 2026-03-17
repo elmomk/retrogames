@@ -211,11 +211,11 @@ Phase 2: Engine Port (Rust / Macroquad) 🟡 In Progress
 
 [x] CI/CD Pipeline Setup: GitHub Actions workflow (release.yml), Ubuntu runner with arm-linux-gnueabihf-gcc, and automated GitHub Releases.
 
-[ ] Core Translation: Initialize Cargo project, port the Fixed Timestep loop, Player Physics, AABB Collision, and Tilemap parsing.
+[x] Core Translation: Initialize Cargo project, port the Fixed Timestep loop, Player Physics, AABB Collision, and Tilemap parsing.
 
-[ ] Rendering Pipeline: Implement draw_texture_ex and translate procedural pixel art arrays.
+[x] Rendering Pipeline: Implement draw_texture_ex and translate procedural pixel art arrays.
 
-[ ] Miyoo Tweaks: Map Miyoo hardware buttons and lock resolution to native 640x480.
+[x] Miyoo Tweaks: Map Miyoo hardware buttons and lock resolution to native 640x480.
 
 Phase 3: Audio, Visuals & Polish 🔴 Planned
 
