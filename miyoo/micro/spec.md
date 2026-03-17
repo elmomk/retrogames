@@ -60,41 +60,15 @@ async fn main() {
 
 The Miyoo Mini Linux OS maps its physical buttons directly to standard keyboard scan codes. Macroquad captures these natively.
 
-Physical Miyoo Button
+| Physical Miyoo Button | Macroquad KeyCode | Game Action |
+|---|---|---|
+| D-Pad | KeyCode::Up, Down, Left, Right | Movement & Aiming |
+| A Button | KeyCode::X | Shoot Fireball |
+| B Button | KeyCode::Space or KeyCode::Z | Jump / Hold for Anchor |
+| Start Button | KeyCode::Enter | Pause / Start |
+| Select Button | KeyCode::RightShift | Back / Menu |
 
-Macroquad KeyCode
-
-Game Action
-
-D-Pad
-
-KeyCode::Up, Down, Left, Right
-
-Movement & Aiming
-
-A Button
-
-KeyCode::X
-
-Shoot Fireball
-
-B Button
-
-KeyCode::Space or KeyCode::Z
-
-Jump / Hold for Anchor
-
-Start Button
-
-KeyCode::Enter
-
-Pause / Start
-
-Select Button
-
-KeyCode::RightShift
-
-Back / Menu
+Implementation Detail: For jump buffering and holding logic, input state must be tracked manually across frames (e.g., logging get_time() when the B button is initially pressed to calculate the hold duration for the Anchor).
 
 5. Procedural Asset Generation (Memory Management)
 
@@ -128,6 +102,18 @@ fn create_sprite(art: &[&str], colors: &[Color]) -> Texture2D {
 6. Core Data Structures (Data-Oriented Design)
 
 To maximize performance on the ARM CPU, the game avoids complex ECS abstractions in favor of flat Vec structs and standard primitive types.
+
+6.1. Game State Enum
+
+enum GameState {
+    Start,
+    Story,
+    Playing,
+    GameOver,
+    Win,
+}
+
+6.2. Core Entities
 
 struct Player {
     rect: Rect, // x, y, w, h
@@ -163,6 +149,23 @@ struct Platform {
     p_type: PlatformType,
 }
 
+6.3. Enemy Types
+
+enum EnemyType {
+    Patrol,
+    Bat,
+    Turret,
+}
+
+struct Enemy {
+    e_type: EnemyType,
+    rect: Rect,
+    vel: Vec2,
+    start_x: f32,
+    range: f32,
+    shoot_timer: f32,
+}
+
 
 7. Physics & Collision Pipeline
 
@@ -174,7 +177,13 @@ Y-Axis Sweep: Apply Player.vel.y (Gravity). Clamp to MAX_FALL_SPEED or WALL_SLID
 
 Verlet Anchor Constraint: If anchor.is_attached is true, calculate the Euclidean distance between Player and Anchor. If distance > anchor.length, apply a pull vector to restrict the player to the radius, damping velocity to simulate swing tension.
 
-8. Build & Deployment Pipeline
+8. Rendering & Camera
+
+Resolution: The logical internal resolution is 640x480 (matching the Miyoo Mini Plus 4:3 screen aspect ratio).
+
+Camera Tracking: A manual camera_y floating-point value will track the player's Y position. Every draw_texture_ex call will subtract camera_y from the object's absolute Y coordinate to achieve vertical scrolling without using a complex engine camera struct.
+
+9. Build & Deployment Pipeline
 
 The artifact is built automatically via a GitHub Actions CI/CD pipeline.
 
@@ -183,3 +192,47 @@ Toolchain: rust-toolchain stable, armv7-unknown-linux-gnueabihf target.
 Linker: Requires Ubuntu package gcc-arm-linux-gnueabihf configured in .cargo/config.toml.
 
 Output: The resulting compiled binary is automatically attached to GitHub Releases for direct installation onto the Miyoo Mini Plus SD card.
+
+10. Development Roadmap
+
+This section tracks our progress from the initial browser prototype to a polished, native release.
+
+Phase 1: Browser Prototyping (HTML5 / Vanilla JS) 🟢 Completed
+
+[x] Core Physics & Movement: Gravity, terminal velocity, AABB collision, wall-sliding, wall-jumping, coyote time, jump buffering, and double jumps.
+
+[x] Combat & Tools: 8-way directional shooting, grappling anchor, and destructible terrain.
+
+[x] Level Architecture: String-based tilemap parser, entity management, arcade scoring, floating text popups, and level progression/storylines.
+
+[x] Mobile / Web Usability: Virtual joystick and classic A/B button layout.
+
+Phase 2: Engine Port (Rust / Macroquad) 🟢 Completed
+
+[x] CI/CD Pipeline Setup: GitHub Actions workflow (release.yml), Ubuntu runner with arm-linux-gnueabihf-gcc, and automated GitHub Releases.
+
+[x] Core Translation: Initialize Cargo project, port the Fixed Timestep loop, Player Physics, AABB Collision, and Tilemap parsing.
+
+[x] Rendering Pipeline: Implement draw_texture_ex and translate procedural pixel art arrays.
+
+[x] Miyoo Tweaks: Map Miyoo hardware buttons and lock resolution to native 640x480.
+
+Phase 3: Audio, Visuals & Polish 🔴 Planned
+
+[ ] Sprite & Animation System: Frame animation logic (Idle, Run, Jump, Wall-Slide, Swing) and animated enemy cycles.
+
+[ ] VFX (Visual Effects): Screen shake, gravity-affected sparks, and dust clouds.
+
+[ ] Audio Implementation: Integrate Macroquad audio module, retro 8-bit SFX, and background chiptune tracks.
+
+Phase 4: Advanced Content & Systems 🔴 Planned
+
+[ ] Level Design: Build 10+ distinct vertical shaft levels and integrate external map editors (e.g., Tiled).
+
+[ ] New Hazards & Enemies: Crumbling platforms, mini-boss encounters.
+
+[ ] Save States & High Scores: Local file I/O for saving High Scores.
+
+Phase 5: Distribution & Release 🔴 Planned
+
+[ ] Onion OS Packaging: Create launch.sh scripts, generate miyoogamelist.xml metadata, and package final ARM binary into a zip release.
