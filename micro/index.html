@@ -33,7 +33,7 @@
         // --- CONSTANTS ---
         const GRAVITY = 0.35; const MAX_FALL_SPEED = 7.0; const WALL_SLIDE_SPEED = 1.5;
         const MOVE_SPEED = 3.5; const JUMP_FORCE = -7.0; const BOUNCE_FORCE = -6.0;
-        const WALL_JUMP_Y = -6.5; const WALL_JUMP_X = 6.0; const LAVA_SPEED = 0.3; 
+        const WALL_JUMP_Y = -6.5; const WALL_JUMP_X = 6.0; 
         const BULLET_SPEED = 10; const ENEMY_BULLET_SPEED = 4.0; const ANCHOR_SPEED = 15; const CLIMB_SPEED = 3.0;
         const TILE_SIZE = 20;
 
@@ -69,72 +69,128 @@
         
         let player, bullets, enemyBullets, enemies, gems, lavaY, cameraY, platforms, anchor, particles, popups;
         let coyoteFrames = 0; let jumpBufferFrames = 0;
+        let levelLavaSpeed = 0.3;
 
-        // Tilemap Strings (.=empty, #=brick, %=stone, C=chest, G=gem, P=Patrol, B=Bat, T=Turret)
-        const levelMaps = [
-            [   // LEVEL 1
-                "################################",
-                "#..............................#",
-                "#.............Goal.............#",
-                "#.............####.............#",
-                "#..............................#",
-                "#......####..........####......#",
-                "#%%%............B...........%%%#",
-                "#%%%........................%%%#",
-                "#............######............#",
-                "#......###............###......#",
-                "#........T.......C.............#",
-                "#............######............#",
-                "#.......G......................#",
-                "#......####..........####......#",
-                "################################",
-                "#%%%........................%%%#",
-                "#%%%.....C......B...........%%%#",
-                "#%%%........................%%%#",
-                "#...........########...........#",
-                "#.........P..........P.........#",
-                "#..............................#",
-                "#....#####............#####....#",
-                "#..........................G...#",
-                "#%%%........................%%%#",
-                "#%%%..................C.....%%%#",
-                "#%%%........................%%%#",
-                "#...........########...........#",
-                "#................T.............#",
-                "#..............................#",
-                "#..........P...................#",
-                "#..............................#",
-                "################################"
-            ],
-            [   // LEVEL 2
-                "################################",
-                "#..............................#",
-                "#.............Goal.............#",
-                "#.............####.............#",
-                "#..............................#",
-                "#........B............B........#",
-                "#..####........C.........####..#",
-                "#..............................#",
-                "#........T............T........#",
-                "#......######......######......#",
-                "#..............................#",
-                "#..G...C.......P.......C...G...#",
-                "#...#######..........#######...#",
-                "#..............................#",
-                "#%%%........................%%%#",
-                "#%%%...........B............%%%#",
-                "#%%%........................%%%#",
-                "#...........########...........#",
-                "#..............................#",
-                "#..............................#",
-                "#....#####............#####....#",
-                "#...........G......G...........#",
-                "#...T......##########......T...#",
-                "#..............................#",
-                "#.........P..........P.........#",
-                "#..............................#",
-                "################################"
-            ]
+        // --- LEVEL ROADMAP ---
+        const levels = [
+            {   // LEVEL 1: The Tutorial Guide
+                lavaSpeed: 0.1, // Very slow lava so player can read
+                map: [
+                    "################################",
+                    "#..............................#",
+                    "#.............Goal.............#", // Row 2
+                    "#.............####.............#",
+                    "#..............................#",
+                    "#..............................#",
+                    "#...................C..........#", // Row 6
+                    "#....#####.......#######.......#", 
+                    "#..............................#",
+                    "#..........#####...............#",
+                    "#..............................#",
+                    "#####################%%%########", // Row 11: Mining lesson
+                    "#####################%%%########",
+                    "#..............................#",
+                    "#..............................#",
+                    "#.................P............#", // Row 15: Shooting lesson
+                    "#...........#############......#", 
+                    "#..............................#",
+                    "#..............................#",
+                    "#..............................#",
+                    "#......######..................#", // Row 20: Double jump lesson
+                    "#..............................#",
+                    "#..............................#",
+                    "#..............................#",
+                    "#..............................#",
+                    "#....####......................#", // Row 25: Jump lesson
+                    "#..............................#",
+                    "#..............................#",
+                    "#..............................#",
+                    "#..............................#",
+                    "#..............................#",
+                    "################################"  // Row 31: Start
+                ],
+                texts: [
+                    { col: 2, row: 28, text: "Welcome to the Obsidian Spire." },
+                    { col: 12, row: 26, text: "Arrow Keys/D-Pad to Move" },
+                    { col: 14, row: 24, text: "Z/Space to Jump" },
+                    { col: 4, row: 18, text: "Press Jump again in mid-air to Double Jump" },
+                    { col: 6, row: 14, text: "Press X to shoot fireballs" },
+                    { col: 2, row: 10, text: "Hold Jump to fire your Anchor and mine Stone (%)" },
+                    { col: 2, row: 5, text: "The Anchor attaches to Bricks (#). Swing!" },
+                    { col: 16, row: 5, text: "Mine Chests (C) for Gems" }
+                ]
+            },
+            {   // LEVEL 2: The Bat Caverns
+                lavaSpeed: 0.3,
+                map: [
+                    "################################",
+                    "#..............................#",
+                    "#.............Goal.............#",
+                    "#.............####.............#",
+                    "#..............................#",
+                    "#......####..........####......#",
+                    "#%%%............B...........%%%#",
+                    "#%%%........................%%%#",
+                    "#............######............#",
+                    "#......###............###......#",
+                    "#........T.......C.............#",
+                    "#............######............#",
+                    "#.......G......................#",
+                    "#......####..........####......#",
+                    "################################",
+                    "#%%%........................%%%#",
+                    "#%%%.....C......B...........%%%#",
+                    "#%%%........................%%%#",
+                    "#...........########...........#",
+                    "#.........P..........P.........#",
+                    "#..............................#",
+                    "#....#####............#####....#",
+                    "#..........................G...#",
+                    "#%%%........................%%%#",
+                    "#%%%..................C.....%%%#",
+                    "#%%%........................%%%#",
+                    "#...........########...........#",
+                    "#................T.............#",
+                    "#..............................#",
+                    "#..........P...................#",
+                    "#..............................#",
+                    "################################"
+                ],
+                texts: []
+            },
+            {   // LEVEL 3: Archmage's Vault
+                lavaSpeed: 0.5,
+                map: [
+                    "################################",
+                    "#..............................#",
+                    "#.............Goal.............#",
+                    "#.............####.............#",
+                    "#..............................#",
+                    "#........B............B........#",
+                    "#..####........C.........####..#",
+                    "#..............................#",
+                    "#........T............T........#",
+                    "#......######......######......#",
+                    "#..............................#",
+                    "#..G...C.......P.......C...G...#",
+                    "#...#######..........#######...#",
+                    "#..............................#",
+                    "#%%%........................%%%#",
+                    "#%%%...........B............%%%#",
+                    "#%%%........................%%%#",
+                    "#...........########...........#",
+                    "#..............................#",
+                    "#..............................#",
+                    "#....#####............#####....#",
+                    "#...........G......G...........#",
+                    "#...T......##########......T...#",
+                    "#..............................#",
+                    "#.........P..........P.........#",
+                    "#..............................#",
+                    "################################"
+                ],
+                texts: []
+            }
         ];
 
         function resetGame(fullReset = false) {
@@ -147,7 +203,9 @@
             
             platforms = []; enemies = [];
             
-            const mapStr = levelMaps[currentLevel];
+            const levelData = levels[currentLevel];
+            levelLavaSpeed = levelData.lavaSpeed;
+            const mapStr = levelData.map;
             const mapHeight = mapStr.length;
             const startY = - (mapHeight * TILE_SIZE) + 480; 
             
@@ -173,7 +231,7 @@
 
         function addScore(amount, x, y) {
             score += amount;
-            popups.push({ text: `+${amount}`, x: x, y: y, life: 30 });
+            popups.push({ text: `+${amount}`, x: x, y: y, life: 40 });
         }
 
         // --- INPUT HANDLING ---
@@ -218,7 +276,12 @@
             let dt = timestamp - lastTime; lastTime = timestamp; if (dt > 250) dt = 250; accumulator += dt;
             while (accumulator >= TIME_STEP) {
                 if (gameState === 'PLAYING') updatePhysics();
-                else if (jumpBufferFrames > 0 || keys.shootPressed) { resetGame(gameState === 'GAMEOVER' || gameState === 'WIN'); jumpBufferFrames = 0; keys.shootPressed = false; }
+                else if (jumpBufferFrames > 0 || keys.shootPressed) { 
+                    if (gameState === 'START') gameState = 'STORY';
+                    else if (gameState === 'STORY') resetGame(true);
+                    else resetGame(gameState === 'GAMEOVER' || gameState === 'WIN'); 
+                    jumpBufferFrames = 0; keys.shootPressed = false; 
+                }
                 accumulator -= TIME_STEP;
             }
             draw(); requestAnimationFrame(gameLoop);
@@ -247,7 +310,6 @@
                     if (overlaps(anchor, p)) {
                         if (p.type === 'stone' || p.type === 'chest') { 
                             if (p.type === 'chest') {
-                                // Chests drop gems!
                                 gems.push({ x: p.x + 2, y: p.y, w: 16, h: 16, vx: (Math.random()-0.5)*4, vy: -5 });
                             }
                             platforms.splice(i, 1); 
@@ -274,7 +336,21 @@
                 let p = popups[i]; p.y -= 1; p.life--;
                 if (p.life <= 0) popups.splice(i, 1);
             }
-  // --- PLAYER MOVEMENT ---
+
+            for(let i=gems.length-1; i>=0; i--) {
+                let g = gems[i]; g.vy += GRAVITY; g.x += g.vx; g.y += g.vy;
+                for(let p of platforms) {
+                    if (overlaps(g, p) && p.type !== 'stone' && p.type !== 'chest') {
+                        if (g.vy > 0 && g.y < p.y) { g.y = p.y - g.h; g.vy = -g.vy * 0.5; g.vx *= 0.8; }
+                    }
+                }
+                if (overlaps(player, g)) {
+                    addScore(50, g.x, g.y);
+                    gems.splice(i, 1);
+                }
+            }
+
+            // --- PLAYER MOVEMENT ---
             let targetVx = 0;
             if (keys.right) { targetVx = MOVE_SPEED; player.facingRight = true; }
             if (keys.left) { targetVx = -MOVE_SPEED; player.facingRight = false; }
@@ -322,6 +398,7 @@
                 else if (player.wallDir !== 0) { player.vy = WALL_JUMP_Y; player.vx = -player.wallDir * WALL_JUMP_X; player.facingRight = player.wallDir === -1; player.jumps = 1; jumpBufferFrames = 0; } 
                 else if (player.jumps < player.maxJumps) { player.vy = JUMP_FORCE; player.jumps++; jumpBufferFrames = 0; }
             }
+
             // --- SHOOTING ---
             if (keys.shootPressed) {
                 let traj = getTrajectory(BULLET_SPEED); bullets.push({ x: player.x + player.w/2 - 4, y: player.y + player.h/2 - 4, vx: traj.vx, vy: traj.vy, w: 8, h: 8 }); keys.shootPressed = false;
@@ -381,17 +458,17 @@
                 if (hitWall || b.x > canvas.width || b.x < -b.w || b.y < cameraY - 100 || b.y > cameraY + canvas.height + 100) enemyBullets.splice(i, 1);
             }
 
-            lavaY -= LAVA_SPEED;
+            lavaY -= levelLavaSpeed; // Use level-specific lava speed!
             if (player.y + player.h > lavaY) gameState = 'GAMEOVER'; 
             
             // GOAL COLLISION & LEVEL TRANSITION
-            const mapHeight = levelMaps[currentLevel].length;
+            const mapHeight = levels[currentLevel].map.length;
             const startY = - (mapHeight * TILE_SIZE) + 480; 
-            const goalRect = { x: 280, y: startY + (2 * TILE_SIZE), w: 30, h: 30 }; // Match goal position in map
+            const goalRect = { x: 280, y: startY + (2 * TILE_SIZE), w: 30, h: 30 };
             
             if (overlaps(player, goalRect)) {
                 currentLevel++;
-                if (currentLevel >= levelMaps.length) {
+                if (currentLevel >= levels.length) {
                     gameState = 'WIN';
                 } else {
                     resetGame(false); // Reset level physics but keep score
@@ -401,10 +478,31 @@
             const targetCameraY = player.y - canvas.height * 0.6; cameraY += (targetCameraY - cameraY) * 0.1;
             if (cameraY > lavaY - canvas.height + 100) cameraY = lavaY - canvas.height + 100;
         }
+
         function draw() {
             ctx.fillStyle = 'rgb(15, 15, 25)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
             const bgSize = 64; const startYBg = Math.floor((cameraY * 0.5) / bgSize) - 1;
             for (let y = startYBg; y < startYBg + 12; y++) { for (let x = 0; x < 12; x++) { ctx.drawImage(bgTex, x * bgSize, (y * bgSize) - (cameraY * 0.5), bgSize, bgSize); } }
+
+            // Draw Level Texts (Tutorial signs)
+            if (gameState === 'PLAYING' && levels[currentLevel].texts) {
+                const mapHeight = levels[currentLevel].map.length;
+                const startY = - (mapHeight * TILE_SIZE) + 480;
+                
+                ctx.font = 'bold 16px monospace';
+                ctx.textAlign = 'left';
+                for (let textObj of levels[currentLevel].texts) {
+                    const textX = textObj.col * TILE_SIZE;
+                    const textY = startY + (textObj.row * TILE_SIZE) - cameraY;
+                    
+                    // Draw thick black outline for readability
+                    ctx.strokeStyle = 'black'; ctx.lineWidth = 4;
+                    ctx.strokeText(textObj.text, textX, textY);
+                    // Draw white text
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(textObj.text, textX, textY);
+                }
+            }
 
             for (let p of platforms) {
                 if (p.y > cameraY - TILE_SIZE && p.y < cameraY + canvas.height + TILE_SIZE) {
@@ -432,16 +530,18 @@
             if (gameState === 'PLAYING' || gameState === 'WIN') { ctx.save(); ctx.translate(player.x + player.w/2, player.y - cameraY + player.h/2); if (!player.facingRight) ctx.scale(-1, 1); ctx.drawImage(mageTex, -player.w/2, -player.h/2, player.w, player.h); ctx.restore(); }
 
             // Draw Goal Portal
-            const mapHeight = levelMaps[currentLevel].length;
-            const startY = - (mapHeight * TILE_SIZE) + 480; 
-            ctx.drawImage(goalTex, 280, startY + (2 * TILE_SIZE) - cameraY, 30, 30);
+            if (gameState === 'PLAYING') {
+                const mapHeight = levels[currentLevel].map.length;
+                const startY = - (mapHeight * TILE_SIZE) + 480; 
+                ctx.drawImage(goalTex, 280, startY + (2 * TILE_SIZE) - cameraY, 30, 30);
+            }
 
             ctx.fillStyle = 'rgba(255, 60, 0, 0.85)'; ctx.fillRect(0, lavaY - cameraY, canvas.width, canvas.height); ctx.fillStyle = 'rgba(255, 150, 0, 0.9)'; ctx.fillRect(0, lavaY - cameraY, canvas.width, 10);
             
-            // HUD (Score, Level, Popups)
+            // HUD
             for(let p of popups) {
                 ctx.fillStyle = `rgba(255, 255, 255, ${p.life / 30})`;
-                ctx.font = 'bold 16px monospace';
+                ctx.font = 'bold 16px monospace'; ctx.textAlign = 'left';
                 ctx.fillText(p.text, p.x + 10, p.y - cameraY);
             }
 
@@ -455,29 +555,39 @@
 
             // Screen Overlays
             ctx.textAlign = 'center';
-            if (gameState === 'START') { ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = 'white'; ctx.font = 'bold 36px monospace'; ctx.fillText("MICRO MAGES PROTOTYPE", canvas.width/2, canvas.height/2 - 20); ctx.font = '20px monospace'; ctx.fillText("Press B/Z/Space to Start", canvas.width/2, canvas.height/2 + 30); ctx.fillText("A(X)=Fire | B(Z)=Jump | Hold B=Rope", canvas.width/2, canvas.height/2 + 70); } 
-            else if (gameState === 'GAMEOVER') { ctx.fillStyle = 'rgba(200, 0, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = 'white'; ctx.font = 'bold 48px monospace'; ctx.fillText("YOU DIED", canvas.width/2, canvas.height/2 - 20); ctx.font = '24px monospace'; ctx.fillText(`FINAL SCORE: ${score}`, canvas.width/2, canvas.height/2 + 30); ctx.fillText("Press B/Z to Restart", canvas.width/2, canvas.height/2 + 70); }
-            else if (gameState === 'WIN') { ctx.fillStyle = 'rgba(0, 200, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.fillStyle = 'white'; ctx.font = 'bold 48px monospace'; ctx.fillText("YOU SURVIVED!", canvas.width/2, canvas.height/2 - 20); ctx.font = '24px monospace'; ctx.fillText(`FINAL SCORE: ${score}`, canvas.width/2, canvas.height/2 + 30); ctx.fillText("Press B/Z to Play Again", canvas.width/2, canvas.height/2 + 70); }
+            if (gameState === 'START') { 
+                ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0, 0, canvas.width, canvas.height); 
+                ctx.fillStyle = 'white'; ctx.font = 'bold 42px monospace'; ctx.fillText("THE OBSIDIAN SPIRE", canvas.width/2, canvas.height/2 - 20); 
+                ctx.font = '20px monospace'; ctx.fillText("Press B/Z/Space to Begin", canvas.width/2, canvas.height/2 + 30); 
+            } 
+            else if (gameState === 'STORY') {
+                ctx.fillStyle = 'rgba(0,0,0,0.9)'; ctx.fillRect(0, 0, canvas.width, canvas.height); 
+                ctx.fillStyle = 'white'; ctx.font = '20px monospace'; 
+                ctx.fillText("The Archmage has stolen the Kingdom's Mana Gems.", canvas.width/2, canvas.height/2 - 60);
+                ctx.fillText("He hides at the top of the volcanic Obsidian Spire.", canvas.width/2, canvas.height/2 - 20);
+                ctx.fillText("As a Micro Mage, you must scale the spire,", canvas.width/2, canvas.height/2 + 20);
+                ctx.fillText("reclaim the gems, and outrun the rising lava.", canvas.width/2, canvas.height/2 + 60);
+                ctx.fillStyle = '#ffaa00';
+                ctx.fillText("Press B/Z/Space to enter the Spire...", canvas.width/2, canvas.height/2 + 130);
+            }
+            else if (gameState === 'GAMEOVER') { 
+                ctx.fillStyle = 'rgba(200, 0, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height); 
+                ctx.fillStyle = 'white'; ctx.font = 'bold 48px monospace'; ctx.fillText("YOU BURNED", canvas.width/2, canvas.height/2 - 20); 
+                ctx.font = '24px monospace'; ctx.fillText(`FINAL SCORE: ${score}`, canvas.width/2, canvas.height/2 + 30); 
+                ctx.fillText("Press B/Z to Restart", canvas.width/2, canvas.height/2 + 70); 
+            }
+            else if (gameState === 'WIN') { 
+                ctx.fillStyle = 'rgba(0, 200, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height); 
+                ctx.fillStyle = 'white'; ctx.font = 'bold 48px monospace'; ctx.fillText("YOU ESCAPED THE SPIRE!", canvas.width/2, canvas.height/2 - 20); 
+                ctx.font = '24px monospace'; ctx.fillText(`FINAL SCORE: ${score}`, canvas.width/2, canvas.height/2 + 30); 
+                ctx.fillText("Press B/Z to Play Again", canvas.width/2, canvas.height/2 + 70); 
+            }
         }
 
-        resetGame(true); requestAnimationFrame(gameLoop);
+        // Initialize state, wait for user input to start Loop.
+        resetGame(true);
+        gameState = 'START';
+        requestAnimationFrame(gameLoop);
     </script>
 </body>
 </html>
-
-
-
-            for(let i=gems.length-1; i>=0; i--) {
-                let g = gems[i]; g.vy += GRAVITY; g.x += g.vx; g.y += g.vy;
-                for(let p of platforms) {
-                    if (overlaps(g, p) && p.type !== 'stone' && p.type !== 'chest') {
-                        if (g.vy > 0 && g.y < p.y) { g.y = p.y - g.h; g.vy = -g.vy * 0.5; g.vx *= 0.8; }
-                    }
-                }
-                if (overlaps(player, g)) {
-                    addScore(50, g.x, g.y);
-                    gems.splice(i, 1);
-                }
-            }
-
-  
