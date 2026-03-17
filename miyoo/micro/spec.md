@@ -207,7 +207,7 @@ Phase 1: Browser Prototyping (HTML5 / Vanilla JS) 🟢 Completed
 
 [x] Mobile / Web Usability: Virtual joystick and classic A/B button layout.
 
-Phase 2: Engine Port (Rust / Macroquad) 🟡 In Progress
+Phase 2: Engine Port (Rust / Macroquad) 🟢 Completed
 
 [x] CI/CD Pipeline Setup: GitHub Actions workflow (release.yml), Ubuntu runner with arm-linux-gnueabihf-gcc, and automated GitHub Releases.
 

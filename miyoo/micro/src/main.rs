@@ -17,6 +17,12 @@ const TILE_SIZE: f32 = 20.0;
 const CANVAS_WIDTH: f32 = 640.0;
 const CANVAS_HEIGHT: f32 = 480.0;
 const TIME_STEP: f64 = 1.0 / 60.0;
+const ANCHOR_HOLD_TIME: f64 = 0.150;
+const MAX_ANCHOR_DISTANCE: f32 = 300.0;
+const BAT_CHASE_RANGE: f32 = 250.0;
+const TURRET_SHOOT_INTERVAL: f32 = 90.0;
+const TURRET_SHOOT_RANGE: f32 = 300.0;
+const TURRET_INITIAL_TIMER_MAX: f32 = 60.0;
 
 // ── SPRITE DATA ────────────────────────────────────────────────────────────
 const MAGE_ART: [&str; 8] = [
@@ -523,7 +529,7 @@ impl Game {
                         x: px, y: py, w: TILE_SIZE, h: TILE_SIZE,
                         vx: 0.0,
                         start_x: px, range: 0.0,
-                        shoot_timer: rand_f32() * 60.0,
+                        shoot_timer: rand_f32() * TURRET_INITIAL_TIMER_MAX,
                     }),
                     'G' => self.gems.push(Gem {
                         x: px + 2.0, y: py + 2.0,
@@ -588,7 +594,7 @@ impl Game {
         if self.keys.b_down
             && !self.anchor.active
             && !self.keys.anchor_fired
-            && (get_time() - self.keys.b_time > 0.150)
+            && (get_time() - self.keys.b_time > ANCHOR_HOLD_TIME)
         {
             let (tvx, tvy) = self.get_trajectory(ANCHOR_SPEED);
             self.anchor.active = true;
@@ -671,7 +677,7 @@ impl Game {
             if self.anchor.active && !self.anchor.is_attached {
                 let dx = (self.player.x + self.player.w / 2.0) - self.anchor.x;
                 let dy = (self.player.y + self.player.h / 2.0) - self.anchor.y;
-                if (dx * dx + dy * dy).sqrt() > 300.0 {
+                if (dx * dx + dy * dy).sqrt() > MAX_ANCHOR_DISTANCE {
                     self.anchor.active = false;
                 }
             }
@@ -964,18 +970,18 @@ impl Game {
                     let dx = player_x - self.enemies[i].x;
                     let dy = player_y - self.enemies[i].y;
                     let dist = (dx * dx + dy * dy).sqrt();
-                    if dist < 250.0 {
+                    if dist < BAT_CHASE_RANGE {
                         self.enemies[i].x += (dx / dist) * 1.2;
                         self.enemies[i].y += (dy / dist) * 1.2;
                     }
                 }
                 EnemyType::Turret => {
                     self.enemies[i].shoot_timer += 1.0;
-                    if self.enemies[i].shoot_timer > 90.0 {
+                    if self.enemies[i].shoot_timer > TURRET_SHOOT_INTERVAL {
                         let dx = player_x - self.enemies[i].x;
                         let dy = player_y - self.enemies[i].y;
                         let dist = (dx * dx + dy * dy).sqrt();
-                        if dist < 300.0 {
+                        if dist < TURRET_SHOOT_RANGE {
                             let ex = self.enemies[i].x + self.enemies[i].w / 2.0 - 4.0;
                             let ey = self.enemies[i].y + self.enemies[i].h / 2.0 - 4.0;
                             new_enemy_bullets.push(Projectile {
