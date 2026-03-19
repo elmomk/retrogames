@@ -294,6 +294,16 @@ struct Particle {
     vy: f32,
     life: f32,
     color: Color,
+    size: f32,
+}
+
+struct DustMote {
+    x: f32,
+    y: f32,
+    vx: f32,
+    vy: f32,
+    size: f32,
+    alpha: f32,
 }
 
 struct Popup {
@@ -622,6 +632,10 @@ struct World {
     damage_flash_timer: f32,
 
     time_counter: f64, // for lava wave animation
+    frame_count: u64,
+    hit_stop_frames: i32,
+    dust_motes: Vec<DustMote>,
+    trail_particles: Vec<Particle>,
 }
 
 impl World {
@@ -660,7 +674,22 @@ impl World {
             screen_shake_y: 0.0,
             damage_flash_timer: 0.0,
             time_counter: 0.0,
+            frame_count: 0,
+            hit_stop_frames: 0,
+            dust_motes: Vec::new(),
+            trail_particles: Vec::new(),
         };
+        // Initialize ambient dust motes
+        for _ in 0..20 {
+            w.dust_motes.push(DustMote {
+                x: rand::gen_range(0.0_f32, SCREEN_W),
+                y: rand::gen_range(0.0_f32, SCREEN_H),
+                vx: rand::gen_range(-0.2_f32, 0.2),
+                vy: rand::gen_range(-0.3_f32, -0.05),
+                size: rand::gen_range(1.0_f32, 2.0),
+                alpha: rand::gen_range(0.1_f32, 0.2),
+            });
+        }
         w.reset_game(true);
         w.state = GameState::Start;
         w
@@ -690,6 +719,8 @@ impl World {
         self.text_popups.clear();
         self.gems.clear();
         self.lava_bubbles.clear();
+        self.trail_particles.clear();
+        self.hit_stop_frames = 0;
         self.damage_flash_timer = 0.0;
         self.shake_magnitude = 0.0;
         self.screen_shake_x = 0.0;
@@ -761,6 +792,48 @@ impl World {
     // ------------------------------------------------------------------
     fn update(&mut self, input: &mut Input) {
         self.time_counter += TIME_STEP;
+        self.frame_count += 1;
+
+        // Hit stop: freeze game logic briefly on enemy kill for impact
+        if self.hit_stop_frames > 0 {
+            self.hit_stop_frames -= 1;
+            return;
+        }
+
+        // Update dust motes (ambient particles)
+        for mote in &mut self.dust_motes {
+            mote.x += mote.vx;
+            mote.y += mote.vy;
+            if mote.y < -5.0 { mote.y = SCREEN_H + 5.0; }
+            if mote.y > SCREEN_H + 5.0 { mote.y = -5.0; }
+            if mote.x < -5.0 { mote.x = SCREEN_W + 5.0; }
+            if mote.x > SCREEN_W + 5.0 { mote.x = -5.0; }
+        }
+
+        // Player trail effect: spawn afterimage when moving fast
+        let vel_mag = (self.player.vx * self.player.vx + self.player.vy * self.player.vy).sqrt();
+        if vel_mag > 2.0 && self.frame_count % 2 == 0 {
+            self.trail_particles.push(Particle {
+                x: self.player.x + self.player.w / 2.0,
+                y: self.player.y + self.player.h / 2.0,
+                vx: 0.0,
+                vy: 0.0,
+                life: 8.0,
+                color: Color::new(0.0, 1.0, 1.0, 0.3),
+                size: self.player.w * 0.8,
+            });
+        }
+        // Update trail particles
+        {
+            let mut i = self.trail_particles.len();
+            while i > 0 {
+                i -= 1;
+                self.trail_particles[i].life -= 1.0;
+                if self.trail_particles[i].life <= 0.0 {
+                    self.trail_particles.remove(i);
+                }
+            }
+        }
 
         // Coyote time
         if self.player.on_ground {
@@ -835,6 +908,7 @@ impl World {
                                     vy: rand::gen_range(-4.0_f32, 4.0),
                                     life: 15.0 + rand::gen_range(0.0_f32, 15.0),
                                     color: pcolor,
+                                    size: 4.0,
                                 });
                             }
                             self.anchor.active = false;
@@ -1074,13 +1148,21 @@ impl World {
                             hit_enemy = true;
                             self.add_score(100, ex, ey);
                             self.trigger_shake(2.0);
-                            for _ in 0..5 {
+                            self.hit_stop_frames = 3;
+                            let death_colors = [
+                                Color::new(1.0, 0.5, 0.0, 1.0),  // orange
+                                Color::new(1.0, 1.0, 0.0, 1.0),  // yellow
+                                Color::new(1.0, 1.0, 1.0, 1.0),  // white
+                                Color::new(1.0, 0.1, 0.1, 1.0),  // red
+                            ];
+                            for k in 0..20 {
                                 self.particles.push(Particle {
-                                    x: bx, y: by,
-                                    vx: rand::gen_range(-3.0_f32, 3.0),
-                                    vy: rand::gen_range(-3.0_f32, 3.0),
-                                    life: 15.0,
-                                    color: color_u8!(255, 0, 255, 255),
+                                    x: ex + 10.0, y: ey + 10.0,
+                                    vx: rand::gen_range(-5.0_f32, 5.0),
+                                    vy: rand::gen_range(-5.0_f32, 5.0),
+                                    life: 15.0 + rand::gen_range(0.0_f32, 15.0),
+                                    color: death_colors[k % 4],
+                                    size: rand::gen_range(1.0_f32, 4.0),
                                 });
                             }
                             break;
@@ -1162,13 +1244,21 @@ impl World {
                         self.enemies.remove(i);
                         self.add_score(100, ex, ey);
                         self.trigger_shake(2.0);
-                        for _ in 0..5 {
+                        self.hit_stop_frames = 3;
+                        let death_colors = [
+                            Color::new(1.0, 0.5, 0.0, 1.0),
+                            Color::new(1.0, 1.0, 0.0, 1.0),
+                            Color::new(1.0, 1.0, 1.0, 1.0),
+                            Color::new(1.0, 0.1, 0.1, 1.0),
+                        ];
+                        for k in 0..20 {
                             self.particles.push(Particle {
                                 x: ex + 10.0, y: ey + 10.0,
-                                vx: rand::gen_range(-3.0_f32, 3.0),
-                                vy: rand::gen_range(-3.0_f32, 3.0),
-                                life: 15.0,
-                                color: color_u8!(255, 0, 255, 255),
+                                vx: rand::gen_range(-5.0_f32, 5.0),
+                                vy: rand::gen_range(-5.0_f32, 5.0),
+                                life: 15.0 + rand::gen_range(0.0_f32, 15.0),
+                                color: death_colors[k % 4],
+                                size: rand::gen_range(1.0_f32, 4.0),
                             });
                         }
                     } else {
@@ -1332,6 +1422,12 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
         }
     }
 
+    // Ambient dust motes (background layer)
+    for mote in &world.dust_motes {
+        draw_rectangle(mote.x, mote.y, mote.size, mote.size,
+            Color::new(1.0, 1.0, 1.0, mote.alpha));
+    }
+
     // Apply screen shake offset for game world drawing
     let sx = world.screen_shake_x;
     let sy = world.screen_shake_y;
@@ -1375,11 +1471,23 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
 
     // Particles
     for p in &world.particles {
-        draw_rectangle(p.x + sx, p.y - cam_y + sy, 4.0, 4.0, p.color);
+        let alpha = (p.life / 15.0).min(1.0);
+        let mut c = p.color;
+        c.a *= alpha;
+        draw_rectangle(p.x + sx, p.y - cam_y + sy, p.size, p.size, c);
     }
 
-    // Gems
+    // Gems (with pulsing glow)
     for g in &world.gems {
+        // Pulsing glow behind the gem
+        let glow_alpha = 0.15 + 0.1 * (world.frame_count as f32 * 0.08).sin();
+        let glow_size = g.w + 8.0 + 2.0 * (world.frame_count as f32 * 0.08).sin();
+        draw_circle(
+            g.x + g.w / 2.0 + sx,
+            g.y + g.h / 2.0 - cam_y + sy,
+            glow_size / 2.0,
+            Color::new(0.0, 1.0, 1.0, glow_alpha),
+        );
         draw_texture_ex(
             &sprites.gem,
             g.x + sx, g.y - cam_y + sy, WHITE,
@@ -1453,6 +1561,18 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
             &sprites.anchor,
             world.anchor.x + sx, world.anchor.y - cam_y + sy, WHITE,
             DrawTextureParams { dest_size: Some(vec2(world.anchor.w, world.anchor.h)), ..Default::default() },
+        );
+    }
+
+    // Player trail afterimages
+    for tp in &world.trail_particles {
+        let alpha = (tp.life / 8.0) * 0.25;
+        let trail_size = tp.size;
+        draw_rectangle(
+            tp.x - trail_size / 2.0 + sx,
+            tp.y - trail_size / 2.0 - cam_y + sy,
+            trail_size, trail_size,
+            Color::new(0.0, 1.0, 1.0, alpha),
         );
     }
 
@@ -1653,6 +1773,37 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
             draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 70.0, 24.0, WHITE);
         }
         GameState::Playing => {} // already drawn above
+    }
+
+    // ----- CRT SCANLINE OVERLAY -----
+    {
+        let scanline_color = Color::new(0.0, 0.0, 0.0, 0.15);
+        let mut y = 0.0_f32;
+        while y < SCREEN_H {
+            draw_line(0.0, y, SCREEN_W, y, 1.0, scanline_color);
+            y += 4.0;
+        }
+    }
+
+    // ----- VIGNETTE EFFECT -----
+    {
+        let depth = 60.0_f32;
+        let layers = 4_u32;
+        for i in 0..layers {
+            let t = i as f32 / layers as f32;
+            let alpha = 0.25 * (1.0 - t);
+            let inset = t * depth;
+            let c = Color::new(0.0, 0.0, 0.0, alpha);
+            let thickness = depth / layers as f32;
+            // Top edge
+            draw_rectangle(0.0, inset, SCREEN_W, thickness, c);
+            // Bottom edge
+            draw_rectangle(0.0, SCREEN_H - inset - thickness, SCREEN_W, thickness, c);
+            // Left edge
+            draw_rectangle(inset, 0.0, thickness, SCREEN_H, c);
+            // Right edge
+            draw_rectangle(SCREEN_W - inset - thickness, 0.0, thickness, SCREEN_H, c);
+        }
     }
 }
 

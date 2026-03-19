@@ -236,6 +236,33 @@ struct Particle {
     alive: bool,
 }
 
+#[derive(Clone)]
+struct ExplosionRing {
+    x: f32,
+    y: f32,
+    max_radius: f32,
+    frame: i32,
+    max_frames: i32,
+    alive: bool,
+}
+
+#[derive(Clone)]
+struct SpawnTeleportEffect {
+    x: f32,
+    y: f32,
+    frame: i32,
+    max_frames: i32,
+    alive: bool,
+}
+
+#[derive(Clone)]
+struct KillStreakText {
+    text: String,
+    frame: i32,
+    max_frames: i32,
+    alive: bool,
+}
+
 // ─── Game ────────────────────────────────────────────────────────────────────
 
 struct Game {
@@ -263,6 +290,12 @@ struct Game {
     blink_timer: f32,
     score_pop_timer: f32,
     score_pop_value: u32,
+    explosion_rings: Vec<ExplosionRing>,
+    spawn_effects: Vec<SpawnTeleportEffect>,
+    kill_streak_texts: Vec<KillStreakText>,
+    damage_border_frames: i32,
+    fence_spark_timer: i32,
+    last_streak_milestone: u32,
 }
 
 impl Game {
@@ -292,6 +325,12 @@ impl Game {
             blink_timer: 0.0,
             score_pop_timer: 0.0,
             score_pop_value: 0,
+            explosion_rings: Vec::new(),
+            spawn_effects: Vec::new(),
+            kill_streak_texts: Vec::new(),
+            damage_border_frames: 0,
+            fence_spark_timer: 0,
+            last_streak_milestone: 0,
         }
     }
 
@@ -311,6 +350,12 @@ impl Game {
         self.laser_active = false;
         self.score_pop_timer = 0.0;
         self.score_pop_value = 0;
+        self.explosion_rings.clear();
+        self.spawn_effects.clear();
+        self.kill_streak_texts.clear();
+        self.damage_border_frames = 0;
+        self.fence_spark_timer = 0;
+        self.last_streak_milestone = 0;
     }
 
     fn start_wave(&mut self) {
@@ -335,6 +380,25 @@ impl Game {
         self.player.score += points;
         self.score_pop_timer = 0.5;
         self.score_pop_value = points;
+
+        // Kill streak milestones
+        let combo = self.player.combo_count;
+        let milestone = if combo >= 20 { 20 } else if combo >= 15 { 15 } else if combo >= 10 { 10 } else if combo >= 5 { 5 } else { 0 };
+        if milestone > 0 && milestone > self.last_streak_milestone {
+            self.last_streak_milestone = milestone;
+            let text = match milestone {
+                5 => "KILLING SPREE!",
+                10 => "UNSTOPPABLE!",
+                15 => "GODLIKE!",
+                _ => "LEGENDARY!",
+            };
+            self.kill_streak_texts.push(KillStreakText {
+                text: text.to_string(),
+                frame: 0,
+                max_frames: 60,
+                alive: true,
+            });
+        }
     }
 
     fn spawn_particles(&mut self, x: f32, y: f32, color: Color, count: usize) {
@@ -369,6 +433,13 @@ impl Game {
             _ => (ARENA_X + ARENA_W - 5.0, rand::gen_range(ARENA_Y + 10.0, ARENA_Y + ARENA_H - 10.0)),
         };
         self.enemies.push(Enemy::new(etype, x, y));
+        self.spawn_effects.push(SpawnTeleportEffect {
+            x,
+            y,
+            frame: 0,
+            max_frames: 15,
+            alive: true,
+        });
     }
 
     fn try_spawn_enemies(&mut self) {
@@ -422,6 +493,7 @@ impl Game {
         self.player.invincible = INVINCIBILITY_FRAMES;
         self.add_screen_shake(5.0);
         self.spawn_particles(self.player.x, self.player.y, RED, 6);
+        self.damage_border_frames = 15;
 
         if self.player.hp <= 0.0 {
             self.player.hp = 0.0;
@@ -591,6 +663,15 @@ impl Game {
         self.add_screen_shake(8.0);
         self.spawn_particles(x, y, ORANGE, 16);
         self.spawn_particles(x, y, YELLOW, 8);
+
+        self.explosion_rings.push(ExplosionRing {
+            x,
+            y,
+            max_radius: 40.0,
+            frame: 0,
+            max_frames: 10,
+            alive: true,
+        });
 
         let splash_radius = 40.0;
         for enemy in self.enemies.iter_mut() {
@@ -795,6 +876,7 @@ impl Game {
             if self.player.combo_timer <= 0.0 {
                 self.player.combo_count = 0;
                 self.player.combo_multiplier = 1.0;
+                self.last_streak_milestone = 0;
             }
         }
 
@@ -881,6 +963,25 @@ impl Game {
                 {
                     enemy.hp -= bullet.damage;
                     enemy.flash_timer = 0.1;
+                    // Bullet impact sparks
+                    let spark_count = rand::gen_range(4, 7) as usize;
+                    for _ in 0..spark_count {
+                        let angle = rand::gen_range(0.0, std::f32::consts::TAU);
+                        let speed = rand::gen_range(2.0, 6.0);
+                        let colors = [WHITE, YELLOW, Color::new(1.0, 1.0, 0.6, 1.0)];
+                        let c = colors[rand::gen_range(0, colors.len())];
+                        self.particles.push(Particle {
+                            x: bullet.x,
+                            y: bullet.y,
+                            vx: angle.cos() * speed,
+                            vy: angle.sin() * speed,
+                            lifetime: rand::gen_range(8.0, 12.0) / 60.0,
+                            max_lifetime: rand::gen_range(8.0, 12.0) / 60.0,
+                            color: c,
+                            size: rand::gen_range(1.5, 3.0),
+                            alive: true,
+                        });
+                    }
                     if bullet.is_rocket {
                         rocket_hits.push((bullet.x, bullet.y));
                     }
@@ -1243,6 +1344,67 @@ impl Game {
         }
         self.particles.retain(|p| p.alive);
 
+        // ── Update explosion rings ──
+        for ring in self.explosion_rings.iter_mut() {
+            if !ring.alive { continue; }
+            ring.frame += 1;
+            if ring.frame >= ring.max_frames { ring.alive = false; }
+        }
+        self.explosion_rings.retain(|r| r.alive);
+
+        // ── Update spawn teleport effects ──
+        for eff in self.spawn_effects.iter_mut() {
+            if !eff.alive { continue; }
+            eff.frame += 1;
+            if eff.frame >= eff.max_frames { eff.alive = false; }
+        }
+        self.spawn_effects.retain(|e| e.alive);
+
+        // ── Update kill streak texts ──
+        for ks in self.kill_streak_texts.iter_mut() {
+            if !ks.alive { continue; }
+            ks.frame += 1;
+            if ks.frame >= ks.max_frames { ks.alive = false; }
+        }
+        self.kill_streak_texts.retain(|k| k.alive);
+
+        // ── Update damage border ──
+        if self.damage_border_frames > 0 {
+            self.damage_border_frames -= 1;
+        }
+
+        // ── Electric fence spark particles ──
+        self.fence_spark_timer += 1;
+        if self.fence_spark_timer >= 10 {
+            self.fence_spark_timer = 0;
+            let spark_count = rand::gen_range(1, 4);
+            for _ in 0..spark_count {
+                let side = rand::gen_range(0, 4);
+                let (sx, sy) = match side {
+                    0 => (rand::gen_range(ARENA_X, ARENA_X + ARENA_W), ARENA_Y),
+                    1 => (rand::gen_range(ARENA_X, ARENA_X + ARENA_W), ARENA_Y + ARENA_H),
+                    2 => (ARENA_X, rand::gen_range(ARENA_Y, ARENA_Y + ARENA_H)),
+                    _ => (ARENA_X + ARENA_W, rand::gen_range(ARENA_Y, ARENA_Y + ARENA_H)),
+                };
+                // Scatter inward
+                let inward_x = (SCREEN_W / 2.0 - sx).signum();
+                let inward_y = (SCREEN_H / 2.0 - sy).signum();
+                let angle = rand::gen_range(-0.5, 0.5);
+                let speed = rand::gen_range(1.5, 4.0);
+                self.particles.push(Particle {
+                    x: sx,
+                    y: sy,
+                    vx: inward_x * speed * angle.cos() + rand::gen_range(-0.5, 0.5),
+                    vy: inward_y * speed * angle.sin() + rand::gen_range(-0.5, 0.5),
+                    lifetime: rand::gen_range(0.2, 0.5),
+                    max_lifetime: rand::gen_range(0.2, 0.5),
+                    color: Color::new(0.0, 1.0, 1.0, 1.0),
+                    size: rand::gen_range(1.5, 3.0),
+                    alive: true,
+                });
+            }
+        }
+
         // ── Screen shake ──
         if self.screen_shake > 0.0 {
             self.screen_shake_x = rand::gen_range(-self.screen_shake, self.screen_shake);
@@ -1298,6 +1460,67 @@ impl Game {
                 self.draw_entities(shake_x, shake_y);
                 self.draw_hud();
                 self.draw_victory();
+            }
+        }
+
+        // ── Kill streak text (drawn above HUD) ──
+        for ks in &self.kill_streak_texts {
+            if !ks.alive { continue; }
+            let t = ks.frame as f32 / ks.max_frames as f32;
+            let scale = 1.0 + t * 0.5;
+            let alpha = 1.0 - t;
+            let size = 40.0 * scale;
+            let y_off = -t * 30.0;
+            draw_text_centered(
+                &ks.text,
+                SCREEN_W / 2.0,
+                SCREEN_H / 2.0 - 60.0 + y_off,
+                size,
+                Color::new(1.0, 0.9, 0.0, alpha),
+            );
+        }
+
+        // ── Player damage red border ──
+        if self.damage_border_frames > 0 {
+            let alpha = self.damage_border_frames as f32 / 15.0 * 0.5;
+            let thickness = 12.0;
+            let c = Color::new(1.0, 0.0, 0.0, alpha);
+            // Top
+            draw_rectangle(0.0, 0.0, SCREEN_W, thickness, c);
+            // Bottom
+            draw_rectangle(0.0, SCREEN_H - thickness, SCREEN_W, thickness, c);
+            // Left
+            draw_rectangle(0.0, 0.0, thickness, SCREEN_H, c);
+            // Right
+            draw_rectangle(SCREEN_W - thickness, 0.0, thickness, SCREEN_H, c);
+        }
+
+        // ── Vignette ──
+        {
+            let edge = 50.0;
+            let steps = 10;
+            for i in 0..steps {
+                let t = i as f32 / steps as f32;
+                let alpha = 0.3 * (1.0 - t);
+                let c = Color::new(0.0, 0.0, 0.0, alpha);
+                let offset = t * edge;
+                // Top
+                draw_rectangle(0.0, offset, SCREEN_W, edge / steps as f32, c);
+                // Bottom
+                draw_rectangle(0.0, SCREEN_H - offset - edge / steps as f32, SCREEN_W, edge / steps as f32, c);
+                // Left
+                draw_rectangle(offset, 0.0, edge / steps as f32, SCREEN_H, c);
+                // Right
+                draw_rectangle(SCREEN_W - offset - edge / steps as f32, 0.0, edge / steps as f32, SCREEN_H, c);
+            }
+        }
+
+        // ── CRT scanline overlay ──
+        {
+            let mut y = 0.0;
+            while y < SCREEN_H {
+                draw_rectangle(0.0, y, SCREEN_W, 1.0, Color::new(0.0, 0.0, 0.0, 0.12));
+                y += 4.0;
             }
         }
     }
@@ -1651,6 +1874,37 @@ impl Game {
             let color = Color::new(p.color.r, p.color.g, p.color.b, alpha);
             let size = p.size * alpha;
             draw_circle(p.x + sx, p.y + sy, size, color);
+        }
+
+        // ── Draw explosion rings ──
+        for ring in &self.explosion_rings {
+            if !ring.alive { continue; }
+            let t = ring.frame as f32 / ring.max_frames as f32;
+            let radius = 5.0 + (ring.max_radius - 5.0) * t;
+            let alpha = 1.0 - t;
+            let r = 1.0;
+            let g = 0.5 * (1.0 - t);
+            let b = 0.0;
+            draw_circle_lines(ring.x + sx, ring.y + sy, radius, 2.0, Color::new(r, g, b, alpha));
+            // Inner glow
+            if t < 0.5 {
+                draw_circle_lines(ring.x + sx, ring.y + sy, radius * 0.7, 1.0, Color::new(1.0, 0.8, 0.0, alpha * 0.5));
+            }
+        }
+
+        // ── Draw spawn teleport effects ──
+        for eff in &self.spawn_effects {
+            if !eff.alive { continue; }
+            let t = eff.frame as f32 / eff.max_frames as f32;
+            let alpha = 1.0 - t;
+            for i in 0..4 {
+                let delay = i as f32 * 0.15;
+                let local_t = (t - delay).clamp(0.0, 1.0);
+                if local_t <= 0.0 { continue; }
+                let radius = 5.0 + local_t * 25.0;
+                let a = alpha * (1.0 - local_t);
+                draw_circle_lines(eff.x + sx, eff.y + sy, radius, 1.5, Color::new(0.5, 0.8, 1.0, a));
+            }
         }
 
         // ── Crosshair at aim point ──

@@ -406,6 +406,34 @@ struct Particle {
     max_life: i32,
     color: Color,
     size: f32,
+    gravity: bool, // if true, apply heavier gravity (for blood/impact particles)
+}
+
+struct DashGhost {
+    active: bool,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    life: i32,
+    max_life: i32,
+}
+
+struct WallSpark {
+    active: bool,
+    x: f32,
+    y: f32,
+    vx: f32,
+    vy: f32,
+    life: i32,
+    max_life: i32,
+}
+
+struct GrassTuft {
+    x: f32,
+    y: f32,
+    h: f32,
+    sway_offset: f32,
 }
 
 struct Pickup {
@@ -451,6 +479,11 @@ struct Game {
     stars: Vec<Star>,
     level_name: String,
     blink_timer: i32,
+    // Visual polish
+    dash_ghosts: Vec<DashGhost>,
+    wall_sparks: Vec<WallSpark>,
+    hit_stop: i32,
+    grass_tufts: Vec<GrassTuft>,
     // Textures
     tex_ninja_idle: Texture2D,
     tex_ninja_run: Texture2D,
@@ -699,6 +732,7 @@ fn spawn_particles(particles: &mut Vec<Particle>, x: f32, y: f32, count: usize, 
                 p.max_life = life;
                 p.color = color;
                 p.size = rand::gen_range(1.0, 3.0);
+                p.gravity = false;
             }
         } else {
             particles.push(Particle {
@@ -711,7 +745,36 @@ fn spawn_particles(particles: &mut Vec<Particle>, x: f32, y: f32, count: usize, 
                 max_life: life,
                 color,
                 size: rand::gen_range(1.0, 3.0),
+                gravity: false,
             });
+        }
+    }
+}
+
+fn spawn_blood_particles(particles: &mut Vec<Particle>, x: f32, y: f32) {
+    let count = rand::gen_range(5, 9) as usize;
+    for _ in 0..count {
+        let p = Particle {
+            active: true,
+            x,
+            y,
+            vx: rand::gen_range(-3.0, 3.0),
+            vy: rand::gen_range(-4.0, -1.0),
+            life: 25,
+            max_life: 25,
+            color: Color::new(
+                rand::gen_range(0.7, 1.0),
+                rand::gen_range(0.0, 0.15),
+                rand::gen_range(0.0, 0.1),
+                1.0,
+            ),
+            size: rand::gen_range(1.5, 3.5),
+            gravity: true,
+        };
+        if particles.len() < MAX_PARTICLES {
+            particles.push(p);
+        } else if let Some(slot) = particles.iter_mut().find(|pp| !pp.active) {
+            *slot = p;
         }
     }
 }
@@ -731,6 +794,7 @@ fn spawn_slash_particles(particles: &mut Vec<Particle>, x: f32, y: f32, facing: 
             max_life: 10,
             color,
             size: rand::gen_range(2.0, 4.0),
+            gravity: false,
         };
         if particles.len() < MAX_PARTICLES {
             particles.push(p);
@@ -752,6 +816,7 @@ fn spawn_dash_trail(particles: &mut Vec<Particle>, x: f32, y: f32, h: f32) {
             max_life: 12,
             color: Color::new(0.0, 0.8, 1.0, 0.7),
             size: rand::gen_range(3.0, 6.0),
+            gravity: false,
         };
         if particles.len() < MAX_PARTICLES {
             particles.push(p);
@@ -776,6 +841,40 @@ impl Game {
             });
         }
 
+        // Generate foreground grass tufts along ground level
+        let mut grass_tufts = Vec::new();
+        for col in 0..MAP_COLS {
+            // Check for ground top edge at row 27
+            if col < MAP_COLS && map[27][col] == TILE_GROUND
+                && (col == 0 || map[26][col] == TILE_EMPTY || map[26][col] == TILE_SPIKE)
+            {
+                // Scatter a few tufts per tile
+                for _ in 0..rand::gen_range(0, 3) {
+                    grass_tufts.push(GrassTuft {
+                        x: col as f32 * TILE + rand::gen_range(0.0, TILE),
+                        y: 27.0 * TILE,
+                        h: rand::gen_range(3.0, 7.0),
+                        sway_offset: rand::gen_range(0.0, std::f32::consts::TAU),
+                    });
+                }
+            }
+            // Also check elevated ground sections
+            for row in 20..27 {
+                if row < MAP_ROWS && map[row][col] == TILE_GROUND
+                    && (row == 0 || map[row - 1][col] == TILE_EMPTY)
+                {
+                    if rand::gen_range(0.0, 1.0) < 0.4 {
+                        grass_tufts.push(GrassTuft {
+                            x: col as f32 * TILE + rand::gen_range(0.0, TILE),
+                            y: row as f32 * TILE,
+                            h: rand::gen_range(3.0, 6.0),
+                            sway_offset: rand::gen_range(0.0, std::f32::consts::TAU),
+                        });
+                    }
+                }
+            }
+        }
+
         Self {
             phase: GamePhase::Title,
             player: Player::new(3.0 * TILE, 24.0 * TILE),
@@ -792,6 +891,10 @@ impl Game {
             stars,
             level_name: "Bamboo Forest".to_string(),
             blink_timer: 0,
+            dash_ghosts: Vec::with_capacity(20),
+            wall_sparks: Vec::with_capacity(30),
+            hit_stop: 0,
+            grass_tufts,
             tex_ninja_idle: sprite_to_texture(&ninja_idle_sprite(), 16, 16),
             tex_ninja_run: sprite_to_texture(&ninja_run_sprite(), 16, 16),
             tex_ninja_jump: sprite_to_texture(&ninja_jump_sprite(), 16, 16),
@@ -813,6 +916,9 @@ impl Game {
         self.pickups = pickups;
         self.projectiles.clear();
         self.particles.clear();
+        self.dash_ghosts.clear();
+        self.wall_sparks.clear();
+        self.hit_stop = 0;
         self.player = Player::new(3.0 * TILE, 24.0 * TILE);
         self.camera = Camera { x: 0.0, y: 0.0 };
         self.shake_timer = 0;
@@ -895,6 +1001,37 @@ impl Game {
             return;
         }
 
+        // Hit stop: freeze gameplay but keep drawing
+        if self.hit_stop > 0 {
+            self.hit_stop -= 1;
+            return;
+        }
+
+        // Update dash ghosts (fade out)
+        for ghost in self.dash_ghosts.iter_mut() {
+            if ghost.active {
+                ghost.life -= 1;
+                if ghost.life <= 0 {
+                    ghost.active = false;
+                }
+            }
+        }
+        self.dash_ghosts.retain(|g| g.active);
+
+        // Update wall sparks
+        for spark in self.wall_sparks.iter_mut() {
+            if spark.active {
+                spark.x += spark.vx;
+                spark.y += spark.vy;
+                spark.vy += 0.15;
+                spark.life -= 1;
+                if spark.life <= 0 {
+                    spark.active = false;
+                }
+            }
+        }
+        self.wall_sparks.retain(|s| s.active);
+
         self.update_player();
         self.update_enemies();
         self.update_projectiles();
@@ -952,6 +1089,18 @@ impl Game {
             p.dashing -= 1;
             // Spawn trail
             spawn_dash_trail(&mut self.particles, p.x, p.y, p.h);
+            // Spawn dash afterimage ghost every 2 frames
+            if self.frame % 2 == 0 {
+                self.dash_ghosts.push(DashGhost {
+                    active: true,
+                    x: p.x,
+                    y: p.y,
+                    w: p.w,
+                    h: p.h,
+                    life: 10,
+                    max_life: 10,
+                });
+            }
             if p.dashing == 0 {
                 p.vx = PLAYER_SPEED * p.facing;
             }
@@ -1095,6 +1244,23 @@ impl Game {
                 && (is_solid(&self.map, p.x + p.w + 1.0, p.y + 4.0) || is_solid(&self.map, p.x + p.w + 1.0, p.y + p.h - 4.0))
             {
                 p.on_wall = 1;
+            }
+        }
+
+        // Wall-slide sparks
+        if p.on_wall != 0 && p.vy > 0.0 {
+            let wx = if p.on_wall < 0 { p.x } else { p.x + p.w };
+            let scatter_dir = -p.on_wall as f32;
+            for _ in 0..rand::gen_range(2, 4) {
+                self.wall_sparks.push(WallSpark {
+                    active: true,
+                    x: wx + rand::gen_range(-1.0, 1.0),
+                    y: p.y + p.h * rand::gen_range(0.3, 0.9),
+                    vx: scatter_dir * rand::gen_range(0.5, 2.5),
+                    vy: rand::gen_range(-2.0, 0.5),
+                    life: rand::gen_range(6, 12),
+                    max_life: 10,
+                });
             }
         }
 
@@ -1300,6 +1466,16 @@ impl Game {
                     3.0,
                     10,
                 );
+                // Blood/impact particles on enemy hit
+                spawn_blood_particles(
+                    &mut self.particles,
+                    self.enemies[i].x + self.enemies[i].w * 0.5,
+                    self.enemies[i].y + self.enemies[i].h * 0.4,
+                );
+                // Hit stop on combo finisher (3rd hit)
+                if self.player.combo == 3 {
+                    self.hit_stop = 4;
+                }
                 if self.enemies[i].hp <= 0 {
                     self.enemies[i].active = false;
                     self.player.score += self.enemies[i].score_val;
@@ -1416,7 +1592,11 @@ impl Game {
             }
             p.x += p.vx;
             p.y += p.vy;
-            p.vy += 0.05;
+            if p.gravity {
+                p.vy += 0.25; // heavier gravity for blood/impact
+            } else {
+                p.vy += 0.05;
+            }
             p.life -= 1;
             if p.life <= 0 {
                 p.active = false;
@@ -1566,14 +1746,59 @@ impl Game {
         self.draw_pickups(cam_x, cam_y);
         self.draw_enemies(cam_x, cam_y);
         self.draw_projectiles(cam_x, cam_y);
+
+        // Dash afterimage ghosts (drawn before player for layering)
+        for ghost in &self.dash_ghosts {
+            if ghost.active {
+                let gx = ghost.x - cam_x;
+                let gy = ghost.y - cam_y;
+                let alpha = 0.5 * (ghost.life as f32 / ghost.max_life as f32);
+                // Purple-tinted afterimage (#a040ff)
+                draw_rectangle(gx, gy, ghost.w, ghost.h, Color::new(0.627, 0.251, 1.0, alpha));
+            }
+        }
+
+        // Wall-slide sparks
+        for spark in &self.wall_sparks {
+            if spark.active {
+                let sx = spark.x - cam_x;
+                let sy = spark.y - cam_y;
+                let alpha = spark.life as f32 / spark.max_life as f32;
+                // Yellow/white spark
+                let c = if rand::gen_range(0.0, 1.0) > 0.5 {
+                    Color::new(1.0, 1.0, 0.8, alpha)
+                } else {
+                    Color::new(1.0, 0.9, 0.3, alpha)
+                };
+                draw_circle(sx, sy, 1.5 * alpha, c);
+            }
+        }
+
         self.draw_player(cam_x, cam_y);
+
+        // Sword slash arc
+        self.draw_slash_arc(cam_x, cam_y);
+
         self.draw_particles(cam_x, cam_y);
+
+        // Parallax foreground grass tufts (slightly faster than camera)
+        self.draw_foreground_grass(cam_x, cam_y);
+
         self.draw_hud();
 
         // Death flash
         if self.phase == GamePhase::Death && self.death_timer < 10 {
             let a = 1.0 - self.death_timer as f32 / 10.0;
             draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(1.0, 0.0, 0.0, a * 0.4));
+        }
+
+        // CRT scanline overlay
+        {
+            let mut y = 0;
+            while y < SCREEN_H as i32 {
+                draw_rectangle(0.0, y as f32, SCREEN_W, 2.0, Color::new(0.0, 0.0, 0.0, 0.12));
+                y += 4;
+            }
         }
     }
 
@@ -1957,6 +2182,77 @@ impl Game {
             draw_line(sx + 6.0, sy + 6.0, sx + 6.0 + a.cos() * 5.0, sy + 6.0 + a.sin() * 5.0, 1.5, Color::new(0.75, 0.75, 0.75, 1.0));
         }
         draw_text(&format!("x{}", self.player.shuriken), 30.0, SCREEN_H - 10.0, 18.0, WHITE);
+    }
+
+    fn draw_slash_arc(&self, cam_x: f32, cam_y: f32) {
+        let p = &self.player;
+        if p.dead || p.attacking <= 0 || p.attacking <= ATTACK_DURATION - 8 {
+            return;
+        }
+        let ar = p.attack_rect();
+        let cx = ar.x + ar.w * 0.5 - cam_x;
+        let cy = ar.y + ar.h * 0.5 - cam_y;
+        let radius = if p.combo == 3 { 22.0 } else { 16.0 };
+        let progress = 1.0 - (p.attacking as f32 / ATTACK_DURATION as f32);
+        let segments = 8;
+        // Quarter-circle arc sweeping from top to bottom (or bottom to top based on facing)
+        let start_angle = -std::f32::consts::FRAC_PI_2;
+        let end_angle = start_angle + std::f32::consts::FRAC_PI_2 * (0.3 + progress * 0.7);
+        let alpha = p.attacking as f32 / ATTACK_DURATION as f32;
+        let arc_color = if p.combo == 3 {
+            // Yellow glow for combo 3
+            Color::new(1.0, 0.95, 0.3, alpha * 0.9)
+        } else {
+            // White/cyan
+            Color::new(0.8, 1.0, 1.0, alpha * 0.7)
+        };
+        for i in 0..segments {
+            let t0 = i as f32 / segments as f32;
+            let t1 = (i + 1) as f32 / segments as f32;
+            let a0 = start_angle + (end_angle - start_angle) * t0;
+            let a1 = start_angle + (end_angle - start_angle) * t1;
+            let x0 = cx + a0.cos() * radius * p.facing;
+            let y0 = cy + a0.sin() * radius;
+            let x1 = cx + a1.cos() * radius * p.facing;
+            let y1 = cy + a1.sin() * radius;
+            let thickness = if p.combo == 3 { 2.5 } else { 1.5 };
+            draw_line(x0, y0, x1, y1, thickness, arc_color);
+        }
+        // Extra glow ring for combo 3
+        if p.combo == 3 {
+            let glow_r = radius + 4.0;
+            for i in 0..segments {
+                let t0 = i as f32 / segments as f32;
+                let t1 = (i + 1) as f32 / segments as f32;
+                let a0 = start_angle + (end_angle - start_angle) * t0;
+                let a1 = start_angle + (end_angle - start_angle) * t1;
+                let x0 = cx + a0.cos() * glow_r * p.facing;
+                let y0 = cy + a0.sin() * glow_r;
+                let x1 = cx + a1.cos() * glow_r * p.facing;
+                let y1 = cy + a1.sin() * glow_r;
+                draw_line(x0, y0, x1, y1, 1.0, Color::new(1.0, 0.85, 0.0, alpha * 0.4));
+            }
+        }
+    }
+
+    fn draw_foreground_grass(&self, cam_x: f32, cam_y: f32) {
+        // Foreground grass parallaxes slightly faster (1.05x) for depth
+        let fg_cam_x = cam_x * 1.05;
+        let fg_cam_y = cam_y;
+        for tuft in &self.grass_tufts {
+            let sx = tuft.x - fg_cam_x;
+            if sx < -10.0 || sx > SCREEN_W + 10.0 {
+                continue;
+            }
+            let sy = tuft.y - fg_cam_y;
+            let sway = (self.frame as f32 * 0.03 + tuft.sway_offset).sin() * 1.5;
+            let green = Color::new(0.12, 0.35, 0.08, 0.45);
+            // Thin grass blade
+            draw_line(sx, sy, sx + sway, sy - tuft.h, 1.0, green);
+            // Second blade slightly offset
+            draw_line(sx + 2.0, sy, sx + 2.0 + sway * 0.7, sy - tuft.h * 0.7, 1.0,
+                Color::new(0.15, 0.4, 0.1, 0.35));
+        }
     }
 
     fn draw_pause_overlay(&self) {

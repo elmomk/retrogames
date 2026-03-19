@@ -124,6 +124,7 @@ struct Enemy {
     last_shot: i64,
     shoot_cooldown: i32,
     color: Color,
+    spawn_flash: i32, // countdown for spawn flash effect
 }
 
 #[derive(Clone, Copy)]
@@ -255,6 +256,9 @@ struct Game {
 
     // shoot held
     shoot_held: bool,
+
+    // wave clear celebration
+    wave_clear_celebrated: bool,
 }
 
 impl Game {
@@ -290,6 +294,7 @@ impl Game {
             story_displayed: String::new(),
             story_wait: 0,
             shoot_held: false,
+            wave_clear_celebrated: false,
         }
     }
 
@@ -500,6 +505,7 @@ impl Game {
             last_shot: self.frame + rand::gen_range(0, 60) as i64,
             shoot_cooldown: shoot_cd,
             color,
+            spawn_flash: 5,
         });
     }
 
@@ -627,6 +633,30 @@ impl Game {
             self.muzzle_flash -= 1;
         }
 
+        // Engine exhaust particles
+        {
+            let ex = self.player.x;
+            let ey = self.player.y + self.player.h / 2.0;
+            for _ in 0..2 {
+                let ox = rand::gen_range(-4.0, 4.0);
+                let c = if rand::gen_range(0.0f32, 1.0) > 0.5 {
+                    Color::new(1.0, 0.5, 0.0, 0.8) // orange
+                } else {
+                    Color::new(1.0, 0.2, 0.0, 0.8) // red
+                };
+                self.particles.push(Particle {
+                    x: ex + ox,
+                    y: ey,
+                    vx: rand::gen_range(-0.3, 0.3),
+                    vy: rand::gen_range(1.0, 3.0),
+                    life: 0.7,
+                    decay: rand::gen_range(0.06, 0.12),
+                    color: c,
+                    alive: true,
+                });
+            }
+        }
+
         // Screen shake decay
         if self.shake_mag > 0.1 {
             self.shake_x = rand::gen_range(-1.0, 1.0) * self.shake_mag;
@@ -656,7 +686,34 @@ impl Game {
         if self.kills >= target {
             if !self.wave_cleared {
                 self.wave_cleared = true;
+                self.wave_clear_celebrated = false;
                 self.slowmo_timer = 30;
+            }
+            // Wave clear celebration burst
+            if !self.wave_clear_celebrated {
+                self.wave_clear_celebrated = true;
+                let cx = GAME_W / 2.0;
+                let cy = GAME_H / 2.0;
+                let celebration_colors = [
+                    Color::new(1.0, 0.84, 0.0, 1.0),  // gold
+                    WHITE,
+                    SKYBLUE,                             // cyan
+                ];
+                for i in 0..30 {
+                    let angle = rand::gen_range(0.0, std::f32::consts::TAU);
+                    let spd = rand::gen_range(2.0, 6.0);
+                    let c = celebration_colors[i % 3];
+                    self.particles.push(Particle {
+                        x: cx,
+                        y: cy,
+                        vx: angle.cos() * spd,
+                        vy: angle.sin() * spd,
+                        life: 1.0,
+                        decay: rand::gen_range(0.01, 0.03),
+                        color: c,
+                        alive: true,
+                    });
+                }
             }
             if self.slowmo_timer > 0 {
                 self.slowmo_timer -= 1;
@@ -686,6 +743,28 @@ impl Game {
             if b.y < -50.0 || b.y > GAME_H + 50.0 || b.x < -50.0 || b.x > GAME_W + 50.0 {
                 b.alive = false;
             }
+        }
+
+        // Bullet trail particles (player bullets only)
+        {
+            let mut trails = Vec::new();
+            for b in &self.bullets {
+                if !b.alive || !b.is_player { continue; }
+                let count = rand::gen_range(1u32, 3); // 1-2 particles
+                for _ in 0..count {
+                    trails.push(Particle {
+                        x: b.x + rand::gen_range(-1.5, 1.5),
+                        y: b.y - b.vy * 0.3 + rand::gen_range(-1.0, 1.0),
+                        vx: rand::gen_range(-0.3, 0.3),
+                        vy: rand::gen_range(-0.2, 0.2),
+                        life: rand::gen_range(0.3, 0.5),
+                        decay: rand::gen_range(0.05, 0.08),
+                        color: Color::new(b.color.r, b.color.g, b.color.b, 0.4),
+                        alive: true,
+                    });
+                }
+            }
+            self.particles.extend(trails);
         }
 
         // Update enemies (collect boss bullets separately)
@@ -719,6 +798,10 @@ impl Game {
             }
             if e.y > GAME_H + e.h {
                 e.alive = false;
+            }
+            // Decrement spawn flash timer
+            if e.spawn_flash > 0 {
+                e.spawn_flash -= 1;
             }
         }
         self.bullets.extend(new_bullets);
@@ -924,9 +1007,12 @@ impl Game {
             gy += step;
         }
 
-        // Stars
-        for s in &self.stars {
-            let c = Color::new(1.0, 1.0, 1.0, s.brightness);
+        // Stars (with twinkle)
+        for (i, s) in self.stars.iter().enumerate() {
+            let twinkle = 0.65 + 0.35 * ((self.frame as f32 * 0.05 + i as f32 * 1.7).sin());
+            let alpha = s.brightness * twinkle;
+            let alpha = alpha.clamp(0.3, 1.0);
+            let c = Color::new(1.0, 1.0, 1.0, alpha);
             draw_rectangle(s.x + self.shake_x, s.y + self.shake_y, s.size, s.size, c);
         }
 
@@ -971,6 +1057,13 @@ impl Game {
             // Enemies
             for e in &self.enemies {
                 self.draw_enemy_shape(e.x + sx, e.y + sy, e.w, e.h, e.etype, e.color, 1.0);
+                // Spawn flash
+                if e.spawn_flash > 0 {
+                    let t = e.spawn_flash as f32 / 5.0;
+                    let radius = e.w * (1.0 + (1.0 - t) * 1.5);
+                    let alpha = t * 0.7;
+                    draw_circle(e.x + sx, e.y + sy, radius, Color::new(1.0, 1.0, 1.0, alpha));
+                }
             }
 
             // Dying enemies
@@ -1028,6 +1121,37 @@ impl Game {
             GameState::GameOver => self.draw_game_over(),
             GameState::Victory => self.draw_victory(),
             _ => {}
+        }
+
+        // ----- CRT scanline overlay -----
+        {
+            let scanline_color = Color::new(0.0, 0.0, 0.0, 0.12);
+            let mut y = 0.0;
+            while y < GAME_H {
+                draw_rectangle(0.0, y, GAME_W, 2.0, scanline_color);
+                y += 4.0;
+            }
+        }
+
+        // ----- Vignette (dark gradient at all 4 edges) -----
+        {
+            let depth = 50.0;
+            let steps = 10;
+            let step_size = depth / steps as f32;
+            for i in 0..steps {
+                let t = 1.0 - (i as f32 / steps as f32); // 1.0 at edge, 0.0 inside
+                let alpha = t * 0.4;
+                let c = Color::new(0.0, 0.0, 0.0, alpha);
+                let offset = i as f32 * step_size;
+                // Top edge
+                draw_rectangle(0.0, offset, GAME_W, step_size, c);
+                // Bottom edge
+                draw_rectangle(0.0, GAME_H - offset - step_size, GAME_W, step_size, c);
+                // Left edge
+                draw_rectangle(offset, 0.0, step_size, GAME_H, c);
+                // Right edge
+                draw_rectangle(GAME_W - offset - step_size, 0.0, step_size, GAME_H, c);
+            }
         }
     }
 

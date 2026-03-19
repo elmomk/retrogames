@@ -40,8 +40,11 @@ const THROW_DISTANCE: f32 = 200.0;
 const SCREEN_SHAKE_HEAVY: f32 = 4.0;
 const SCREEN_SHAKE_LIGHT: f32 = 2.0;
 
-const MAX_PARTICLES: usize = 100;
+const MAX_PARTICLES: usize = 200;
 const CONTINUE_SECONDS: i32 = 9;
+const MAX_FLOAT_TEXTS: usize = 16;
+const FLOAT_TEXT_DURATION: i32 = 20;
+const MAX_RAIN_DROPS: usize = 40;
 
 const GO_ARROW_DISPLAY: f32 = 3.0; // seconds to show "GO >>>"
 
@@ -394,6 +397,48 @@ impl Particle {
 }
 
 #[derive(Clone)]
+struct FloatingText {
+    x: f32,
+    y: f32,
+    text: &'static str,
+    timer: i32,       // counts down from FLOAT_TEXT_DURATION
+    large: bool,      // true for combo finisher hits
+    active: bool,
+}
+
+impl FloatingText {
+    fn inactive() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            text: "",
+            timer: 0,
+            large: false,
+            active: false,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct RainDrop {
+    x: f32,
+    y: f32,
+    speed: f32,
+    length: f32,
+}
+
+impl RainDrop {
+    fn new_random() -> Self {
+        Self {
+            x: rand::gen_range(0.0, SCREEN_W + 100.0),
+            y: rand::gen_range(-SCREEN_H, 0.0),
+            speed: rand::gen_range(6.0, 12.0),
+            length: rand::gen_range(8.0, 18.0),
+        }
+    }
+}
+
+#[derive(Clone)]
 struct Projectile {
     x: f32,
     y: f32,
@@ -452,6 +497,15 @@ struct Game {
     title_blink: f32,
     stage_name_timer: f32,
     flash_timer: f32,
+    hit_stop: i32,
+    float_texts: Vec<FloatingText>,
+    rain_drops: Vec<RainDrop>,
+    shockwave_radius: f32,
+    shockwave_active: bool,
+    frame_count: u64,
+    stage_fade_timer: i32,   // counts 0..60 during stage transition fade
+    stage_fade_dir: i32,     // -1 = fading out, 1 = fading in, 0 = showing name
+    stage_fade_hold: i32,    // frames to hold on stage name
 }
 
 impl Game {
@@ -484,6 +538,15 @@ impl Game {
             title_blink: 0.0,
             stage_name_timer: 0.0,
             flash_timer: 0.0,
+            hit_stop: 0,
+            float_texts: vec![FloatingText::inactive(); MAX_FLOAT_TEXTS],
+            rain_drops: (0..MAX_RAIN_DROPS).map(|_| RainDrop::new_random()).collect(),
+            shockwave_radius: 0.0,
+            shockwave_active: false,
+            frame_count: 0,
+            stage_fade_timer: 0,
+            stage_fade_dir: -1,
+            stage_fade_hold: 0,
         }
     }
 
@@ -562,6 +625,36 @@ impl Game {
 
     fn add_flash(&mut self) {
         self.flash_timer = 0.1;
+    }
+
+    fn spawn_float_text(&mut self, x: f32, y: f32, large: bool) {
+        let texts: [&'static str; 3] = ["POW", "BAM", "CRACK"];
+        let text = texts[rand::gen_range(0, 3) as usize];
+        for ft in &mut self.float_texts {
+            if !ft.active {
+                ft.active = true;
+                ft.x = x;
+                ft.y = y;
+                ft.text = text;
+                ft.timer = FLOAT_TEXT_DURATION;
+                ft.large = large;
+                return;
+            }
+        }
+    }
+
+    fn spawn_wham_text(&mut self, x: f32, y: f32) {
+        for ft in &mut self.float_texts {
+            if !ft.active {
+                ft.active = true;
+                ft.x = x;
+                ft.y = y;
+                ft.text = "WHAM!";
+                ft.timer = FLOAT_TEXT_DURATION;
+                ft.large = true;
+                return;
+            }
+        }
     }
 }
 
@@ -794,13 +887,20 @@ async fn main() {
     loop {
         let dt = get_frame_time().min(0.05);
 
-        match game.state {
-            GameState::Title => update_title(&mut game),
-            GameState::Playing => update_playing(&mut game, dt),
-            GameState::Paused => update_paused(&mut game),
-            GameState::StageTransition => update_stage_transition(&mut game, dt),
-            GameState::GameOver => update_game_over(&mut game, dt),
-            GameState::Victory => update_victory(&mut game, dt),
+        game.frame_count = game.frame_count.wrapping_add(1);
+
+        // Hit stop: skip game updates but still draw
+        if game.hit_stop > 0 {
+            game.hit_stop -= 1;
+        } else {
+            match game.state {
+                GameState::Title => update_title(&mut game),
+                GameState::Playing => update_playing(&mut game, dt),
+                GameState::Paused => update_paused(&mut game),
+                GameState::StageTransition => update_stage_transition(&mut game, dt),
+                GameState::GameOver => update_game_over(&mut game, dt),
+                GameState::Victory => update_victory(&mut game, dt),
+            }
         }
 
         // Render
@@ -835,6 +935,16 @@ async fn main() {
             game.flash_timer -= dt;
         }
 
+        // CRT scanline overlay
+        {
+            let scanline_color = Color::new(0.0, 0.0, 0.0, 0.12);
+            let mut scan_y = 0.0;
+            while scan_y < SCREEN_H {
+                draw_rectangle(0.0, scan_y, SCREEN_W, 1.0, scanline_color);
+                scan_y += 4.0;
+            }
+        }
+
         next_frame().await;
     }
 }
@@ -857,6 +967,23 @@ fn update_title(game: &mut Game) {
 // ---------------------------------------------------------------------------
 fn update_stage_transition(game: &mut Game, dt: f32) {
     game.transition_timer -= dt;
+
+    // Frame-based fade: fade out 30 frames, hold 30 frames, fade in 30 frames
+    // Total ~90 frames mapped over the 2.5s timer
+    if game.transition_timer > 1.8 {
+        // Fading to black (first 30 frames)
+        game.stage_fade_dir = -1;
+        game.stage_fade_timer = ((2.5 - game.transition_timer) / 0.7 * 30.0).min(30.0) as i32;
+    } else if game.transition_timer > 0.7 {
+        // Holding on stage name
+        game.stage_fade_dir = 0;
+        game.stage_fade_timer = 30;
+    } else {
+        // Fading back in
+        game.stage_fade_dir = 1;
+        game.stage_fade_timer = ((0.7 - game.transition_timer) / 0.7 * 30.0).min(30.0) as i32;
+    }
+
     if game.transition_timer <= 0.0 {
         game.state = GameState::Playing;
         game.start_stage(game.stage_index);
@@ -930,6 +1057,8 @@ fn update_playing(game: &mut Game, dt: f32) {
     update_enemies(game, dt);
     update_projectiles(game, dt);
     update_particles(game, dt);
+    update_float_texts(game);
+    update_rain(game);
     check_wave_triggers(game);
     update_camera(game);
     check_screen_lock(game);
@@ -1183,6 +1312,10 @@ fn update_player(game: &mut Game, dt: f32) {
 
         PlayerState::Special => {
             game.player.state_timer -= 1;
+            // Shockwave expands over move duration
+            game.shockwave_active = true;
+            let progress = 1.0 - (game.player.state_timer as f32 / SPECIAL_FRAMES as f32);
+            game.shockwave_radius = progress * 80.0;
             // Hit all enemies in radius on first frame
             if game.player.state_timer == SPECIAL_FRAMES - 1 {
                 game.add_flash();
@@ -1205,6 +1338,8 @@ fn update_player(game: &mut Game, dt: f32) {
             }
             if game.player.state_timer <= 0 {
                 game.player.state = PlayerState::Idle;
+                game.shockwave_active = false;
+                game.shockwave_radius = 0.0;
             }
         }
 
@@ -1356,6 +1491,15 @@ fn check_player_attack_hits(game: &mut Game) {
             game.spawn_particle(spark_x, spark_y, NEON_YELLOW, 5, 3.0);
             game.add_shake(SCREEN_SHAKE_LIGHT, 4);
 
+            // POW/BAM floating text on every hit
+            let is_combo_finisher = combo_idx >= 3;
+            game.spawn_float_text(spark_x, spark_y, is_combo_finisher);
+
+            // Hit stop on combo finisher (3rd punch) or jump kick
+            if is_combo_finisher || is_jump_kick {
+                game.hit_stop = 5;
+            }
+
             if game.enemies[i].hp <= 0.0 {
                 game.enemies[i].state = EnemyState::Dead;
                 game.enemies[i].state_timer = 60;
@@ -1495,6 +1639,14 @@ fn update_enemies(game: &mut Game, dt: f32) {
                         game.enemies[j].state = EnemyState::Stunned;
                         game.enemies[j].state_timer = 30;
                         game.player.score += 100;
+
+                        // Thrown enemy collision: big burst of white/yellow particles + WHAM text
+                        let cx = (ei_x + game.enemies[j].x) * 0.5;
+                        let cy = (ei_y + game.enemies[j].y) * 0.5 - 20.0;
+                        game.spawn_particle(cx, cy, WHITE, 8, 5.0);
+                        game.spawn_particle(cx, cy, NEON_YELLOW, 7, 4.0);
+                        game.spawn_wham_text(cx, cy);
+                        game.add_shake(SCREEN_SHAKE_HEAVY, 8);
                     }
                 }
 
@@ -1772,6 +1924,36 @@ fn update_particles(game: &mut Game, dt: f32) {
     }
 }
 
+fn update_float_texts(game: &mut Game) {
+    for ft in &mut game.float_texts {
+        if !ft.active {
+            continue;
+        }
+        ft.timer -= 1;
+        ft.y -= 1.5; // float upward
+        if ft.timer <= 0 {
+            ft.active = false;
+        }
+    }
+}
+
+fn update_rain(game: &mut Game) {
+    // Only rain in stage 0 (Back Alley)
+    if game.stage_index != 0 {
+        return;
+    }
+    for drop in &mut game.rain_drops {
+        drop.x -= drop.speed * 0.3; // diagonal
+        drop.y += drop.speed;
+        if drop.y > SCREEN_H || drop.x < -20.0 {
+            drop.x = rand::gen_range(0.0, SCREEN_W + 100.0);
+            drop.y = rand::gen_range(-SCREEN_H, -10.0);
+            drop.speed = rand::gen_range(6.0, 12.0);
+            drop.length = rand::gen_range(8.0, 18.0);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Wave triggers, screen lock, stage completion
 // ---------------------------------------------------------------------------
@@ -1939,6 +2121,65 @@ fn draw_game(game: &Game, shake: Vec2) {
             let alpha = (p.life / p.max_life).clamp(0.0, 1.0);
             let c = Color::new(p.color.r, p.color.g, p.color.b, alpha);
             draw_rectangle(p.x - cam, p.y + sy, p.size, p.size, c);
+        }
+    }
+
+    // Floating text effects (POW, BAM, CRACK, WHAM!)
+    for ft in &game.float_texts {
+        if !ft.active {
+            continue;
+        }
+        let progress = 1.0 - (ft.timer as f32 / FLOAT_TEXT_DURATION as f32);
+        let alpha = 1.0 - progress;
+        let base_size = if ft.large { 40.0 } else { 28.0 };
+        let scale_up = 1.0 + progress * 0.3; // scales up slightly
+        let font_size = base_size * scale_up;
+        let c = Color::new(1.0, 1.0, 0.0, alpha); // bold yellow
+        let sx = ft.x - cam;
+        let sy_ft = ft.y + sy;
+        // Shadow for readability
+        draw_text(ft.text, sx + 2.0, sy_ft + 2.0, font_size, Color::new(0.0, 0.0, 0.0, alpha * 0.6));
+        draw_text(ft.text, sx, sy_ft, font_size, c);
+    }
+
+    // Special move shockwave
+    if game.shockwave_active && game.shockwave_radius > 0.0 {
+        let px = game.player.x - cam;
+        let py_sw = game.player.y + sy - game.player.jump_z;
+        let fade = if game.player.state_timer < 5 {
+            game.player.state_timer as f32 / 5.0
+        } else {
+            1.0
+        };
+        let alpha = 0.3 * fade;
+        draw_circle(
+            px,
+            py_sw - 24.0,
+            game.shockwave_radius,
+            Color::new(1.0, 0.0, 1.0, alpha),
+        );
+        // Ring outline
+        draw_circle_lines(
+            px,
+            py_sw - 24.0,
+            game.shockwave_radius,
+            2.0,
+            Color::new(1.0, 0.0, 1.0, alpha * 1.5),
+        );
+    }
+
+    // Background rain for Back Alley (stage 0) - draw on top for visibility
+    if game.stage_index == 0 {
+        for drop in &game.rain_drops {
+            let alpha = 0.25;
+            draw_line(
+                drop.x,
+                drop.y + sy,
+                drop.x - drop.length * 0.3,
+                drop.y + drop.length + sy,
+                1.0,
+                Color::new(0.8, 0.8, 1.0, alpha),
+            );
         }
     }
 
@@ -2287,6 +2528,29 @@ fn draw_enemy(enemy: &Enemy, cam: f32, sy: f32) {
     // Stunned flash
     if enemy.state == EnemyState::Stunned && enemy.state_timer % 4 < 2 {
         // flash effect - draw slightly brighter
+    }
+
+    // Stun stars orbiting above head
+    if enemy.state == EnemyState::Stunned {
+        let (_, sh) = enemy.sprite_size();
+        let star_cx = x;
+        let star_cy = y - sh * scale - 10.0;
+        let t = enemy.anim_frame as f32 * 0.08;
+        for s in 0..3 {
+            let angle = t + (s as f32) * std::f32::consts::TAU / 3.0;
+            let sr = 10.0 * scale;
+            let sx = star_cx + angle.cos() * sr;
+            let sy_star = star_cy + angle.sin() * sr * 0.4; // elliptical orbit
+            // Draw small yellow star (diamond shape)
+            let star_size = 3.0 * scale;
+            draw_rectangle(
+                sx - star_size * 0.5,
+                sy_star - star_size * 0.5,
+                star_size,
+                star_size,
+                NEON_YELLOW,
+            );
+        }
     }
 
     let body_color = enemy_body_color(enemy.kind);
@@ -2653,16 +2917,35 @@ fn draw_title_character(cx: f32, cy: f32) {
 }
 
 fn draw_stage_transition(game: &Game) {
-    draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, BLACK);
+    // Fade alpha: during fade-out, black goes from 0->1;
+    // during hold, black = 1; during fade-in, black goes from 1->0
+    let fade_alpha = if game.stage_fade_dir == -1 {
+        // Fading to black
+        (game.stage_fade_timer as f32 / 30.0).clamp(0.0, 1.0)
+    } else if game.stage_fade_dir == 0 {
+        // Holding
+        1.0
+    } else {
+        // Fading in from black
+        1.0 - (game.stage_fade_timer as f32 / 30.0).clamp(0.0, 1.0)
+    };
 
-    let alpha = if game.transition_timer > 2.0 {
-        (2.5 - game.transition_timer) * 2.0
-    } else if game.transition_timer < 0.5 {
-        game.transition_timer * 2.0
+    draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.0, 0.0, 0.0, fade_alpha));
+
+    // Only show text when screen is mostly dark
+    let text_alpha = if game.stage_fade_dir == 0 {
+        1.0
+    } else if game.stage_fade_dir == -1 && game.stage_fade_timer > 20 {
+        (game.stage_fade_timer as f32 - 20.0) / 10.0
+    } else if game.stage_fade_dir == 1 && game.stage_fade_timer < 10 {
+        (10.0 - game.stage_fade_timer as f32) / 10.0
+    } else if game.stage_fade_dir == -1 {
+        0.0
     } else {
         1.0
     };
-    let c = Color::new(1.0, 1.0, 1.0, alpha.clamp(0.0, 1.0));
+
+    let c = Color::new(1.0, 1.0, 1.0, text_alpha.clamp(0.0, 1.0));
 
     let stage_name = format!(
         "STAGE {}: {}",
@@ -2685,7 +2968,7 @@ fn draw_stage_transition(game: &Game) {
         (SCREEN_W - rw) * 0.5,
         SCREEN_H * 0.55,
         24.0,
-        Color::new(NEON_CYAN.r, NEON_CYAN.g, NEON_CYAN.b, alpha.clamp(0.0, 1.0)),
+        Color::new(NEON_CYAN.r, NEON_CYAN.g, NEON_CYAN.b, text_alpha.clamp(0.0, 1.0)),
     );
 }
 
