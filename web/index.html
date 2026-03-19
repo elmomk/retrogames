@@ -1,77 +1,588 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script>if(!window.location.pathname.endsWith('/'))window.location.replace(window.location.pathname+'/');</script>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Retro Game Launcher</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Retro Arcade</title>
     <style>
-        body {
-            background-color: #0f0f19;
-            color: white;
-            font-family: 'Courier New', Courier, monospace;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 50px;
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body, html {
+            width: 100%; height: 100%;
+            background: #06060e;
+            font-family: 'Press Start 2P', monospace;
+            overflow-x: hidden;
+            color: #fff;
         }
-        h1 {
+
+        /* Starfield background */
+        .starfield {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 0; pointer-events: none;
+        }
+
+        /* Scanline overlay */
+        .scanlines {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: repeating-linear-gradient(
+                to bottom,
+                transparent 0px, transparent 2px,
+                rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 4px
+            );
+            pointer-events: none; z-index: 100;
+        }
+
+        /* CRT vignette */
+        .vignette {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.7) 100%);
+            pointer-events: none; z-index: 99;
+        }
+
+        .page {
+            position: relative; z-index: 1;
+            min-height: 100vh;
+            display: flex; flex-direction: column; align-items: center;
+            padding: 40px 20px 60px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+            animation: fadeDown 0.8s ease-out;
+        }
+
+        .title {
+            font-size: 2.8rem;
+            letter-spacing: 4px;
+            background: linear-gradient(180deg, #ff6b35 0%, #ff2d78 50%, #c40cff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            filter: drop-shadow(0 0 20px rgba(255, 45, 120, 0.4));
+            line-height: 1.3;
+        }
+
+        .subtitle {
+            margin-top: 16px;
+            font-size: 0.6rem;
+            color: #556;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+        }
+
+        .coin-prompt {
+            margin-top: 20px;
+            font-size: 0.55rem;
             color: #ffaa00;
-            text-shadow: 2px 2px 0px #ff0000;
-            font-size: 3rem;
-            margin-bottom: 40px;
+            animation: blink 1.2s step-end infinite;
         }
+
+        /* Game grid */
         .game-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 24px;
             width: 100%;
-            max-width: 800px;
+            max-width: 960px;
         }
+
+        /* Game card */
         .game-card {
-            background: rgba(255, 255, 255, 0.1);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 10px;
-            padding: 20px;
-            text-align: center;
-            cursor: pointer;
-            transition: transform 0.2s, background 0.2s;
+            position: relative;
+            background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.08) 100%);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            padding: 0;
             text-decoration: none;
-            color: white;
-            display: block;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: transform 0.25s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+            animation: fadeUp 0.6s ease-out both;
         }
+
+        .game-card:nth-child(1) { animation-delay: 0.1s; }
+        .game-card:nth-child(2) { animation-delay: 0.2s; }
+        .game-card:nth-child(3) { animation-delay: 0.3s; }
+        .game-card:nth-child(4) { animation-delay: 0.4s; }
+        .game-card:nth-child(5) { animation-delay: 0.5s; }
+
         .game-card:hover {
-            transform: scale(1.05);
-            background: rgba(255, 255, 255, 0.2);
-            border-color: #00ffff;
+            transform: translateY(-6px) scale(1.02);
+            border-color: var(--card-color, #0ff);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 20px var(--card-glow, rgba(0,255,255,0.15));
         }
-        .game-title {
-            font-size: 1.5rem;
-            font-weight: bold;
-            margin-bottom: 10px;
+
+        .game-card:active {
+            transform: translateY(-2px) scale(1.0);
         }
-        .game-desc {
+
+        /* Card preview area */
+        .card-preview {
+            height: 140px;
+            background: var(--card-bg, #111);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card-preview canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+        }
+
+        .card-icon {
+            font-size: 3rem;
+            z-index: 1;
+            filter: drop-shadow(0 0 12px var(--card-glow, rgba(0,255,255,0.4)));
+        }
+
+        /* Card body */
+        .card-body {
+            padding: 18px 20px 20px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-genre {
+            font-size: 0.45rem;
+            color: var(--card-color, #0ff);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .card-title {
             font-size: 0.9rem;
-            color: #aaaaaa;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+
+        .card-desc {
+            font-size: 0.5rem;
+            color: #778;
+            line-height: 1.8;
+            flex: 1;
+        }
+
+        .card-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .card-tag {
+            font-size: 0.4rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.06);
+            color: #99a;
+        }
+
+        .card-play {
+            font-size: 0.45rem;
+            color: var(--card-color, #0ff);
+            letter-spacing: 2px;
+        }
+
+        .game-card:hover .card-play {
+            animation: blink 0.8s step-end infinite;
+        }
+
+        /* Coming soon card */
+        .game-card.coming-soon {
+            opacity: 0.35;
+            pointer-events: none;
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 60px;
+            text-align: center;
+            font-size: 0.4rem;
+            color: #334;
+            letter-spacing: 2px;
+        }
+
+        /* Animations */
+        @keyframes blink {
+            0%, 49% { opacity: 1; }
+            50%, 100% { opacity: 0; }
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .title { font-size: 1.6rem; }
+            .game-grid { grid-template-columns: 1fr; gap: 18px; }
+            .page { padding: 24px 14px 40px; }
+            .card-preview { height: 110px; }
         }
     </style>
 </head>
 <body>
 
-    <h1>ARCADE LAUNCHER</h1>
+<canvas class="starfield" id="stars"></canvas>
+<div class="scanlines"></div>
+<div class="vignette"></div>
+
+<div class="page">
+    <header class="header">
+        <div class="title">RETRO ARCADE</div>
+        <div class="subtitle">Select your mission</div>
+        <div class="coin-prompt">INSERT COIN TO CONTINUE</div>
+    </header>
 
     <div class="game-grid">
-        <!-- Link out to your micro mages index.html -->
-        <a href="micro/index.html" class="game-card">
-            <div class="game-title">Micro Mages (JS)</div>
-            <div class="game-desc">Browser prototype of the Miyoo platformer.</div>
+
+        <a href="micro/index.html" class="game-card" style="--card-color:#00e5ff;--card-glow:rgba(0,229,255,0.2);--card-bg:#0a1520;">
+            <div class="card-preview">
+                <canvas id="preview-micro"></canvas>
+                <div class="card-icon">&#x1F9D9;</div>
+            </div>
+            <div class="card-body">
+                <div class="card-genre">Platformer</div>
+                <div class="card-title">Micro Mages</div>
+                <div class="card-desc">Wall-jump through perilous towers. Shoot, grapple, and dodge rising lava in this retro platformer.</div>
+                <div class="card-footer">
+                    <span class="card-tag">3 Levels</span>
+                    <span class="card-play">PLAY &#9654;</span>
+                </div>
+            </div>
         </a>
 
-        <!-- Add future games here -->
-        <a href="#" class="game-card" style="opacity: 0.5; cursor: not-allowed;">
-            <div class="game-title">Project 2</div>
-            <div class="game-desc">Coming soon...</div>
+        <a href="space/index.html" class="game-card" style="--card-color:#ff2d78;--card-glow:rgba(255,45,120,0.2);--card-bg:#150a14;">
+            <div class="card-preview">
+                <canvas id="preview-space"></canvas>
+                <div class="card-icon">&#x1F680;</div>
+            </div>
+            <div class="card-body">
+                <div class="card-genre">Shoot 'em Up</div>
+                <div class="card-title">Neon Defender</div>
+                <div class="card-desc">Blast through waves of alien ships. Collect power-ups and face off against massive bosses.</div>
+                <div class="card-footer">
+                    <span class="card-tag">4 Waves</span>
+                    <span class="card-play">PLAY &#9654;</span>
+                </div>
+            </div>
         </a>
+
+        <a href="shadow/index.html" class="game-card" style="--card-color:#c40cff;--card-glow:rgba(196,12,255,0.2);--card-bg:#12081a;">
+            <div class="card-preview">
+                <canvas id="preview-shadow"></canvas>
+                <div class="card-icon">&#x1F977;</div>
+            </div>
+            <div class="card-body">
+                <div class="card-genre">Action Platformer</div>
+                <div class="card-title">Shadow Blade</div>
+                <div class="card-desc">Wall-run, dash, and slash as a rogue ninja. Master the blade across bamboo forests and demon shrines.</div>
+                <div class="card-footer">
+                    <span class="card-tag">3 Stages</span>
+                    <span class="card-play">PLAY &#9654;</span>
+                </div>
+            </div>
+        </a>
+
+        <a href="arena/index.html" class="game-card" style="--card-color:#ffaa00;--card-glow:rgba(255,170,0,0.2);--card-bg:#1a1408;">
+            <div class="card-preview">
+                <canvas id="preview-arena"></canvas>
+                <div class="card-icon">&#x1F4A5;</div>
+            </div>
+            <div class="card-body">
+                <div class="card-genre">Twin-Stick Shooter</div>
+                <div class="card-title">Arena Blitz</div>
+                <div class="card-desc">Survive endless waves in a top-down arena. Grab weapons, dodge bullets, and obliterate everything.</div>
+                <div class="card-footer">
+                    <span class="card-tag">10 Waves</span>
+                    <span class="card-play">PLAY &#9654;</span>
+                </div>
+            </div>
+        </a>
+
+        <a href="dragon/index.html" class="game-card" style="--card-color:#ff6b35;--card-glow:rgba(255,107,53,0.2);--card-bg:#1a0e08;">
+            <div class="card-preview">
+                <canvas id="preview-dragon"></canvas>
+                <div class="card-icon">&#x1F409;</div>
+            </div>
+            <div class="card-body">
+                <div class="card-genre">Beat 'em Up</div>
+                <div class="card-title">Dragon Fury</div>
+                <div class="card-desc">Punch, kick, and throw your way through the streets. Classic brawler action with brutal combos.</div>
+                <div class="card-footer">
+                    <span class="card-tag">3 Stages</span>
+                    <span class="card-play">PLAY &#9654;</span>
+                </div>
+            </div>
+        </a>
+
     </div>
+
+    <div class="footer">RETRO ARCADE &copy; 2026 &mdash; ALL GAMES BROWSER PLAYABLE</div>
+</div>
+
+<script>
+// Animated starfield background
+(function() {
+    const canvas = document.getElementById('stars');
+    const ctx = canvas.getContext('2d');
+    let stars = [];
+    const STAR_COUNT = 120;
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+
+    function init() {
+        resize();
+        stars = [];
+        for (let i = 0; i < STAR_COUNT; i++) {
+            stars.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 1.5 + 0.3,
+                speed: Math.random() * 0.3 + 0.05,
+                brightness: Math.random()
+            });
+        }
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const t = Date.now() * 0.001;
+        for (const s of stars) {
+            s.y += s.speed;
+            if (s.y > canvas.height) { s.y = 0; s.x = Math.random() * canvas.width; }
+            const flicker = 0.5 + 0.5 * Math.sin(t * 2 + s.brightness * 10);
+            const alpha = s.brightness * 0.4 * flicker + 0.1;
+            ctx.fillStyle = `rgba(180,190,255,${alpha})`;
+            ctx.fillRect(Math.floor(s.x), Math.floor(s.y), Math.ceil(s.size), Math.ceil(s.size));
+        }
+        requestAnimationFrame(draw);
+    }
+
+    window.addEventListener('resize', resize);
+    init();
+    draw();
+})();
+
+// Mini animated previews for each game card
+(function() {
+    const previews = {
+        'preview-micro': drawMicroPreview,
+        'preview-space': drawSpacePreview,
+        'preview-shadow': drawShadowPreview,
+        'preview-arena': drawArenaPreview,
+        'preview-dragon': drawDragonPreview,
+    };
+
+    for (const [id, drawFn] of Object.entries(previews)) {
+        const c = document.getElementById(id);
+        if (!c) continue;
+        const parent = c.parentElement;
+        c.width = 280;
+        c.height = 140;
+        const ctx = c.getContext('2d');
+        (function animate() {
+            drawFn(ctx, c.width, c.height, Date.now() * 0.001);
+            requestAnimationFrame(animate);
+        })();
+    }
+
+    function drawMicroPreview(ctx, w, h, t) {
+        ctx.clearRect(0, 0, w, h);
+        // Platforms
+        ctx.fillStyle = '#1a3040';
+        for (let i = 0; i < 5; i++) {
+            const px = 20 + i * 55;
+            const py = 80 + Math.sin(t + i) * 10;
+            ctx.fillRect(px, py, 40, 6);
+        }
+        // Character bouncing
+        const cx = 60 + Math.sin(t * 1.5) * 30;
+        const cy = 60 + Math.abs(Math.sin(t * 3)) * -20;
+        ctx.fillStyle = '#00e5ff';
+        ctx.fillRect(cx, cy, 8, 12);
+        ctx.fillStyle = '#00e5ff55';
+        ctx.fillRect(cx - 2, cy + 12, 12, 2);
+        // Lava
+        ctx.fillStyle = '#ff440044';
+        ctx.fillRect(0, h - 15, w, 15);
+        ctx.fillStyle = '#ff4400';
+        for (let i = 0; i < w; i += 8) {
+            const lh = 4 + Math.sin(t * 2 + i * 0.1) * 3;
+            ctx.fillRect(i, h - lh, 6, lh);
+        }
+    }
+
+    function drawSpacePreview(ctx, w, h, t) {
+        ctx.clearRect(0, 0, w, h);
+        // Stars
+        for (let i = 0; i < 20; i++) {
+            const sx = (i * 47 + t * 10) % w;
+            const sy = (i * 31) % h;
+            ctx.fillStyle = '#ffffff22';
+            ctx.fillRect(sx, sy, 1, 1);
+        }
+        // Ship
+        const sx = w / 2 + Math.sin(t * 2) * 20;
+        ctx.fillStyle = '#ff2d78';
+        ctx.beginPath();
+        ctx.moveTo(sx, 100); ctx.lineTo(sx - 8, 115); ctx.lineTo(sx + 8, 115);
+        ctx.fill();
+        // Bullets
+        ctx.fillStyle = '#ff2d78';
+        for (let i = 0; i < 3; i++) {
+            const by = 90 - i * 25 - ((t * 80) % 25);
+            if (by > 10) ctx.fillRect(sx - 1, by, 2, 6);
+        }
+        // Enemies
+        ctx.fillStyle = '#0f0';
+        for (let i = 0; i < 4; i++) {
+            const ex = 40 + i * 55 + Math.sin(t + i * 2) * 15;
+            const ey = 20 + Math.sin(t * 0.5 + i) * 8;
+            ctx.fillRect(ex, ey, 10, 8);
+        }
+    }
+
+    function drawShadowPreview(ctx, w, h, t) {
+        ctx.clearRect(0, 0, w, h);
+        // Bamboo background
+        ctx.fillStyle = '#0a1a0a';
+        ctx.fillRect(0, 0, w, h);
+        for (let i = 0; i < 8; i++) {
+            ctx.fillStyle = `rgba(0,80,0,${0.1 + i * 0.02})`;
+            ctx.fillRect(15 + i * 35, 0, 4, h);
+        }
+        // Ground
+        ctx.fillStyle = '#1a0a2a';
+        ctx.fillRect(0, h - 20, w, 20);
+        // Ninja running
+        const nx = (t * 40) % (w + 20) - 10;
+        const ny = h - 32 + (Math.floor(t * 8) % 2) * -2;
+        ctx.fillStyle = '#c40cff';
+        ctx.fillRect(nx, ny, 8, 12);
+        // Slash effect
+        if (Math.sin(t * 5) > 0.7) {
+            ctx.strokeStyle = '#ff44ff88';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(nx + 12, ny + 4, 10, -0.5, 1);
+            ctx.stroke();
+        }
+        // Shuriken
+        const stx = (nx + 60) % w;
+        ctx.fillStyle = '#fff';
+        ctx.save();
+        ctx.translate(stx, ny + 4);
+        ctx.rotate(t * 10);
+        ctx.fillRect(-3, -1, 6, 2);
+        ctx.fillRect(-1, -3, 2, 6);
+        ctx.restore();
+    }
+
+    function drawArenaPreview(ctx, w, h, t) {
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#0d0d00';
+        ctx.fillRect(0, 0, w, h);
+        // Arena border
+        ctx.strokeStyle = '#ffaa0033';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(10, 10, w - 20, h - 20);
+        // Player
+        const px = w / 2 + Math.cos(t) * 30;
+        const py = h / 2 + Math.sin(t * 0.7) * 20;
+        ctx.fillStyle = '#ffaa00';
+        ctx.fillRect(px - 4, py - 4, 8, 8);
+        // Bullets from player
+        for (let i = 0; i < 4; i++) {
+            const angle = t * 2 + i * Math.PI / 2;
+            const bx = px + Math.cos(angle) * (20 + ((t * 60) % 40));
+            const by = py + Math.sin(angle) * (20 + ((t * 60) % 40));
+            if (bx > 10 && bx < w-10 && by > 10 && by < h-10) {
+                ctx.fillStyle = '#ffaa00';
+                ctx.fillRect(bx, by, 3, 3);
+            }
+        }
+        // Enemies
+        ctx.fillStyle = '#ff3333';
+        for (let i = 0; i < 6; i++) {
+            const ex = 40 + (i * 43 + Math.sin(t + i) * 20) % (w - 80);
+            const ey = 30 + (i * 29 + Math.cos(t * 0.8 + i) * 15) % (h - 60);
+            ctx.fillRect(ex, ey, 6, 6);
+        }
+        // Explosion
+        if (Math.sin(t * 3) > 0.9) {
+            ctx.fillStyle = '#ffaa0044';
+            ctx.beginPath();
+            ctx.arc(w * 0.7, h * 0.3, 12 + Math.random() * 5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    function drawDragonPreview(ctx, w, h, t) {
+        ctx.clearRect(0, 0, w, h);
+        // Street background
+        ctx.fillStyle = '#0f0808';
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#1a1010';
+        ctx.fillRect(0, h - 40, w, 40);
+        // Street lines
+        ctx.fillStyle = '#221515';
+        ctx.fillRect(0, h - 41, w, 2);
+        // Player punching
+        const px = 80;
+        const py = h - 55;
+        ctx.fillStyle = '#ff6b35';
+        ctx.fillRect(px, py, 10, 16);
+        // Punch arm extending
+        const punchPhase = Math.sin(t * 8);
+        if (punchPhase > 0) {
+            ctx.fillStyle = '#ff6b35';
+            ctx.fillRect(px + 10, py + 3, 6 + punchPhase * 6, 4);
+            // Impact
+            if (punchPhase > 0.7) {
+                ctx.fillStyle = '#fff';
+                ctx.font = '8px monospace';
+                ctx.fillText('POW', px + 22, py);
+            }
+        }
+        // Enemies
+        ctx.fillStyle = '#aa3333';
+        for (let i = 0; i < 3; i++) {
+            const ex = 140 + i * 40 + Math.sin(t + i * 2) * 5;
+            const ey = h - 55 + Math.sin(t * 2 + i) * 3;
+            ctx.fillRect(ex, ey, 10, 16);
+        }
+        // Walking thug from right
+        const tx = w - 20 - ((t * 15) % 60);
+        ctx.fillStyle = '#993333';
+        ctx.fillRect(tx, h - 52, 10, 14);
+    }
+})();
+</script>
 
 </body>
 </html>

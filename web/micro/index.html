@@ -62,14 +62,83 @@
         const goalTex = createSprite(["...11...","..1221..",".123321.","12333321","12333321",".123321.","..1221..","...11..."], ['#ffaa00', '#ffff00', '#ffffff']);
         const gemTex = createSprite(["........",".111111.","11222211","12233221",".122221.","..1221..","...11...","........"], ['#000000', '#00ffff', '#ffffff']);
 
+        // --- AUDIO ---
+        let audioCtx = null;
+        function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        function playSound(type) {
+            if (!audioCtx) return;
+            const t = audioCtx.currentTime;
+            if (type === 'jump') {
+                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.type = 'square'; o.frequency.setValueAtTime(250, t); o.frequency.linearRampToValueAtTime(500, t + 0.08);
+                g.gain.setValueAtTime(0.15, t); g.gain.linearRampToValueAtTime(0, t + 0.08);
+                o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + 0.08);
+            } else if (type === 'shoot') {
+                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.type = 'sawtooth'; o.frequency.setValueAtTime(800, t); o.frequency.linearRampToValueAtTime(200, t + 0.08);
+                g.gain.setValueAtTime(0.12, t); g.gain.linearRampToValueAtTime(0, t + 0.08);
+                o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + 0.08);
+            } else if (type === 'hit') {
+                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.type = 'square'; o.frequency.setValueAtTime(300, t); o.frequency.linearRampToValueAtTime(100, t + 0.05);
+                g.gain.setValueAtTime(0.2, t); g.gain.linearRampToValueAtTime(0, t + 0.05);
+                o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + 0.05);
+            } else if (type === 'pickup') {
+                [523, 659, 784].forEach((freq, i) => {
+                    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                    o.type = 'square'; o.frequency.setValueAtTime(freq, t + i * 0.06);
+                    g.gain.setValueAtTime(0.12, t + i * 0.06); g.gain.linearRampToValueAtTime(0, t + i * 0.06 + 0.06);
+                    o.connect(g); g.connect(audioCtx.destination); o.start(t + i * 0.06); o.stop(t + i * 0.06 + 0.06);
+                });
+            } else if (type === 'death') {
+                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.type = 'sawtooth'; o.frequency.setValueAtTime(400, t); o.frequency.linearRampToValueAtTime(30, t + 0.8);
+                g.gain.setValueAtTime(0.2, t); g.gain.linearRampToValueAtTime(0, t + 0.8);
+                o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + 0.8);
+            } else if (type === 'enemydeath') {
+                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.type = 'sawtooth'; o.frequency.setValueAtTime(500, t); o.frequency.linearRampToValueAtTime(50, t + 0.15);
+                g.gain.setValueAtTime(0.15, t); g.gain.linearRampToValueAtTime(0, t + 0.15);
+                o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + 0.15);
+            } else if (type === 'anchor') {
+                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.type = 'sine'; o.frequency.setValueAtTime(1200, t); o.frequency.linearRampToValueAtTime(600, t + 0.1);
+                g.gain.setValueAtTime(0.12, t); g.gain.linearRampToValueAtTime(0, t + 0.1);
+                o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + 0.1);
+            } else if (type === 'walljump') {
+                const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.type = 'square'; o.frequency.setValueAtTime(350, t); o.frequency.linearRampToValueAtTime(700, t + 0.1);
+                g.gain.setValueAtTime(0.12, t); g.gain.linearRampToValueAtTime(0, t + 0.1);
+                o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + 0.1);
+            }
+        }
+        document.addEventListener('click', initAudio, { once: false });
+        document.addEventListener('touchstart', initAudio, { once: false });
+
         // --- GAME STATE ---
-        let gameState = 'START'; 
+        let gameState = 'START';
         let score = 0;
         let currentLevel = 0;
-        
+
         let player, bullets, enemyBullets, enemies, gems, lavaY, cameraY, platforms, anchor, particles, popups;
         let coyoteFrames = 0; let jumpBufferFrames = 0;
         let levelLavaSpeed = 0.3;
+
+        // --- SCREEN SHAKE ---
+        let screenShakeX = 0, screenShakeY = 0, shakeMagnitude = 0;
+        function triggerShake(mag) { shakeMagnitude = Math.max(shakeMagnitude, mag); }
+
+        // --- DAMAGE FLASH ---
+        let damageFlashTimer = 0;
+
+        // --- TEXT POPUPS ---
+        let textPopups = [];
+
+        // --- LAVA BUBBLES ---
+        let lavaBubbles = [];
+
+        // --- TITLE PARTICLES ---
+        let titleEmbers = [];
 
         // --- LEVEL ROADMAP ---
         const levels = [
@@ -197,7 +266,7 @@
             if (fullReset) { score = 0; currentLevel = 0; }
             
             player = { x: 300, y: 0, w: 24, h: 24, vx: 0, vy: 0, onGround: false, wallDir: 0, facingRight: true, jumps: 0, maxJumps: 2 };
-            bullets = []; enemyBullets = []; particles = []; popups = []; gems = [];
+            bullets = []; enemyBullets = []; particles = []; popups = []; gems = []; textPopups = []; lavaBubbles = []; damageFlashTimer = 0; shakeMagnitude = 0; screenShakeX = 0; screenShakeY = 0;
             anchor = { active: false, isAttached: false, x: 0, y: 0, vx: 0, vy: 0, length: 0, w: 16, h: 16 };
             keys.anchor_fired = false;
             
@@ -237,7 +306,7 @@
         // --- INPUT HANDLING ---
         const keys = { right: false, left: false, up: false, down: false, jumpPressed: false, shootPressed: false, b_down: false, b_time: 0, anchor_fired: false };
 
-        function pressB() { if (!keys.b_down) { keys.b_down = true; keys.b_time = Date.now(); jumpBufferFrames = 6; } }
+        function pressB() { initAudio(); if (!keys.b_down) { keys.b_down = true; keys.b_time = Date.now(); jumpBufferFrames = 6; } }
         function releaseB() { keys.b_down = false; }
         function pressA() { keys.shootPressed = true; }
 
@@ -293,7 +362,7 @@
 
             // --- ANCHOR LOGIC ---
             if (keys.b_down && !anchor.active && !keys.anchor_fired && (Date.now() - keys.b_time > 150)) {
-                let traj = getTrajectory(ANCHOR_SPEED); anchor.active = true; anchor.isAttached = false; keys.anchor_fired = true;
+                let traj = getTrajectory(ANCHOR_SPEED); anchor.active = true; anchor.isAttached = false; keys.anchor_fired = true; playSound('anchor');
                 anchor.x = player.x + player.w / 2 - anchor.w / 2; anchor.y = player.y + player.h / 2 - anchor.h / 2;
                 anchor.vx = traj.vx; anchor.vy = traj.vy;
             }
@@ -317,7 +386,7 @@
                             anchor.active = false;
                         } 
                         else {
-                            hitSolid = true; anchor.isAttached = true; 
+                            hitSolid = true; anchor.isAttached = true; triggerShake(4);
                             anchor.length = Math.sqrt(Math.pow((player.x + player.w/2) - anchor.x, 2) + Math.pow((player.y + player.h/2) - anchor.y, 2));
                             break;
                         }
@@ -346,6 +415,8 @@
                 }
                 if (overlaps(player, g)) {
                     addScore(50, g.x, g.y);
+                    textPopups.push({ text: '+100', x: g.x, y: g.y, life: 30 });
+                    playSound('pickup');
                     gems.splice(i, 1);
                 }
             }
@@ -394,14 +465,14 @@
 
             if (jumpBufferFrames > 0) {
                 if (anchor.isAttached) { }
-                else if (coyoteFrames > 0) { player.vy = JUMP_FORCE; player.jumps = 1; coyoteFrames = 0; jumpBufferFrames = 0; } 
-                else if (player.wallDir !== 0) { player.vy = WALL_JUMP_Y; player.vx = -player.wallDir * WALL_JUMP_X; player.facingRight = player.wallDir === -1; player.jumps = 1; jumpBufferFrames = 0; } 
-                else if (player.jumps < player.maxJumps) { player.vy = JUMP_FORCE; player.jumps++; jumpBufferFrames = 0; }
+                else if (coyoteFrames > 0) { player.vy = JUMP_FORCE; player.jumps = 1; coyoteFrames = 0; jumpBufferFrames = 0; playSound('jump'); }
+                else if (player.wallDir !== 0) { player.vy = WALL_JUMP_Y; player.vx = -player.wallDir * WALL_JUMP_X; player.facingRight = player.wallDir === -1; player.jumps = 1; jumpBufferFrames = 0; playSound('walljump'); }
+                else if (player.jumps < player.maxJumps) { player.vy = JUMP_FORCE; player.jumps++; jumpBufferFrames = 0; playSound('jump'); }
             }
 
             // --- SHOOTING ---
             if (keys.shootPressed) {
-                let traj = getTrajectory(BULLET_SPEED); bullets.push({ x: player.x + player.w/2 - 4, y: player.y + player.h/2 - 4, vx: traj.vx, vy: traj.vy, w: 8, h: 8 }); keys.shootPressed = false;
+                let traj = getTrajectory(BULLET_SPEED); bullets.push({ x: player.x + player.w/2 - 4, y: player.y + player.h/2 - 4, vx: traj.vx, vy: traj.vy, w: 8, h: 8 }); keys.shootPressed = false; playSound('shoot');
             }
 
             for (let i = bullets.length - 1; i >= 0; i--) {
@@ -414,6 +485,7 @@
                         let e = enemies[j];
                         enemies.splice(j, 1); hitEnemy = true;
                         addScore(100, e.x, e.y); // POINTS!
+                        playSound('enemydeath'); triggerShake(2);
                         for(let k=0; k<5; k++) particles.push({ x: b.x, y: b.y, vx: (Math.random()-0.5)*6, vy: (Math.random()-0.5)*6, life: 15, color: '#ff00ff' });
                         break; 
                     }
@@ -442,11 +514,12 @@
 
                 if (overlaps(player, e)) {
                     if (player.vy > 0 && player.y + player.h < e.y + e.h / 2 + 5 && e.type !== 'turret') {
-                        player.vy = BOUNCE_FORCE; player.jumps = 1; enemies.splice(i, 1); 
+                        player.vy = BOUNCE_FORCE; player.jumps = 1; enemies.splice(i, 1);
                         addScore(100, e.x, e.y); // POINTS!
+                        playSound('enemydeath'); triggerShake(2);
                         for(let k=0; k<5; k++) particles.push({ x: e.x+10, y: e.y+10, vx: (Math.random()-0.5)*6, vy: (Math.random()-0.5)*6, life: 15, color: '#ff00ff' });
                     } else {
-                        gameState = 'GAMEOVER';
+                        gameState = 'GAMEOVER'; playSound('death'); triggerShake(6); damageFlashTimer = 6;
                     }
                 }
             }
@@ -454,12 +527,12 @@
             for (let i = enemyBullets.length - 1; i >= 0; i--) {
                 let b = enemyBullets[i]; b.x += b.vx; b.y += b.vy; let hitWall = false;
                 for (let p of platforms) { if (overlaps(b, p) && p.type !== 'stone' && p.type !== 'chest') { hitWall = true; break; } }
-                if (overlaps(b, player)) gameState = 'GAMEOVER';
+                if (overlaps(b, player)) { gameState = 'GAMEOVER'; playSound('death'); triggerShake(6); damageFlashTimer = 6; }
                 if (hitWall || b.x > canvas.width || b.x < -b.w || b.y < cameraY - 100 || b.y > cameraY + canvas.height + 100) enemyBullets.splice(i, 1);
             }
 
             lavaY -= levelLavaSpeed; // Use level-specific lava speed!
-            if (player.y + player.h > lavaY) gameState = 'GAMEOVER'; 
+            if (player.y + player.h > lavaY) { gameState = 'GAMEOVER'; playSound('death'); triggerShake(6); damageFlashTimer = 6; }
             
             // GOAL COLLISION & LEVEL TRANSITION
             const mapHeight = levels[currentLevel].map.length;
@@ -475,6 +548,31 @@
                 }
             }
 
+            // Screen shake decay
+            if (shakeMagnitude > 0.1) {
+                screenShakeX = (Math.random() - 0.5) * 2 * shakeMagnitude;
+                screenShakeY = (Math.random() - 0.5) * 2 * shakeMagnitude;
+                shakeMagnitude *= 0.85;
+            } else { screenShakeX = 0; screenShakeY = 0; shakeMagnitude = 0; }
+
+            // Damage flash decay
+            if (damageFlashTimer > 0) damageFlashTimer--;
+
+            // Text popups update
+            for (let i = textPopups.length - 1; i >= 0; i--) {
+                textPopups[i].y -= 1.5; textPopups[i].life--;
+                if (textPopups[i].life <= 0) textPopups.splice(i, 1);
+            }
+
+            // Lava bubbles
+            if (Math.random() < 0.3) {
+                lavaBubbles.push({ x: Math.random() * canvas.width, y: lavaY, r: 2 + Math.random() * 4, life: 20 + Math.random() * 30, speed: 0.5 + Math.random() * 1.5 });
+            }
+            for (let i = lavaBubbles.length - 1; i >= 0; i--) {
+                lavaBubbles[i].y -= lavaBubbles[i].speed; lavaBubbles[i].life--;
+                if (lavaBubbles[i].life <= 0) lavaBubbles.splice(i, 1);
+            }
+
             const targetCameraY = player.y - canvas.height * 0.6; cameraY += (targetCameraY - cameraY) * 0.1;
             if (cameraY > lavaY - canvas.height + 100) cameraY = lavaY - canvas.height + 100;
         }
@@ -483,6 +581,10 @@
             ctx.fillStyle = 'rgb(15, 15, 25)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
             const bgSize = 64; const startYBg = Math.floor((cameraY * 0.5) / bgSize) - 1;
             for (let y = startYBg; y < startYBg + 12; y++) { for (let x = 0; x < 12; x++) { ctx.drawImage(bgTex, x * bgSize, (y * bgSize) - (cameraY * 0.5), bgSize, bgSize); } }
+
+            // Apply screen shake
+            ctx.save();
+            ctx.translate(screenShakeX, screenShakeY);
 
             // Draw Level Texts (Tutorial signs)
             if (gameState === 'PLAYING' && levels[currentLevel].texts) {
@@ -536,8 +638,56 @@
                 ctx.drawImage(goalTex, 280, startY + (2 * TILE_SIZE) - cameraY, 30, 30);
             }
 
-            ctx.fillStyle = 'rgba(255, 60, 0, 0.85)'; ctx.fillRect(0, lavaY - cameraY, canvas.width, canvas.height); ctx.fillStyle = 'rgba(255, 150, 0, 0.9)'; ctx.fillRect(0, lavaY - cameraY, canvas.width, 10);
-            
+            // Animated lava
+            const lavaScreenY = lavaY - cameraY;
+            const lavaGrad = ctx.createLinearGradient(0, lavaScreenY, 0, lavaScreenY + canvas.height);
+            lavaGrad.addColorStop(0, 'rgba(255, 160, 0, 0.95)');
+            lavaGrad.addColorStop(0.15, 'rgba(255, 80, 0, 0.9)');
+            lavaGrad.addColorStop(0.5, 'rgba(180, 20, 0, 0.85)');
+            lavaGrad.addColorStop(1, 'rgba(80, 0, 0, 0.85)');
+            // Wavy top edge
+            const now = Date.now() * 0.003;
+            ctx.beginPath();
+            ctx.moveTo(0, lavaScreenY + canvas.height);
+            for (let wx = 0; wx <= canvas.width; wx += 4) {
+                const waveY = lavaScreenY + Math.sin(now + wx * 0.02) * 4 + Math.sin(now * 1.7 + wx * 0.035) * 3;
+                ctx.lineTo(wx, waveY);
+            }
+            ctx.lineTo(canvas.width, lavaScreenY + canvas.height);
+            ctx.closePath();
+            ctx.fillStyle = lavaGrad;
+            ctx.fill();
+            // Bright edge highlight
+            ctx.beginPath();
+            for (let wx = 0; wx <= canvas.width; wx += 4) {
+                const waveY = lavaScreenY + Math.sin(now + wx * 0.02) * 4 + Math.sin(now * 1.7 + wx * 0.035) * 3;
+                if (wx === 0) ctx.moveTo(wx, waveY); else ctx.lineTo(wx, waveY);
+            }
+            ctx.strokeStyle = 'rgba(255, 255, 100, 0.7)'; ctx.lineWidth = 3; ctx.stroke();
+            // Lava bubbles
+            for (let lb of lavaBubbles) {
+                const alpha = lb.life / 50;
+                ctx.beginPath(); ctx.arc(lb.x, lb.y - cameraY, lb.r, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 200, 50, ${alpha})`; ctx.fill();
+            }
+
+            // End screen shake before HUD
+            ctx.restore();
+
+            // Damage flash
+            if (damageFlashTimer > 0) {
+                ctx.fillStyle = `rgba(200, 0, 0, ${0.3 * (damageFlashTimer / 6)})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+
+            // Text popups (gem collection feedback)
+            for (let tp of textPopups) {
+                const alpha = tp.life / 30;
+                ctx.fillStyle = `rgba(255, 255, 0, ${alpha})`;
+                ctx.font = 'bold 18px monospace'; ctx.textAlign = 'center';
+                ctx.fillText(tp.text, tp.x + 10, tp.y - cameraY);
+            }
+
             // HUD
             for(let p of popups) {
                 ctx.fillStyle = `rgba(255, 255, 255, ${p.life / 30})`;
@@ -555,11 +705,28 @@
 
             // Screen Overlays
             ctx.textAlign = 'center';
-            if (gameState === 'START') { 
-                ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0, 0, canvas.width, canvas.height); 
-                ctx.fillStyle = 'white'; ctx.font = 'bold 42px monospace'; ctx.fillText("THE OBSIDIAN SPIRE", canvas.width/2, canvas.height/2 - 20); 
-                ctx.font = '20px monospace'; ctx.fillText("Press B/Z/Space to Begin", canvas.width/2, canvas.height/2 + 30); 
-            } 
+            if (gameState === 'START') {
+                ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                // Title embers
+                if (Math.random() < 0.4) titleEmbers.push({ x: Math.random() * canvas.width, y: canvas.height + 5, vy: -(1 + Math.random() * 2), vx: (Math.random() - 0.5) * 0.5, life: 60 + Math.random() * 60, size: 2 + Math.random() * 3 });
+                for (let i = titleEmbers.length - 1; i >= 0; i--) {
+                    let e = titleEmbers[i]; e.x += e.vx; e.y += e.vy; e.life--;
+                    const alpha = Math.min(1, e.life / 40);
+                    const colors = ['rgba(255,160,0,', 'rgba(255,200,50,', 'rgba(255,100,0,'];
+                    ctx.fillStyle = colors[i % 3] + alpha + ')';
+                    ctx.fillRect(e.x, e.y, e.size, e.size);
+                    if (e.life <= 0) titleEmbers.splice(i, 1);
+                }
+                // Title with glow
+                ctx.save();
+                ctx.shadowColor = '#ff8800'; ctx.shadowBlur = 20;
+                ctx.fillStyle = 'white'; ctx.font = 'bold 42px monospace'; ctx.fillText("THE OBSIDIAN SPIRE", canvas.width/2, canvas.height/2 - 20);
+                ctx.restore();
+                // Blinking prompt
+                if (Math.floor(Date.now() / 500) % 2 === 0) {
+                    ctx.fillStyle = '#ffaa00'; ctx.font = '20px monospace'; ctx.fillText("Press B/Z/Space to Begin", canvas.width/2, canvas.height/2 + 30);
+                }
+            }
             else if (gameState === 'STORY') {
                 ctx.fillStyle = 'rgba(0,0,0,0.9)'; ctx.fillRect(0, 0, canvas.width, canvas.height); 
                 ctx.fillStyle = 'white'; ctx.font = '20px monospace'; 
