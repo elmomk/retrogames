@@ -321,7 +321,7 @@ function specialPressed() { const v = inputSpecial() && !prevSpecial; return v; 
 function startPressed() { const v = inputStart() && !prevStart; return v; }
 
 // --- Game State ---
-let gameState = 'TITLE'; // TITLE, PLAYING, STAGE_INTRO, GAME_OVER, VICTORY, CONTINUE
+let gameState = 'TITLE'; // TITLE, STORY, PLAYING, STAGE_INTRO, GAME_OVER, VICTORY, BOSS_INTRO, CONTINUE
 let frameCount = 0;
 let score = 0;
 let cameraX = 0;
@@ -335,6 +335,98 @@ let stageIntroTimer = 0;
 let continueTimer = 0;
 let titleBlinkTimer = 0;
 let gameOverTimer = 0;
+
+// --- Story System ---
+let storyLines = [];
+let storyLineIndex = 0;
+let storyCharIndex = 0;
+let storyCharTimer = 0;
+let storyPhase = ''; // 'INTRO','PRE_STAGE','POST_STAGE','VICTORY'
+let storyCallback = null;
+let midStageDialogue = null;
+let midStageTimer = 0;
+let bossIntroData = null;
+let bossIntroTimer = 0;
+let midStageShownWaves = {}; // track which mid-stage dialogues already shown
+
+const STORY_DATA = {
+    intro: [
+        'NEO-OSAKA, KABUKI DISTRICT \u2014 3:47 AM',
+        'The Dragon Fist dojo burns. Grandmaster Sato is gone.',
+        'A witness saw the Iron Serpents heading east toward the port district. Their tag is fresh on every wall.',
+        'You crack your knuckles. Ten blocks east. That\'s where this starts.'
+    ],
+    preStage: [
+        // Stage 1
+        ['The alleys behind Kabuki are Iron Serpent territory. Low-level thugs and dealers. Someone here knows where Sato is.'],
+        // Stage 2
+        ['The Iron Serpents\' base of operations. Crates of weapons, stolen goods, and something else \u2014 medical equipment. What are they doing to Sato?'],
+        // Stage 3
+        ['The neon skyline of Neo-Osaka stretches before you. On the highest rooftop, Jin waits. Sato kneels beside him, alive but broken.']
+    ],
+    midStage: [
+        // Stage 1 after wave 3
+        'A beaten thug spits blood and laughs: "You think you\'re tough? Wait till you see what\'s waiting at the warehouse. The Viper\'s got plans for your old man..."',
+        // Stage 2 after wave 3
+        'You find a room with a chair, restraints, and recording equipment. On a screen: footage of Sato being forced to demonstrate the Dragon\'s Breath technique. He refuses. They hurt him. He still refuses.',
+        // Stage 3 after wave 3
+        'Jin\'s voice echoes across the rooftops: "Do you know WHY Sato refused to teach me the Dragon\'s Breath? Because he saw what I really am. But he taught YOU. His precious student. His chosen son. While I got NOTHING."'
+    ],
+    bossIntro: [
+        { name: 'BLADE', title: 'Iron Serpent Lieutenant', quote: 'Nothing personal, Dragon boy. Just business.' },
+        { name: 'CRUSHER', title: 'Iron Serpent Enforcer', quote: 'The Viper said to break every bone in your body. I always follow orders.' },
+        { name: 'JIN TAKEDA \u2014 THE VIPER', title: 'Former Dragon Fist Disciple', quote: 'Sato chose you over me. Now I\'ll take everything from both of you.' }
+    ],
+    postStage: [
+        // After Stage 1 boss
+        [
+            'Blade falls. Through his radio, you hear a voice \u2014 cold, familiar.',
+            '"Let him come. I want to see what Sato taught him."',
+            'It\'s Jin. He knows you\'re coming.'
+        ],
+        // After Stage 2 boss
+        [
+            'Behind the warehouse, you find a passage leading up \u2014 to the rooftops.',
+            'And a note in Sato\'s handwriting, hidden under a loose brick:',
+            '"Ryu \u2014 Jin doesn\'t want the technique to sell. He wants it to destroy. The rage consumed him long ago. Forgive him if you can. Stop him if you must. \u2014Sato"'
+        ],
+        // After Stage 3 boss (final)
+        [
+            'Jin falls to his knees. His rage is spent.',
+            'Sato limps forward and places a hand on Jin\'s shoulder.',
+            '"I didn\'t refuse you because you were weak, Jin. I refused because the Dragon\'s Breath amplifies what\'s in your heart. And your heart was full of anger. But anger fades."',
+            'Jin looks up. For the first time in ten years, he doesn\'t look furious. He looks tired.'
+        ]
+    ],
+    victory: [
+        'The sun rises over Neo-Osaka. The Iron Serpents scatter without their leader.',
+        'Grandmaster Sato begins rebuilding the dojo. It will take months. Jin Takeda turns himself in to the authorities.',
+        'Three months later, you visit Jin in prison. He\'s thinner. Quieter. He asks about the dojo.',
+        '"We saved you a spot," you tell him. "When you\'re ready."',
+        'The Dragon Fist endures.'
+    ]
+};
+
+function startStory(lines, phase, callback) {
+    storyLines = lines;
+    storyLineIndex = 0;
+    storyCharIndex = 0;
+    storyCharTimer = 0;
+    storyPhase = phase;
+    storyCallback = callback;
+    gameState = 'STORY';
+}
+
+function showMidStageDialogue(text) {
+    midStageDialogue = text;
+    midStageTimer = 240; // 4 seconds
+}
+
+function showBossIntro(data) {
+    bossIntroData = data;
+    bossIntroTimer = 0;
+    gameState = 'BOSS_INTRO';
+}
 
 // --- Hit Numbers & Screen Flash ---
 let hitNumbers = [];
@@ -757,7 +849,7 @@ const stages = [
             { x: 1400, enemies: [{type:'brawler',count:2},{type:'thug',count:2}] },
             { x: 2000, enemies: [{type:'knife',count:3},{type:'brawler',count:1},{type:'thug',count:2}] },
             { x: 2800, enemies: [{type:'thug',count:2},{type:'knife',count:2},{type:'brawler',count:1}] },
-            { x: 3400, enemies: [{type:'boss',count:1,bossName:'DRAGON KING'}] },
+            { x: 3400, enemies: [{type:'boss',count:1,bossName:'JIN TAKEDA'}] },
         ],
         pickups: [
             { x: 400, type: 'pipe', isWeapon: true },
@@ -827,6 +919,11 @@ function initStage(idx) {
     enemies = [];
     groundWeapons = [];
     pickups = [];
+    midStageDialogue = null;
+    midStageTimer = 0;
+
+    // Reset boss intro flags for this stage
+    stage.waves.forEach(w => { delete w._bossIntroShown; });
 
     // Spawn pickups for stage
     stage.pickups.forEach(p => {
@@ -849,9 +946,14 @@ function initStage(idx) {
 function startGame() {
     player = createPlayer();
     score = 0;
+    midStageShownWaves = {};
     initStage(0);
-    gameState = 'STAGE_INTRO';
-    stageIntroTimer = 180;
+    startStory(STORY_DATA.intro, 'INTRO', function() {
+        startStory(STORY_DATA.preStage[0], 'PRE_STAGE', function() {
+            gameState = 'STAGE_INTRO';
+            stageIntroTimer = 180;
+        });
+    });
 }
 
 // --- Spawn Waves ---
@@ -860,6 +962,14 @@ function checkWaveSpawn() {
     if (waveIndex >= stage.waves.length) return;
     const wave = stage.waves[waveIndex];
     if (cameraX + GW * 0.4 >= wave.x && !scrollLocked) {
+        // Check if this wave is a boss wave — show boss intro
+        const isBossWave = wave.enemies.some(g => g.type === 'boss');
+        if (isBossWave && !wave._bossIntroShown) {
+            wave._bossIntroShown = true;
+            showBossIntro(STORY_DATA.bossIntro[stageIndex]);
+            return; // Don't spawn yet, will spawn after boss intro
+        }
+
         // Spawn this wave
         scrollLocked = true;
         wave.enemies.forEach(group => {
@@ -873,6 +983,13 @@ function checkWaveSpawn() {
             }
         });
         waveIndex++;
+
+        // Show mid-stage dialogue after wave 3 (waveIndex is now 3 after incrementing from wave index 2)
+        const midKey = stageIndex + '_' + waveIndex;
+        if (waveIndex === 3 && !midStageShownWaves[midKey]) {
+            midStageShownWaves[midKey] = true;
+            showMidStageDialogue(STORY_DATA.midStage[stageIndex]);
+        }
     }
 }
 
@@ -1678,6 +1795,37 @@ function update() {
         if (startPressed()) {
             startGame();
         }
+    } else if (gameState === 'STORY') {
+        // Typewriter text advancement
+        storyCharTimer++;
+        if (storyCharTimer >= 2) {
+            storyCharTimer = 0;
+            if (storyLineIndex < storyLines.length && storyCharIndex < storyLines[storyLineIndex].length) {
+                storyCharIndex++;
+            }
+        }
+        if (startPressed()) {
+            // If current line not fully shown, show it all
+            if (storyLineIndex < storyLines.length && storyCharIndex < storyLines[storyLineIndex].length) {
+                storyCharIndex = storyLines[storyLineIndex].length;
+            } else {
+                // Advance to next line
+                storyLineIndex++;
+                storyCharIndex = 0;
+                storyCharTimer = 0;
+                if (storyLineIndex >= storyLines.length) {
+                    // Story complete
+                    if (storyCallback) storyCallback();
+                }
+            }
+        }
+    } else if (gameState === 'BOSS_INTRO') {
+        bossIntroTimer++;
+        if (startPressed() && bossIntroTimer > 15) {
+            gameState = 'PLAYING';
+            // Now actually spawn the boss wave
+            checkWaveSpawn();
+        }
     } else if (gameState === 'STAGE_INTRO') {
         stageIntroTimer--;
         if (stageIntroTimer <= 0) {
@@ -1692,6 +1840,14 @@ function update() {
         checkCombat();
         checkWaveSpawn();
 
+        // Mid-stage dialogue timer
+        if (midStageDialogue) {
+            midStageTimer--;
+            if (midStageTimer <= 0 || startPressed()) {
+                midStageDialogue = null;
+            }
+        }
+
         // Check if wave is cleared
         if (scrollLocked && enemies.filter(e => !e.dead).length === 0) {
             waveClearTimer++;
@@ -1702,15 +1858,24 @@ function update() {
                 // Check stage complete
                 const stage = stages[stageIndex];
                 if (waveIndex >= stage.waves.length) {
+                    playSound('stageclear');
                     if (stageIndex < stages.length - 1) {
-                        stageIndex++;
-                        initStage(stageIndex);
-                        gameState = 'STAGE_INTRO';
-                        stageIntroTimer = 180;
-                        playSound('stageclear');
+                        const completedStage = stageIndex;
+                        startStory(STORY_DATA.postStage[completedStage], 'POST_STAGE', function() {
+                            stageIndex = completedStage + 1;
+                            initStage(stageIndex);
+                            startStory(STORY_DATA.preStage[stageIndex], 'PRE_STAGE', function() {
+                                gameState = 'STAGE_INTRO';
+                                stageIntroTimer = 180;
+                            });
+                        });
                     } else {
-                        gameState = 'VICTORY';
-                        playSound('stageclear');
+                        // Final boss beaten — show final post-stage then victory
+                        startStory(STORY_DATA.postStage[stageIndex], 'POST_STAGE', function() {
+                            startStory(STORY_DATA.victory, 'VICTORY_STORY', function() {
+                                gameState = 'VICTORY';
+                            });
+                        });
                     }
                 }
             }
@@ -1785,6 +1950,10 @@ function render() {
 
     if (gameState === 'TITLE') {
         drawTitleScreen();
+    } else if (gameState === 'STORY') {
+        drawStoryScreen();
+    } else if (gameState === 'BOSS_INTRO') {
+        drawBossIntroScreen();
     } else if (gameState === 'STAGE_INTRO') {
         drawStageIntro();
     } else if (gameState === 'PLAYING' || gameState === 'GAME_OVER') {
@@ -1838,6 +2007,11 @@ function render() {
 
         drawHUD();
 
+        // Mid-stage dialogue overlay
+        if (midStageDialogue && gameState === 'PLAYING') {
+            drawMidStageDialogue();
+        }
+
         if (gameState === 'GAME_OVER') {
             drawGameOver();
         }
@@ -1880,21 +2054,34 @@ function drawTitleScreen() {
 
     ctx.shadowBlur = 0;
 
+    // Subtitle: STREETS OF VENGEANCE
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = '#00ffff';
+    ctx.fillStyle = '#00ffff';
+    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.fillText('STREETS OF VENGEANCE', GW/2, 245);
+    ctx.shadowBlur = 0;
+
+    // Tagline
+    ctx.fillStyle = '#ff0066';
+    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.fillText('A Dragon Fist Story', GW/2, 268);
+
     // Character preview
-    drawPlayerPreview(GW/2 - 16, 250);
+    drawPlayerPreview(GW/2 - 16, 280);
 
     // Press start blink
     if (Math.floor(titleBlinkTimer / 30) % 2 === 0) {
         ctx.fillStyle = '#ffffff';
         ctx.font = '16px "Press Start 2P", monospace';
-        ctx.fillText('PRESS START', GW/2, 380);
+        ctx.fillText('PRESS START', GW/2, 410);
     }
 
     // Controls hint
     ctx.fillStyle = '#888888';
     ctx.font = '8px "Press Start 2P", monospace';
-    ctx.fillText('Z: PUNCH   X: JUMP   C: SPECIAL', GW/2, 420);
-    ctx.fillText('ARROW KEYS TO MOVE', GW/2, 440);
+    ctx.fillText('Z: PUNCH   X: JUMP   C: SPECIAL', GW/2, 440);
+    ctx.fillText('ARROW KEYS TO MOVE', GW/2, 458);
 
     ctx.textAlign = 'left';
 }
@@ -1984,23 +2171,35 @@ function drawVictoryScreen() {
     ctx.fillStyle = '#0a0a1a';
     ctx.fillRect(0, 0, GW, GH);
 
+    // Sunrise gradient at top
+    const grad = ctx.createLinearGradient(0, 0, 0, 120);
+    grad.addColorStop(0, '#ff660033');
+    grad.addColorStop(1, 'transparent');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, GW, 120);
+
     ctx.textAlign = 'center';
     ctx.shadowBlur = 20;
     ctx.shadowColor = '#ffff00';
     ctx.fillStyle = '#ffff00';
     ctx.font = '28px "Press Start 2P", monospace';
-    ctx.fillText('VICTORY!', GW/2, 120);
+    ctx.fillText('VICTORY', GW/2, 70);
     ctx.shadowBlur = 0;
 
-    ctx.fillStyle = '#ff0066';
-    ctx.font = '14px "Press Start 2P", monospace';
-    ctx.fillText('THE CITY IS SAVED', GW/2, 180);
+    ctx.fillStyle = '#00ffff';
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.fillText('STREETS OF VENGEANCE', GW/2, 100);
 
     ctx.fillStyle = '#00ffff';
-    ctx.font = '18px "Press Start 2P", monospace';
-    ctx.fillText('SCORE: ' + score.toString().padStart(7, '0'), GW/2, 250);
+    ctx.font = '14px "Press Start 2P", monospace';
+    ctx.fillText('SCORE: ' + score.toString().padStart(7, '0'), GW/2, 140);
 
-    drawPlayerPreview(GW/2 - 16, 280);
+    // The Dragon Fist Endures
+    ctx.fillStyle = '#ff0066';
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.fillText('THE DRAGON FIST ENDURES', GW/2, 175);
+
+    drawPlayerPreview(GW/2 - 16, 200);
 
     if (Math.floor(frameCount / 30) % 2 === 0) {
         ctx.fillStyle = '#ffffff';
@@ -2009,6 +2208,236 @@ function drawVictoryScreen() {
     }
 
     ctx.textAlign = 'left';
+}
+
+// --- Story / Dialogue Drawing ---
+function drawStoryScreen() {
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, GW, GH);
+
+    // Subtle background effect
+    ctx.fillStyle = 'rgba(255,0,102,0.03)';
+    for (let i = 0; i < 5; i++) {
+        const rx = Math.sin(frameCount * 0.01 + i) * 100 + GW/2;
+        const ry = Math.cos(frameCount * 0.008 + i*2) * 80 + GH/2;
+        ctx.beginPath();
+        ctx.arc(rx, ry, 100 + i*20, 0, Math.PI*2);
+        ctx.fill();
+    }
+
+    // Title bar for phase
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ff0066';
+    ctx.font = '10px "Press Start 2P", monospace';
+    if (storyPhase === 'INTRO') {
+        ctx.fillText('STREETS OF VENGEANCE', GW/2, 40);
+    } else if (storyPhase === 'PRE_STAGE') {
+        ctx.fillText('STAGE ' + (stageIndex + 1) + ' \u2014 ' + stages[stageIndex].name, GW/2, 40);
+    } else if (storyPhase === 'POST_STAGE') {
+        ctx.fillText('STAGE ' + (stageIndex + 1) + ' CLEAR', GW/2, 40);
+    } else if (storyPhase === 'VICTORY_STORY') {
+        ctx.fillText('EPILOGUE', GW/2, 40);
+    }
+
+    // Horizontal line
+    ctx.strokeStyle = '#ff006666';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(GW * 0.15, 55);
+    ctx.lineTo(GW * 0.85, 55);
+    ctx.stroke();
+
+    // Draw completed lines
+    ctx.textAlign = 'left';
+    const lineHeight = 28;
+    const startY = 100;
+    const maxWidth = GW - 100;
+
+    for (let i = 0; i <= storyLineIndex && i < storyLines.length; i++) {
+        const text = (i < storyLineIndex) ? storyLines[i] : storyLines[i].substring(0, storyCharIndex);
+        const alpha = (i < storyLineIndex) ? 0.7 : 1.0;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = (i === storyLineIndex) ? '#ffffff' : '#cccccc';
+        ctx.font = '10px "Press Start 2P", monospace';
+
+        // Word wrap
+        wrapText(ctx, text, 50, startY + i * (lineHeight + 12), maxWidth, lineHeight);
+    }
+    ctx.globalAlpha = 1;
+
+    // Blinking cursor on current line
+    if (storyLineIndex < storyLines.length && storyCharIndex < storyLines[storyLineIndex].length) {
+        if (Math.floor(frameCount / 15) % 2 === 0) {
+            ctx.fillStyle = '#ff0066';
+            ctx.fillRect(50 + measureWrappedCursorX(ctx, storyLines[storyLineIndex].substring(0, storyCharIndex), 50, maxWidth),
+                         startY + storyLineIndex * (lineHeight + 12) + getWrappedLineOffset(ctx, storyLines[storyLineIndex].substring(0, storyCharIndex), maxWidth) - 10,
+                         8, 12);
+        }
+    }
+
+    // Prompt
+    ctx.textAlign = 'center';
+    if (storyLineIndex < storyLines.length && storyCharIndex >= storyLines[storyLineIndex].length) {
+        if (Math.floor(frameCount / 20) % 2 === 0) {
+            ctx.fillStyle = '#888888';
+            ctx.font = '8px "Press Start 2P", monospace';
+            ctx.fillText('PRESS START TO CONTINUE', GW/2, GH - 30);
+        }
+    } else if (storyLineIndex >= storyLines.length) {
+        if (Math.floor(frameCount / 20) % 2 === 0) {
+            ctx.fillStyle = '#888888';
+            ctx.font = '8px "Press Start 2P", monospace';
+            ctx.fillText('PRESS START', GW/2, GH - 30);
+        }
+    }
+    ctx.textAlign = 'left';
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+    const words = text.split(' ');
+    let line = '';
+    let lineY = y;
+
+    for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && n > 0) {
+            ctx.fillText(line.trim(), x, lineY);
+            line = words[n] + ' ';
+            lineY += lineHeight;
+        } else {
+            line = testLine;
+        }
+    }
+    ctx.fillText(line.trim(), x, lineY);
+}
+
+function measureWrappedCursorX(ctx, text, startX, maxWidth) {
+    const words = text.split(' ');
+    let line = '';
+    let lastLineText = '';
+
+    for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && n > 0) {
+            line = words[n] + ' ';
+        } else {
+            line = testLine;
+        }
+    }
+    return ctx.measureText(line.trim()).width + 4;
+}
+
+function getWrappedLineOffset(ctx, text, maxWidth) {
+    const words = text.split(' ');
+    let line = '';
+    let extraLines = 0;
+
+    for (let n = 0; n < words.length; n++) {
+        const testLine = line + words[n] + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && n > 0) {
+            line = words[n] + ' ';
+            extraLines++;
+        } else {
+            line = testLine;
+        }
+    }
+    return extraLines * 28;
+}
+
+function drawBossIntroScreen() {
+    // Draw game scene darkened in background
+    const stage = stages[stageIndex];
+    drawBackground(stage, cameraX);
+
+    const drawList = [];
+    if (player.state !== 'DEAD') drawList.push(player);
+    enemies.forEach(e => drawList.push(e));
+    drawList.sort((a, b) => a.groundY - b.groundY);
+    for (const ent of drawList) drawEntity(ent, cameraX);
+
+    // Dark overlay
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0, 0, GW, GH);
+
+    if (!bossIntroData) return;
+
+    const t = Math.min(bossIntroTimer / 30, 1); // fade in
+
+    ctx.globalAlpha = t;
+    ctx.textAlign = 'center';
+
+    // Warning flash
+    if (bossIntroTimer < 60 && Math.floor(bossIntroTimer / 4) % 2 === 0) {
+        ctx.fillStyle = '#ff0000';
+        ctx.font = '10px "Press Start 2P", monospace';
+        ctx.fillText('!! WARNING !!', GW/2, GH/2 - 100);
+    }
+
+    // Boss name
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = '#ff0066';
+    ctx.fillStyle = '#ff0066';
+    ctx.font = '24px "Press Start 2P", monospace';
+    ctx.fillText(bossIntroData.name, GW/2, GH/2 - 40);
+    ctx.shadowBlur = 0;
+
+    // Title
+    ctx.fillStyle = '#ffff00';
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.fillText(bossIntroData.title, GW/2, GH/2);
+
+    // Divider
+    ctx.strokeStyle = '#ff006666';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(GW * 0.2, GH/2 + 20);
+    ctx.lineTo(GW * 0.8, GH/2 + 20);
+    ctx.stroke();
+
+    // Quote
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '9px "Press Start 2P", monospace';
+    wrapText(ctx, '"' + bossIntroData.quote + '"', GW * 0.15, GH/2 + 50, GW * 0.7, 22);
+
+    // Prompt
+    ctx.textAlign = 'center';
+    if (bossIntroTimer > 30 && Math.floor(frameCount / 20) % 2 === 0) {
+        ctx.fillStyle = '#888888';
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.fillText('PRESS START TO FIGHT', GW/2, GH - 40);
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'left';
+}
+
+function drawMidStageDialogue() {
+    if (!midStageDialogue) return;
+
+    const fadeIn = Math.min(1, (240 - midStageTimer) / 15);
+    const fadeOut = Math.min(1, midStageTimer / 15);
+    const alpha = Math.min(fadeIn, fadeOut);
+
+    ctx.globalAlpha = alpha;
+
+    // Semi-transparent text box at bottom
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(20, GH - 130, GW - 40, 80);
+    ctx.strokeStyle = '#ff006688';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(20, GH - 130, GW - 40, 80);
+
+    // Text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.textAlign = 'left';
+    wrapText(ctx, midStageDialogue, 35, GH - 112, GW - 80, 18);
+
+    ctx.globalAlpha = 1;
 }
 
 // --- Game Loop ---

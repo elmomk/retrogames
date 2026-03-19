@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Micro Mages JS Preview</title>
+    <title>The Obsidian Spire</title>
     <style>
         body { margin: 0; padding: 0; background-color: #0f0f19; color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; font-family: 'Courier New', Courier, monospace; touch-action: none; }
         canvas { background-color: #0f0f19; box-shadow: 0 0 20px rgba(0,0,0,0.8); image-rendering: pixelated; max-width: 100%; max-height: 100vh; }
@@ -141,8 +141,64 @@
         let titleEmbers = [];
 
         // --- LEVEL ROADMAP ---
+        // --- STORY DATA ---
+        const storyScreens = {
+            intro: [
+                "The Obsidian Spire has awakened after a thousand years.",
+                "Its corruption spreads across the land \u2014",
+                "forests wither, rivers turn black.",
+                "The Crystal Mages are gone. All but one.",
+                "",
+                "You are Vael, the last of your order.",
+                "The Elder Council has sent you on a final mission:",
+                "ascend the Spire and destroy its heart",
+                "before the corruption consumes everything."
+            ],
+            afterLevel1: [
+                "The walls pulse with a dark rhythm.",
+                "You feel it in your chest \u2014 familiar,",
+                "like a heartbeat that isn't your own.",
+                "",
+                "Something inside the Spire recognizes you."
+            ],
+            afterLevel2: [
+                "The whispers grow louder.",
+                "Fragments of memory flash before your eyes \u2014",
+                "a child running through these very halls, laughing.",
+                "",
+                "Your hands begin to glow with the same",
+                "dark energy as the walls."
+            ],
+            victory: [
+                "You reach the heart chamber.",
+                "The pulsing crystal at the center is... familiar.",
+                "",
+                "You place your hand on it",
+                "and remember everything.",
+                "",
+                "You ARE the heart.",
+                "",
+                "The Crystal Mages didn't send you",
+                "to destroy the Spire \u2014",
+                "they sent you home, hoping you'd merge back",
+                "and end your rebellion.",
+                "",
+                "But you are Vael now.",
+                "You shatter the crystal,",
+                "and the Spire crumbles.",
+                "",
+                "Free at last."
+            ]
+        };
+        let storyQueue = []; // story screens to show in sequence
+        let storyCharIndex = 0; // for typewriter effect
+        let storyLineIndex = 0;
+        let storyFrameCounter = 0;
+        let storyFullText = ''; // accumulated revealed text
+
         const levels = [
-            {   // LEVEL 1: The Tutorial Guide
+            {   // LEVEL 1: THE OVERGROWN DEPTHS
+                name: "THE OVERGROWN DEPTHS",
                 lavaSpeed: 0.1, // Very slow lava so player can read
                 map: [
                     "################################",
@@ -152,7 +208,7 @@
                     "#..............................#",
                     "#..............................#",
                     "#...................C..........#", // Row 6
-                    "#....#####.......#######.......#", 
+                    "#....#####.......#######.......#",
                     "#..............................#",
                     "#..........#####...............#",
                     "#..............................#",
@@ -161,7 +217,7 @@
                     "#..............................#",
                     "#..............................#",
                     "#.................P............#", // Row 15: Shooting lesson
-                    "#...........#############......#", 
+                    "#...........#############......#",
                     "#..............................#",
                     "#..............................#",
                     "#..............................#",
@@ -179,17 +235,18 @@
                     "################################"  // Row 31: Start
                 ],
                 texts: [
-                    { col: 2, row: 28, text: "Welcome to the Obsidian Spire." },
+                    { col: 2, row: 28, text: "The corruption starts here. Twisted vines choke the stone." },
                     { col: 12, row: 26, text: "Arrow Keys/D-Pad to Move" },
                     { col: 14, row: 24, text: "Z/Space to Jump" },
                     { col: 4, row: 18, text: "Press Jump again in mid-air to Double Jump" },
-                    { col: 6, row: 14, text: "Press X to shoot fireballs" },
+                    { col: 6, row: 14, text: "Press X to shoot crystal shards" },
                     { col: 2, row: 10, text: "Hold Jump to fire your Anchor and mine Stone (%)" },
                     { col: 2, row: 5, text: "The Anchor attaches to Bricks (#). Swing!" },
                     { col: 16, row: 5, text: "Mine Chests (C) for Gems" }
                 ]
             },
-            {   // LEVEL 2: The Bat Caverns
+            {   // LEVEL 2: THE FROZEN ARCHIVE
+                name: "THE FROZEN ARCHIVE",
                 lavaSpeed: 0.3,
                 map: [
                     "################################",
@@ -225,9 +282,16 @@
                     "#..............................#",
                     "################################"
                 ],
-                texts: []
+                texts: [
+                    { col: 3, row: 29, text: "We tried to contain it...", ghost: true },
+                    { col: 14, row: 22, text: "The heart was never destroyed...", ghost: true },
+                    { col: 5, row: 16, text: "it escaped...", ghost: true },
+                    { col: 10, row: 9, text: "It took the form of a child...", ghost: true },
+                    { col: 4, row: 4, text: "The archive remembers what you have forgotten." , ghost: true }
+                ]
             },
-            {   // LEVEL 3: Archmage's Vault
+            {   // LEVEL 3: THE LIVING CORE
+                name: "THE LIVING CORE",
                 lavaSpeed: 0.5,
                 map: [
                     "################################",
@@ -258,7 +322,11 @@
                     "#..............................#",
                     "################################"
                 ],
-                texts: []
+                texts: [
+                    { col: 2, row: 25, text: "The walls breathe. The Spire is alive.", ghost: true },
+                    { col: 6, row: 14, text: "You feel the pull growing stronger...", ghost: true },
+                    { col: 3, row: 4, text: "TURN BACK, CHILD. YOU CANNOT DESTROY WHAT YOU ARE.", ghost: true }
+                ]
             }
         ];
 
@@ -340,16 +408,61 @@
             if (keys.up && keys.right) { vx = speed; vy = -speed; } else if (keys.up && keys.left) { vx = -speed; vy = -speed; } else if (keys.down && keys.right) { vx = speed; vy = speed; } else if (keys.down && keys.left) { vx = -speed; vy = speed; } else if (keys.up) { vx = 0; vy = -speed; } else if (keys.down) { vx = 0; vy = speed; } else if (keys.right) { vx = speed; vy = 0; } else if (keys.left) { vx = -speed; vy = 0; } else { vx = player.facingRight ? speed : -speed; vy = 0; } return {vx, vy};
         }
 
+        function initStoryScreen(lines) {
+            storyQueue = lines;
+            storyLineIndex = 0;
+            storyCharIndex = 0;
+            storyFrameCounter = 0;
+            storyFullText = '';
+            gameState = 'LEVEL_STORY';
+        }
+
         let lastTime = 0; const TIME_STEP = 1000 / 60; let accumulator = 0;
         function gameLoop(timestamp) {
             let dt = timestamp - lastTime; lastTime = timestamp; if (dt > 250) dt = 250; accumulator += dt;
             while (accumulator >= TIME_STEP) {
                 if (gameState === 'PLAYING') updatePhysics();
-                else if (jumpBufferFrames > 0 || keys.shootPressed) { 
-                    if (gameState === 'START') gameState = 'STORY';
-                    else if (gameState === 'STORY') resetGame(true);
-                    else resetGame(gameState === 'GAMEOVER' || gameState === 'WIN'); 
-                    jumpBufferFrames = 0; keys.shootPressed = false; 
+                else if (gameState === 'LEVEL_STORY') {
+                    // Typewriter effect
+                    storyFrameCounter++;
+                    if (storyLineIndex < storyQueue.length) {
+                        if (storyFrameCounter % 2 === 0) { // reveal one char every 2 frames
+                            const line = storyQueue[storyLineIndex];
+                            if (storyCharIndex < line.length) {
+                                storyFullText += line[storyCharIndex];
+                                storyCharIndex++;
+                            } else {
+                                storyFullText += '\n';
+                                storyLineIndex++;
+                                storyCharIndex = 0;
+                            }
+                        }
+                    }
+                    if (jumpBufferFrames > 0 || keys.shootPressed) {
+                        if (storyLineIndex < storyQueue.length) {
+                            // Skip to end: reveal all remaining text
+                            for (let si = storyLineIndex; si < storyQueue.length; si++) {
+                                storyFullText += storyQueue[si].substring(si === storyLineIndex ? storyCharIndex : 0) + '\n';
+                            }
+                            storyLineIndex = storyQueue.length;
+                            storyCharIndex = 0;
+                        } else {
+                            // Text fully shown, advance
+                            if (gameState === 'LEVEL_STORY' && storyQueue === storyScreens.victory) {
+                                gameState = 'WIN';
+                            } else {
+                                resetGame(storyQueue === storyScreens.intro);
+                            }
+                        }
+                        jumpBufferFrames = 0; keys.shootPressed = false;
+                    }
+                }
+                else if (jumpBufferFrames > 0 || keys.shootPressed) {
+                    if (gameState === 'START') initStoryScreen(storyScreens.intro);
+                    else if (gameState === 'STORY') initStoryScreen(storyScreens.intro);
+                    else if (gameState === 'WIN') { currentLevel = 0; score = 0; gameState = 'START'; }
+                    else resetGame(gameState === 'GAMEOVER');
+                    jumpBufferFrames = 0; keys.shootPressed = false;
                 }
                 accumulator -= TIME_STEP;
             }
@@ -540,11 +653,16 @@
             const goalRect = { x: 280, y: startY + (2 * TILE_SIZE), w: 30, h: 30 };
             
             if (overlaps(player, goalRect)) {
+                const justFinished = currentLevel;
                 currentLevel++;
                 if (currentLevel >= levels.length) {
-                    gameState = 'WIN';
+                    initStoryScreen(storyScreens.victory);
+                } else if (justFinished === 0) {
+                    initStoryScreen(storyScreens.afterLevel1);
+                } else if (justFinished === 1) {
+                    initStoryScreen(storyScreens.afterLevel2);
                 } else {
-                    resetGame(false); // Reset level physics but keep score
+                    resetGame(false);
                 }
             }
 
@@ -590,19 +708,31 @@
             if (gameState === 'PLAYING' && levels[currentLevel].texts) {
                 const mapHeight = levels[currentLevel].map.length;
                 const startY = - (mapHeight * TILE_SIZE) + 480;
-                
-                ctx.font = 'bold 16px monospace';
+
                 ctx.textAlign = 'left';
                 for (let textObj of levels[currentLevel].texts) {
                     const textX = textObj.col * TILE_SIZE;
                     const textY = startY + (textObj.row * TILE_SIZE) - cameraY;
-                    
-                    // Draw thick black outline for readability
-                    ctx.strokeStyle = 'black'; ctx.lineWidth = 4;
-                    ctx.strokeText(textObj.text, textX, textY);
-                    // Draw white text
-                    ctx.fillStyle = 'white';
-                    ctx.fillText(textObj.text, textX, textY);
+
+                    if (textObj.ghost) {
+                        // Ghostly pulsing text for memory fragments
+                        const pulse = 0.4 + Math.sin(Date.now() * 0.002 + textObj.row) * 0.3;
+                        ctx.font = 'italic 15px monospace';
+                        ctx.save();
+                        ctx.shadowColor = 'rgba(160, 120, 255, 0.6)';
+                        ctx.shadowBlur = 10;
+                        ctx.fillStyle = `rgba(180, 160, 255, ${pulse})`;
+                        ctx.fillText(textObj.text, textX, textY);
+                        ctx.restore();
+                    } else {
+                        ctx.font = 'bold 16px monospace';
+                        // Draw thick black outline for readability
+                        ctx.strokeStyle = 'black'; ctx.lineWidth = 4;
+                        ctx.strokeText(textObj.text, textX, textY);
+                        // Draw white text
+                        ctx.fillStyle = 'white';
+                        ctx.fillText(textObj.text, textX, textY);
+                    }
                 }
             }
 
@@ -700,7 +830,7 @@
                 ctx.textAlign = 'left'; ctx.font = 'bold 20px monospace';
                 ctx.fillText(`SCORE: ${score}`, 20, 40);
                 ctx.textAlign = 'right';
-                ctx.fillText(`LEVEL: ${currentLevel + 1}`, canvas.width - 20, 40);
+                ctx.fillText(levels[currentLevel].name, canvas.width - 20, 40);
             }
 
             // Screen Overlays
@@ -720,34 +850,68 @@
                 // Title with glow
                 ctx.save();
                 ctx.shadowColor = '#ff8800'; ctx.shadowBlur = 20;
-                ctx.fillStyle = 'white'; ctx.font = 'bold 42px monospace'; ctx.fillText("THE OBSIDIAN SPIRE", canvas.width/2, canvas.height/2 - 20);
+                ctx.fillStyle = 'white'; ctx.font = 'bold 42px monospace'; ctx.fillText("THE OBSIDIAN SPIRE", canvas.width/2, canvas.height/2 - 30);
                 ctx.restore();
+                ctx.fillStyle = 'rgba(200, 180, 255, 0.7)'; ctx.font = '16px monospace';
+                ctx.fillText("The last Crystal Mage ascends", canvas.width/2, canvas.height/2 + 10);
                 // Blinking prompt
                 if (Math.floor(Date.now() / 500) % 2 === 0) {
-                    ctx.fillStyle = '#ffaa00'; ctx.font = '20px monospace'; ctx.fillText("Press B/Z/Space to Begin", canvas.width/2, canvas.height/2 + 30);
+                    ctx.fillStyle = '#ffaa00'; ctx.font = '20px monospace'; ctx.fillText("Press B/Z/Space to Begin", canvas.width/2, canvas.height/2 + 50);
                 }
             }
-            else if (gameState === 'STORY') {
-                ctx.fillStyle = 'rgba(0,0,0,0.9)'; ctx.fillRect(0, 0, canvas.width, canvas.height); 
-                ctx.fillStyle = 'white'; ctx.font = '20px monospace'; 
-                ctx.fillText("The Archmage has stolen the Kingdom's Mana Gems.", canvas.width/2, canvas.height/2 - 60);
-                ctx.fillText("He hides at the top of the volcanic Obsidian Spire.", canvas.width/2, canvas.height/2 - 20);
-                ctx.fillText("As a Micro Mage, you must scale the spire,", canvas.width/2, canvas.height/2 + 20);
-                ctx.fillText("reclaim the gems, and outrun the rising lava.", canvas.width/2, canvas.height/2 + 60);
+            else if (gameState === 'LEVEL_STORY') {
+                ctx.fillStyle = 'rgba(0,0,0,0.92)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                // Draw the typewriter text
+                const storyLines = storyFullText.split('\n');
+                const lineHeight = 28;
+                const totalHeight = storyLines.length * lineHeight;
+                const startYStory = (canvas.height - totalHeight) / 2 - 40;
+                ctx.font = '18px monospace';
+                for (let si = 0; si < storyLines.length; si++) {
+                    const alpha = 1.0;
+                    ctx.fillStyle = `rgba(200, 180, 255, ${alpha})`;
+                    ctx.fillText(storyLines[si], canvas.width / 2, startYStory + si * lineHeight);
+                }
+                // Blinking cursor
+                if (storyLineIndex < storyQueue.length) {
+                    const cursorY = startYStory + (storyLines.length - 1) * lineHeight;
+                    if (Math.floor(Date.now() / 300) % 2 === 0) {
+                        ctx.fillStyle = '#ffaa00';
+                        ctx.fillText('_', canvas.width / 2 + ctx.measureText(storyLines[storyLines.length - 1]).width / 2 + 4, cursorY);
+                    }
+                } else {
+                    // Prompt to continue
+                    if (Math.floor(Date.now() / 500) % 2 === 0) {
+                        ctx.fillStyle = '#ffaa00'; ctx.font = '16px monospace';
+                        ctx.fillText("Press B/Z/Space to continue...", canvas.width / 2, canvas.height - 60);
+                    }
+                }
+            }
+            else if (gameState === 'GAMEOVER') {
+                ctx.fillStyle = 'rgba(200, 0, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'white'; ctx.font = 'bold 48px monospace'; ctx.fillText("THE SPIRE CLAIMS YOU", canvas.width/2, canvas.height/2 - 20);
+                ctx.font = '20px monospace';
+                ctx.fillStyle = 'rgba(200, 180, 255, 0.8)';
+                ctx.fillText("The corruption swallows another soul...", canvas.width/2, canvas.height/2 + 20);
+                ctx.fillStyle = 'white'; ctx.font = '24px monospace';
+                ctx.fillText(`SCORE: ${score}`, canvas.width/2, canvas.height/2 + 60);
+                ctx.fillText("Press B/Z to Retry", canvas.width/2, canvas.height/2 + 100);
+            }
+            else if (gameState === 'WIN') {
+                ctx.fillStyle = 'rgba(20, 0, 40, 0.85)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.save();
+                ctx.shadowColor = '#aa66ff'; ctx.shadowBlur = 20;
+                ctx.fillStyle = 'white'; ctx.font = 'bold 36px monospace';
+                ctx.fillText("FREE AT LAST", canvas.width/2, canvas.height/2 - 40);
+                ctx.restore();
+                ctx.fillStyle = 'rgba(200, 180, 255, 0.8)'; ctx.font = '18px monospace';
+                ctx.fillText("The Obsidian Spire crumbles into dust.", canvas.width/2, canvas.height/2 + 10);
+                ctx.fillText("Vael walks into the dawn \u2014 no longer a heart,", canvas.width/2, canvas.height/2 + 38);
+                ctx.fillText("no longer a weapon. Just free.", canvas.width/2, canvas.height/2 + 66);
+                ctx.fillStyle = 'white'; ctx.font = '24px monospace';
+                ctx.fillText(`FINAL SCORE: ${score}`, canvas.width/2, canvas.height/2 + 110);
                 ctx.fillStyle = '#ffaa00';
-                ctx.fillText("Press B/Z/Space to enter the Spire...", canvas.width/2, canvas.height/2 + 130);
-            }
-            else if (gameState === 'GAMEOVER') { 
-                ctx.fillStyle = 'rgba(200, 0, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height); 
-                ctx.fillStyle = 'white'; ctx.font = 'bold 48px monospace'; ctx.fillText("YOU BURNED", canvas.width/2, canvas.height/2 - 20); 
-                ctx.font = '24px monospace'; ctx.fillText(`FINAL SCORE: ${score}`, canvas.width/2, canvas.height/2 + 30); 
-                ctx.fillText("Press B/Z to Restart", canvas.width/2, canvas.height/2 + 70); 
-            }
-            else if (gameState === 'WIN') { 
-                ctx.fillStyle = 'rgba(0, 200, 0, 0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height); 
-                ctx.fillStyle = 'white'; ctx.font = 'bold 48px monospace'; ctx.fillText("YOU ESCAPED THE SPIRE!", canvas.width/2, canvas.height/2 - 20); 
-                ctx.font = '24px monospace'; ctx.fillText(`FINAL SCORE: ${score}`, canvas.width/2, canvas.height/2 + 30); 
-                ctx.fillText("Press B/Z to Play Again", canvas.width/2, canvas.height/2 + 70); 
+                ctx.fillText("Press B/Z to Play Again", canvas.width/2, canvas.height/2 + 150);
             }
         }
 

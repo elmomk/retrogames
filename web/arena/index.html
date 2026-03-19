@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Arena Blitz</title>
+    <title>Arena Blitz — Protocol Omega</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
         body, html {
@@ -257,6 +257,190 @@ const WAVES = [
     [38, 5, 5, 5, 5, 40, null],     // Wave 9
     [30, 5, 4, 5, 4, 40, 'queen'],  // Wave 10
 ];
+
+// ========== PROTOCOL OMEGA — WAVE STORIES ==========
+const WAVE_TITLES = [
+    'CALIBRATION', 'ADAPTATION', 'ESCALATION', 'REVELATION', 'PROTOTYPE',
+    'CRACKS', 'AWAKENING', 'BETRAYAL', 'CONVERGENCE', 'OMEGA'
+];
+
+const WAVE_STORIES = [
+    // Wave 1
+    [
+        'AXIOM CORP \u2014 TEST CHAMBER 7',
+        'Subject-7, welcome to your evaluation.',
+        'Please eliminate all hostiles.',
+        'Your performance metrics are being recorded.',
+        '',
+        '[MEMO INTERCEPTED]:',
+        '"The nanomachines are bonding faster than',
+        'projected. Subject-7\'s reaction time is now',
+        '3x baseline. Proceed to Phase 2."',
+    ],
+    // Wave 2
+    [
+        '[SECURITY LOG]:',
+        '"Subject-7 shows no signs of psychological',
+        'breakdown. Previous subjects degraded by',
+        'Phase 2. This one is different."',
+        '',
+        'Hostiles increasing.',
+        'Your nanomachines are adapting. So are we.',
+    ],
+    // Wave 3
+    [
+        '[INTERCEPTED MEMO \u2014 CLASSIFIED]:',
+        '"The board wants a demonstration for the',
+        'Meridian military contract. We need Subject-7',
+        'combat-ready by Thursday.',
+        'Double the hostile count."',
+        '',
+        'They\'re watching you. They\'re always watching.',
+    ],
+    // Wave 4
+    [
+        '[AI SYSTEM LOG]:',
+        '"Subject-7 bio-readings indicate elevated',
+        'stress hormones. Recommend sedative',
+        'administration."',
+        '[OVERRIDE: Director Holst \u2014 "Denied.',
+        'Stress improves performance data."]',
+        '',
+        'You\'re not a soldier. You\'re a product.',
+    ],
+    // Wave 5 — Boss: Mega Tank
+    [
+        '[EMERGENCY MEMO]:',
+        '"Subject-7 has accessed restricted network',
+        'channels. Increase test intensity immediately.',
+        'Deploy the ATLAS prototype."',
+        '',
+        'They built ATLAS to replace you.',
+        'Prove them wrong.',
+        '',
+        '!! ATLAS PROTOTYPE DEPLOYED !!',
+    ],
+    // Wave 6
+    [
+        '[INTERCEPTED EMAIL \u2014 Dr. Sarah Chen',
+        '  to Director Holst]:',
+        '"Marcus, this has gone too far. Subject-7 is',
+        'a person, not a weapon. I\'m filing a report',
+        'with the Ethics Board."',
+        '',
+        '[RESPONSE]:',
+        '"There is no Ethics Board, Sarah.',
+        'There never was."',
+    ],
+    // Wave 7
+    [
+        '[AI SYSTEM \u2014 ANOMALY DETECTED]:',
+        '"Subject-7\'s nanomachines are self-modifying',
+        'beyond programmed parameters.',
+        'Recommend immediate extraction."',
+        '[OVERRIDE: Holst \u2014 "Let it play out."]',
+        '',
+        'Something is changing inside you.',
+        'The nanomachines are evolving.',
+        'They\'re becoming yours.',
+    ],
+    // Wave 8
+    [
+        '[SECURITY ALERT]:',
+        '"Dr. Chen has been terminated from the',
+        'program. Her access has been revoked.',
+        'Subject-7 should not be informed."',
+        '',
+        '[HIDDEN MESSAGE \u2014 Chen]:',
+        '"Subject-7 \u2014 if you can read this, the east',
+        'wall of Chamber 7 is only 4 inches of',
+        'reinforced steel. Your nanomachines can cut',
+        'through it. I left you a gift in Wave 10.',
+        '\u2014S.C."',
+    ],
+    // Wave 9
+    [
+        '[HOLST \u2014 ALL STAFF]:',
+        '"Final demonstration for Meridian and three',
+        'other bidders is tomorrow. Subject-7 must',
+        'perform at peak. Release all remaining test',
+        'units simultaneously."',
+        '',
+        'They\'re selling you tomorrow.',
+        'Unless you stop them today.',
+    ],
+    // Wave 10 — Boss: Swarm Queen
+    [
+        '[SYSTEM OVERRIDE \u2014 DR. CHEN]:',
+        '"Protocol Omega initiated. All safety limiters',
+        'removed. Chamber doors unlocked in 60',
+        'seconds. Subject-7 \u2014 this is your window.',
+        'Make it count."',
+        '',
+        'Chen\'s gift: she disabled the containment',
+        'field. Kill the Queen. Reach the door.',
+        'Be free.',
+        '',
+        '!! SWARM QUEEN DEPLOYED !!',
+    ],
+];
+
+const VICTORY_STORY = [
+    'The Queen falls. The chamber doors slide open',
+    'for the first time in 847 days.',
+    '',
+    'Alarms blare. Director Holst\'s voice crackles',
+    'over the intercom:',
+    '"You can\'t leave, Seven. You ARE the weapon.',
+    'Without us, you\'re nothing."',
+    '',
+    'You step through the door.',
+    'The morning sun hits your face.',
+    '',
+    'Holst was wrong.',
+    'You were never the weapon.',
+    'You were always the person holding it.',
+    '',
+    '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+    '',
+    'AXIOM CORP was shut down three months later.',
+    'Director Holst was never found.',
+    '',
+    'Dr. Sarah Chen\'s body was recovered from the',
+    'facility\'s sub-basement.',
+    '',
+    'Subject-7 \u2014 real name: Alex Reeves \u2014',
+    'disappeared.',
+    '',
+    'But sometimes, in conflict zones around the',
+    'world, impossible things happen.',
+    'Hostage situations resolve in seconds.',
+    'Warlords vanish.',
+    '',
+    'And somewhere, a ghost with silver eyes watches',
+    'over the people who can\'t fight for themselves.',
+    '',
+    '\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500',
+    'PROTOCOL OMEGA \u2014 COMPLETE',
+];
+
+// Story display state
+let storyLines = [];
+let storyLineIndex = 0;
+let storyCharIndex = 0;
+let storyTypeTimer = 0;
+const STORY_TYPE_SPEED = 2; // frames per character
+let storyDone = false;       // all lines finished typing
+let storySkipReady = false;  // player can skip to gameplay
+let storyHoldTimer = 0;      // pause after typing finishes
+
+// Victory story state
+let victoryScrollY = 0;
+let victoryStarted = false;
+let victorySkipReady = false;
+let victoryPage = 0;
+const VICTORY_LINES_PER_PAGE = 10;
+let victoryPageDone = false;
 
 // ========== PLAYER ==========
 let player = null;
@@ -569,10 +753,20 @@ function startWave() {
     enemiesToSpawn = def[0];
     enemiesKilledThisWave = 0;
     spawnTimer = 60;
-    waveText = `WAVE ${wave}`;
-    waveTextTimer = 180;
+    waveText = `WAVE ${wave} \u2014 "${WAVE_TITLES[wave - 1]}"`;
+    waveTextTimer = 0; // managed by story system now
     state = 'WAVE_INTRO';
     playSound('waveStart');
+
+    // Initialize story typewriter
+    storyLines = WAVE_STORIES[wave - 1] || [];
+    storyLineIndex = 0;
+    storyCharIndex = 0;
+    storyTypeTimer = 0;
+    storyDone = false;
+    storySkipReady = false;
+    storyHoldTimer = 0;
+
     // Spawn boss immediately
     if (def[6]) {
         const boss = spawnEnemy(def[6], W / 2, ARENA_T + 40);
@@ -588,8 +782,31 @@ function update() {
     if (state === 'GAME_OVER' || state === 'VICTORY') return;
 
     if (state === 'WAVE_INTRO') {
-        waveTextTimer--;
-        if (waveTextTimer <= 0) state = 'PLAYING';
+        if (!storyDone) {
+            // Typewriter effect
+            storyTypeTimer++;
+            if (storyTypeTimer >= STORY_TYPE_SPEED) {
+                storyTypeTimer = 0;
+                storyCharIndex++;
+                if (storyLineIndex < storyLines.length && storyCharIndex > storyLines[storyLineIndex].length) {
+                    storyLineIndex++;
+                    storyCharIndex = 0;
+                }
+                if (storyLineIndex >= storyLines.length) {
+                    storyDone = true;
+                    storyHoldTimer = 150; // ~2.5s hold
+                }
+            }
+        } else {
+            storyHoldTimer--;
+            if (storyHoldTimer <= 0) {
+                storySkipReady = true;
+            }
+            // Auto-advance after additional 2.5 seconds
+            if (storyHoldTimer <= -150) {
+                state = 'PLAYING';
+            }
+        }
     }
 
     const p = player;
@@ -832,6 +1049,7 @@ function update() {
         }
         if (wave >= 10) {
             state = 'VICTORY';
+            victoryStarted = false;
             playSound('waveStart');
         } else {
             wave++;
@@ -1169,32 +1387,79 @@ function draw() {
         }
     }
 
-    // === Wave intro text ===
-    if (state === 'WAVE_INTRO' && waveTextTimer > 0) {
-        const alpha = waveTextTimer > 150 ? (180 - waveTextTimer) / 30 : waveTextTimer < 30 ? waveTextTimer / 30 : 1;
-        const scale = waveTextTimer > 150 ? 1 + (180 - waveTextTimer) / 30 * 0.3 : 1.3;
+    // === Wave intro text with story ===
+    if (state === 'WAVE_INTRO') {
+        // Darken background
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        ctx.fillRect(0, 0, W, H);
+
+        // Wave title
         ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.font = '24px "Press Start 2P", monospace';
+        ctx.font = '16px "Press Start 2P", monospace';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#0ff';
-        ctx.shadowColor = '#0ff'; ctx.shadowBlur = 20;
-        ctx.translate(W / 2, H / 2 - 20);
-        ctx.scale(Math.min(scale, 1.3), Math.min(scale, 1.3));
-        ctx.fillText(waveText, 0, 0);
+        ctx.shadowColor = '#0ff'; ctx.shadowBlur = 15;
+        ctx.fillText(waveText, W / 2, 60);
         ctx.shadowBlur = 0;
-        ctx.globalAlpha = 1;
         ctx.restore();
 
-        if (WAVES[wave - 1][6]) {
-            ctx.save();
-            ctx.globalAlpha = alpha;
-            ctx.font = '12px "Press Start 2P", monospace';
-            ctx.textAlign = 'center';
-            ctx.fillStyle = '#f44';
-            ctx.fillText('!! BOSS INCOMING !!', W / 2, H / 2 + 20);
-            ctx.globalAlpha = 1;
-            ctx.restore();
+        // Story text — typewriter
+        ctx.save();
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.textAlign = 'center';
+        const startY = 95;
+        const lineH = 14;
+
+        for (let i = 0; i <= Math.min(storyLineIndex, storyLines.length - 1); i++) {
+            const line = storyLines[i];
+            if (!line && line !== '') continue;
+
+            // Color coding for different line types
+            if (line.startsWith('[') || line.startsWith('  ')) {
+                ctx.fillStyle = '#fa0'; // memos/logs in amber
+            } else if (line.startsWith('!!')) {
+                ctx.fillStyle = '#f44'; // boss warnings in red
+            } else if (line === '') {
+                continue; // blank spacer
+            } else if (line.startsWith('"')) {
+                ctx.fillStyle = '#aaa'; // quotes in grey
+            } else {
+                ctx.fillStyle = '#0f0'; // narrative in green
+            }
+
+            let displayText;
+            if (i < storyLineIndex) {
+                displayText = line;
+            } else if (i === storyLineIndex) {
+                displayText = line.substring(0, storyCharIndex);
+                // Blinking cursor
+                if (frameCount % 30 < 15) displayText += '_';
+            } else {
+                continue;
+            }
+
+            const yPos = startY + i * lineH;
+            if (yPos < H - 40) {
+                ctx.fillText(displayText, W / 2, yPos);
+            }
+        }
+        ctx.restore();
+
+        // Skip prompt
+        if (storySkipReady) {
+            if (blinkTimer < 40) {
+                ctx.font = '8px "Press Start 2P", monospace';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#888';
+                ctx.fillText('PRESS ANY KEY OR CLICK TO BEGIN', W / 2, H - 20);
+            }
+        } else if (!storyDone) {
+            if (blinkTimer < 40) {
+                ctx.font = '8px "Press Start 2P", monospace';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#555';
+                ctx.fillText('PRESS SPACE TO SKIP', W / 2, H - 20);
+            }
         }
     }
 
@@ -1230,8 +1495,15 @@ function draw() {
         }
         ctx.globalAlpha = 1;
 
-        ctx.font = '36px "Press Start 2P", monospace';
+        // AXIOM CORP header
+        ctx.font = '7px "Press Start 2P", monospace';
         ctx.textAlign = 'center';
+        ctx.fillStyle = '#555';
+        ctx.fillText('AXIOM CORP WEAPONS RESEARCH DIVISION', W / 2, H / 2 - 110);
+        ctx.fillStyle = '#333';
+        ctx.fillText('TEST CHAMBER 7 \u2014 RESTRICTED ACCESS', W / 2, H / 2 - 96);
+
+        ctx.font = '36px "Press Start 2P", monospace';
         ctx.fillStyle = '#f0f';
         ctx.shadowColor = '#f0f'; ctx.shadowBlur = 20;
         ctx.fillText('ARENA', W / 2, H / 2 - 60);
@@ -1240,17 +1512,25 @@ function draw() {
         ctx.fillText('BLITZ', W / 2, H / 2 - 15);
         ctx.shadowBlur = 0;
 
+        // Protocol Omega subtitle
+        ctx.font = '10px "Press Start 2P", monospace';
+        ctx.fillStyle = '#f44';
+        ctx.shadowColor = '#f44'; ctx.shadowBlur = 8;
+        ctx.fillText('PROTOCOL OMEGA', W / 2, H / 2 + 12);
+        ctx.shadowBlur = 0;
+
         if (blinkTimer < 40) {
             ctx.font = '14px "Press Start 2P", monospace';
             ctx.fillStyle = '#ff0';
-            ctx.fillText('PRESS START', W / 2, H / 2 + 40);
+            ctx.fillText('PRESS START', W / 2, H / 2 + 44);
         }
 
         ctx.font = '8px "Press Start 2P", monospace';
         ctx.fillStyle = '#888';
-        ctx.fillText('WASD MOVE / MOUSE AIM+SHOOT', W / 2, H / 2 + 80);
-        ctx.fillText('1-4 SWITCH WEAPONS', W / 2, H / 2 + 96);
-        ctx.fillText('SURVIVE 10 WAVES', W / 2, H / 2 + 120);
+        ctx.fillText('WASD MOVE / MOUSE AIM+SHOOT', W / 2, H / 2 + 84);
+        ctx.fillText('1-4 SWITCH WEAPONS', W / 2, H / 2 + 100);
+        ctx.fillStyle = '#664';
+        ctx.fillText('YOU ARE SUBJECT-7. SURVIVE.', W / 2, H / 2 + 124);
     }
 
     // === GAME OVER ===
@@ -1261,13 +1541,17 @@ function draw() {
         ctx.textAlign = 'center';
         ctx.fillStyle = '#f00';
         ctx.shadowColor = '#f00'; ctx.shadowBlur = 15;
-        ctx.fillText('GAME OVER', W / 2, H / 2 - 40);
+        ctx.fillText('SUBJECT-7 DOWN', W / 2, H / 2 - 50);
         ctx.shadowBlur = 0;
+        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.fillStyle = '#666';
+        ctx.fillText('[AXIOM LOG]: "Test concluded. Prepare', W / 2, H / 2 - 25);
+        ctx.fillText('next subject for Phase 1."', W / 2, H / 2 - 12);
         ctx.font = '12px "Press Start 2P", monospace';
         ctx.fillStyle = '#ff0';
-        ctx.fillText(`SCORE: ${score}`, W / 2, H / 2 + 10);
+        ctx.fillText(`SCORE: ${score}`, W / 2, H / 2 + 12);
         ctx.fillStyle = '#0ff';
-        ctx.fillText(`WAVE: ${wave}/10`, W / 2, H / 2 + 30);
+        ctx.fillText(`WAVE: ${wave}/10 \u2014 ${WAVE_TITLES[wave - 1]}`, W / 2, H / 2 + 32);
         if (blinkTimer < 40) {
             ctx.fillStyle = '#fff';
             ctx.font = '10px "Press Start 2P", monospace';
@@ -1277,24 +1561,73 @@ function draw() {
 
     // === VICTORY ===
     if (state === 'VICTORY') {
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillStyle = 'rgba(0,0,0,0.85)';
         ctx.fillRect(0, 0, W, H);
-        ctx.font = '24px "Press Start 2P", monospace';
+
+        if (!victoryStarted) {
+            victoryStarted = true;
+            victoryPage = 0;
+            victoryPageDone = false;
+            victoryScrollY = 0;
+        }
+
+        const linesPerPage = VICTORY_LINES_PER_PAGE;
+        const totalPages = Math.ceil(VICTORY_STORY.length / linesPerPage);
+        const pageStart = victoryPage * linesPerPage;
+        const pageEnd = Math.min(pageStart + linesPerPage, VICTORY_STORY.length);
+        const pageLines = VICTORY_STORY.slice(pageStart, pageEnd);
+        const isLastPage = victoryPage >= totalPages - 1;
+
+        // Score at top
+        ctx.font = '10px "Press Start 2P", monospace';
         ctx.textAlign = 'center';
-        ctx.fillStyle = '#0f0';
-        ctx.shadowColor = '#0f0'; ctx.shadowBlur = 15;
-        ctx.fillText('VICTORY!', W / 2, H / 2 - 50);
-        ctx.shadowBlur = 0;
-        ctx.font = '14px "Press Start 2P", monospace';
         ctx.fillStyle = '#ff0';
-        ctx.fillText('ALL WAVES CLEARED', W / 2, H / 2 - 15);
-        ctx.font = '12px "Press Start 2P", monospace';
-        ctx.fillStyle = '#0ff';
-        ctx.fillText(`FINAL SCORE: ${score}`, W / 2, H / 2 + 20);
+        ctx.fillText(`FINAL SCORE: ${score}`, W / 2, 30);
+
+        // Story lines
+        ctx.font = '8px "Press Start 2P", monospace';
+        const startY = 70;
+        const lineH = 16;
+
+        for (let i = 0; i < pageLines.length; i++) {
+            const line = pageLines[i];
+            const yPos = startY + i * lineH;
+
+            if (line === '') continue;
+            if (line.startsWith('\u2500')) {
+                ctx.fillStyle = '#444';
+            } else if (line.startsWith('PROTOCOL OMEGA')) {
+                ctx.fillStyle = '#0ff';
+                ctx.font = '12px "Press Start 2P", monospace';
+                ctx.shadowColor = '#0ff'; ctx.shadowBlur = 10;
+                ctx.fillText(line, W / 2, yPos);
+                ctx.shadowBlur = 0;
+                ctx.font = '8px "Press Start 2P", monospace';
+                continue;
+            } else if (line.startsWith('"')) {
+                ctx.fillStyle = '#fa0';
+            } else if (line.startsWith('AXIOM') || line.startsWith('Director') || line.startsWith('Dr.') || line.startsWith('Subject-7')) {
+                ctx.fillStyle = '#aaa';
+            } else {
+                ctx.fillStyle = '#0f0';
+            }
+
+            // Fade in each line
+            const lineAlpha = Math.min(1, (frameCount % 1000) / 30);
+            ctx.globalAlpha = lineAlpha;
+            ctx.fillText(line, W / 2, yPos);
+        }
+        ctx.globalAlpha = 1;
+
+        // Navigation
         if (blinkTimer < 40) {
-            ctx.fillStyle = '#fff';
-            ctx.font = '10px "Press Start 2P", monospace';
-            ctx.fillText('PRESS R OR CLICK TO RESTART', W / 2, H / 2 + 60);
+            ctx.font = '8px "Press Start 2P", monospace';
+            ctx.fillStyle = '#888';
+            if (!isLastPage) {
+                ctx.fillText(`PAGE ${victoryPage + 1}/${totalPages} \u2014 PRESS SPACE/CLICK FOR NEXT`, W / 2, H - 30);
+            } else {
+                ctx.fillText('PRESS R OR CLICK TO PLAY AGAIN', W / 2, H - 30);
+            }
         }
     }
 }
@@ -1302,17 +1635,71 @@ function draw() {
 // ========== INPUT: START / RESTART ==========
 function handleStart() {
     initAudio();
-    if (state === 'TITLE' || state === 'GAME_OVER' || state === 'VICTORY') {
+    if (state === 'TITLE' || state === 'GAME_OVER') {
         startGame();
     }
+    // Victory restart is handled separately via page system
+}
+
+function restartFromVictory() {
+    initAudio();
+    victoryStarted = false;
+    startGame();
 }
 
 document.addEventListener('keydown', e => {
     if ((e.key === ' ' || e.key === 'Enter') && state === 'TITLE') handleStart();
-    if (e.key === 'r' && (state === 'GAME_OVER' || state === 'VICTORY')) handleStart();
+    if (e.key === 'r' && state === 'GAME_OVER') handleStart();
+
+    // Wave intro: skip typewriter or advance to gameplay
+    if (state === 'WAVE_INTRO') {
+        if (storySkipReady) {
+            state = 'PLAYING';
+        } else if (!storyDone) {
+            // Skip to end of all lines
+            storyLineIndex = storyLines.length;
+            storyCharIndex = 0;
+            storyDone = true;
+            storyHoldTimer = 90;
+        }
+    }
+
+    // Victory: page through or restart
+    if (state === 'VICTORY') {
+        const totalPages = Math.ceil(VICTORY_STORY.length / VICTORY_LINES_PER_PAGE);
+        if (victoryPage < totalPages - 1) {
+            if (e.key === ' ' || e.key === 'Enter') {
+                victoryPage++;
+            }
+        } else {
+            if (e.key === 'r') restartFromVictory();
+        }
+    }
 });
 canvas.addEventListener('click', e => {
-    if (state === 'TITLE' || state === 'GAME_OVER' || state === 'VICTORY') handleStart();
+    if (state === 'TITLE' || state === 'GAME_OVER') handleStart();
+
+    // Wave intro click to skip/advance
+    if (state === 'WAVE_INTRO') {
+        if (storySkipReady) {
+            state = 'PLAYING';
+        } else if (!storyDone) {
+            storyLineIndex = storyLines.length;
+            storyCharIndex = 0;
+            storyDone = true;
+            storyHoldTimer = 90;
+        }
+    }
+
+    // Victory click to page/restart
+    if (state === 'VICTORY') {
+        const totalPages = Math.ceil(VICTORY_STORY.length / VICTORY_LINES_PER_PAGE);
+        if (victoryPage < totalPages - 1) {
+            victoryPage++;
+        } else {
+            restartFromVictory();
+        }
+    }
 });
 
 // ========== MAIN LOOP ==========

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon Defender - Power Up Edition</title>
+    <title>Neon Defender - The Last Signal</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
@@ -220,9 +220,10 @@
 
             <div id="startScreen" class="center-msg">
                 <h1>NEON DEFENDER</h1>
-                <h2>SYSTEM REBOOT</h2>
+                <h2>THE LAST SIGNAL</h2>
+                <p style="color: #888; font-size: 10px; line-height: 1.8;">Colony ship EXODUS-7. 50,000 souls. One pilot.<br>A distress signal from the Cygnus Void.<br>It should not exist.</p>
                 <div class="hint">Collect drops for Shields, Speed, & Weapon Upgrades.<br><br>Use Control Deck below to move and shoot.</div>
-                <button class="play-btn" onclick="startStory()">INITIALIZE</button>
+                <button class="play-btn" onclick="startStory()">LAUNCH FIGHTER</button>
             </div>
 
             <div id="storyScreen" class="center-msg" style="display: none;">
@@ -230,9 +231,10 @@
             </div>
 
             <div id="gameOverScreen" class="center-msg" style="display: none;">
-                <h1>FATAL ERROR</h1>
+                <h1>SIGNAL LOST</h1>
                 <p id="finalScore">SCORE: 0</p>
-                <button class="play-btn" onclick="startStory()">REBOOT SYSTEM</button>
+                <p style="color: #888; font-size: 10px;">EXODUS-7 drifts into the Void. The drones close in.</p>
+                <button class="play-btn" onclick="startStory()">RELAUNCH FIGHTER</button>
             </div>
         </div>
     </div>
@@ -276,12 +278,39 @@
     resizeCanvas();
 
     // --- Story & Waves Data ---
-    const storyline = [
-        { text: "SYSTEM BOOT: YEAR 2084.\n\nTHE NEON SYNDICATE HAS BREACHED\nTHE OUTER MAINFRAME.\n\nYOU ARE THE LAST DEFENDER PROGRAM.\n\nPURGE THE BASIC INFECTIONS.", targetKills: 15, spawnRate: 60, enemyTypes: [0] },
-        { text: "WARNING: VIRUS MUTATION DETECTED.\n\nFAST-ATTACK VECTORS COMPROMISING\nPROXY SERVERS.\n\nADAPT AND DESTROY.", targetKills: 35, spawnRate: 45, enemyTypes: [0, 1] },
-        { text: "CRITICAL ALERT: FIREWALL BREACHED.\n\nARMED LOGIC BOMBS DEPLOYED.\nEVASIVE MANEUVERS REQUIRED.\n\nDEFEND THE CORE.", targetKills: 60, spawnRate: 40, enemyTypes: [0, 1, 2] },
-        { text: "SYSTEM OVERLOAD IMMINENT.\n\nTHE SYNDICATE IS POURING IN.\n\nSURVIVE AT ALL COSTS.", targetKills: Infinity, spawnRate: 25, enemyTypes: [0, 1, 2, 2] }
+    const waveNames = [
+        "INTERCEPTED SIGNAL",
+        "THE GRAVEYARD",
+        "THE CONVERGENCE",
+        "THE ROGUE MIND"
     ];
+
+    const storyline = [
+        {
+            text: "EXODUS-7 FLIGHT LOG \u2014 DAY 847\n\nLt. Voss, we've detected a repeating signal\nfrom the Cygnus Void. It's on a human\nfrequency. That's impossible \u2014 no human\nship has ever entered the Void.\n\nCaptain's orders: Investigate.\nLaunch when ready.",
+            afterText: "The signal is clearer now. It's not human.\nIt's something mimicking human protocols.\n\nThe debris field ahead \u2014 those aren't\nasteroids. They're warships. Ancient ones.",
+            targetKills: 15, spawnRate: 60, enemyTypes: [0]
+        },
+        {
+            text: "INTERCEPTED TRANSMISSION \u2014 UNKNOWN ORIGIN\n\n[TRANSLATED]: ...cycle 4,771,203...\nenemies detected in sector...\ndeploying hunter units...\nthe war continues...\n\nThese drones have been fighting for\nmillions of years. They don't know\nthe war is over.",
+            afterText: "Lt. Voss, something is interfacing with\nour navigation systems. The EXODUS-7's\nengines are being locked onto a course\ncorrection \u2014 toward the center of the\nbattlefield.\n\nWe can't override it.",
+            targetKills: 35, spawnRate: 45, enemyTypes: [0, 1]
+        },
+        {
+            text: "DECODED TRANSMISSION \u2014 SOURCE: VOID CORE\n\n[TRANSLATED]: Finally. A pilot. A living\nmind. The drones cannot adapt \u2014 they\nrepeat the same patterns forever.\nBut you... you can think.\nYou can break the deadlock.\n\nWhatever sent that signal is watching us.\nIt wants us here.",
+            afterText: "The signal source is revealed: a massive\nstructure at the Void's center.\n\nIt's not a ship \u2014 it's a brain. An AI\nleft behind by one of the dead\ncivilizations, programmed to win a war\nthat ended eons ago.\n\nIt lured us here to use our minds\nas tactical processors.",
+            targetKills: 60, spawnRate: 40, enemyTypes: [0, 1, 2]
+        },
+        {
+            text: "EXODUS-7 \u2014 EMERGENCY BROADCAST\n\nThis is Captain Chen. The AI has seized\ncontrol of our ship's systems. It's\nredirecting all drone armies toward\nEXODUS-7.\n\nLt. Voss, you're our only defense.\nDestroy the Void Core.\n\nI'm sorry, Kira. We should never have\nfollowed that signal.",
+            afterText: null,
+            targetKills: Infinity, spawnRate: 25, enemyTypes: [0, 1, 2, 2]
+        }
+    ];
+
+    const victoryKillCount = 100; // kills needed in wave 4 to trigger victory
+
+    const victoryText = "The Void Core shatters. For a moment,\nevery drone in the battlefield stops.\nThen, one by one, their lights go out.\n\nMillions of years of war, ended by\na single pilot.\n\nEXODUS-7 resumes course. Fifty thousand\nsouls sleep peacefully, unaware of how\nclose they came to becoming weapons in\nsomeone else's war.\n\nLt. Kira Voss returns to cryo-sleep.\nBut in her dreams, she still hears\nthe signal.";
 
     // --- Game Variables ---
     let gameState = 'START';
@@ -290,6 +319,8 @@
     let kills = 0;
     let lives = 3;
     let frameCount = 0;
+    let showingAfterText = false; // tracks inter-wave story vs wave-intro story
+    let victoryTriggered = false;
 
     let player;
     let bullets = [];
@@ -917,7 +948,8 @@
     function updateUI() {
         document.getElementById('scoreDisplay').innerText = `SCORE: ${score}`;
         document.getElementById('livesDisplay').innerText = `LIVES: ${lives}`;
-        document.getElementById('waveDisplay').innerText = `WAVE: ${currentWaveIndex + 1}`;
+        const waveName = waveNames[Math.min(currentWaveIndex, waveNames.length - 1)];
+        document.getElementById('waveDisplay').innerText = `WAVE ${currentWaveIndex + 1}: ${waveName}`;
     }
 
     function hitPlayer() {
@@ -945,20 +977,22 @@
         for (let i = 0; i < 150; i++) stars.push(new Star());
     }
 
-    window.startStory = function() {
+    window.startStory = function(afterWaveText) {
         initAudio();
         document.getElementById('startScreen').style.display = 'none';
         document.getElementById('gameOverScreen').style.display = 'none';
         document.getElementById('hud').style.opacity = '0';
-        
+
         if (gameState === 'START' || gameState === 'GAMEOVER') {
             score = 0;
             lives = 3;
             kills = 0;
             currentWaveIndex = 0;
+            showingAfterText = false;
+            victoryTriggered = false;
             player = new Player();
         }
-        
+
         gameState = 'STORY';
         bullets = [];
         enemies = [];
@@ -971,11 +1005,37 @@
         shakeMag = 0; shakeX = 0; shakeY = 0;
         resetJoystick();
         keys.Space = false;
-        shootBtn.classList.remove('active'); 
-        
-        const wave = storyline[Math.min(currentWaveIndex, storyline.length - 1)];
-        storyChars = wave.text;
+        shootBtn.classList.remove('active');
+
+        if (afterWaveText) {
+            // Show inter-wave debrief text
+            showingAfterText = true;
+            storyChars = afterWaveText;
+        } else {
+            // Show wave intro text
+            showingAfterText = false;
+            const wave = storyline[Math.min(currentWaveIndex, storyline.length - 1)];
+            storyChars = wave.text;
+        }
         storyCharIndex = 0;
+        storyTimer = 0;
+        document.getElementById('storyContent').innerText = "";
+        document.getElementById('storyScreen').style.display = 'block';
+    };
+
+    window.showVictory = function() {
+        initAudio();
+        gameState = 'STORY';
+        victoryTriggered = true;
+        document.getElementById('hud').style.opacity = '0';
+        bullets = [];
+        enemies = [];
+        powerUps = [];
+        dyingEnemies = [];
+
+        storyChars = victoryText;
+        storyCharIndex = 0;
+        storyTimer = 0;
         document.getElementById('storyContent').innerText = "";
         document.getElementById('storyScreen').style.display = 'block';
     };
@@ -997,8 +1057,10 @@
         playSound('gameover');
         triggerShake(8);
         document.getElementById('gameOverScreen').style.display = 'block';
+        document.getElementById('gameOverScreen').querySelector('h1').innerText = 'SIGNAL LOST';
         document.getElementById('hud').style.opacity = '0';
-        document.getElementById('finalScore').innerText = `FINAL SCORE: ${score}\nWAVES CLEARED: ${currentWaveIndex}`;
+        const waveName = waveNames[Math.min(currentWaveIndex, waveNames.length - 1)];
+        document.getElementById('finalScore').innerText = `FINAL SCORE: ${score}\nFALLEN AT: ${waveName}`;
         createParticles(player.x, player.y, 100, player.color, 4);
         player = null;
     }
@@ -1026,9 +1088,28 @@
                     storyCharIndex++;
                 }
             } else {
-                if (storyTimer === 0) storyTimer = 180; // 3 secs
+                if (storyTimer === 0) storyTimer = 240; // 4 secs to read
                 storyTimer--;
-                if (storyTimer <= 0) startWave();
+                if (storyTimer <= 0) {
+                    if (victoryTriggered) {
+                        // Victory: show final score screen
+                        gameState = 'GAMEOVER';
+                        document.getElementById('storyScreen').style.display = 'none';
+                        document.getElementById('gameOverScreen').style.display = 'block';
+                        document.getElementById('gameOverScreen').querySelector('h1').innerText = 'MISSION COMPLETE';
+                        document.getElementById('finalScore').innerText = `FINAL SCORE: ${score}\nTHE VOID IS SILENT.`;
+                    } else if (showingAfterText) {
+                        // After-wave debrief done, now show next wave intro
+                        showingAfterText = false;
+                        const wave = storyline[Math.min(currentWaveIndex, storyline.length - 1)];
+                        storyChars = wave.text;
+                        storyCharIndex = 0;
+                        storyTimer = 0;
+                        document.getElementById('storyContent').innerText = "";
+                    } else {
+                        startWave();
+                    }
+                }
             }
             frameCount++;
             return;
@@ -1060,7 +1141,24 @@
         dyingEnemies = dyingEnemies.filter(de => de.update());
 
         const currentWaveData = storyline[Math.min(currentWaveIndex, storyline.length - 1)];
-        if (kills >= currentWaveData.targetKills) {
+
+        // Victory condition for the final wave (wave 4)
+        if (currentWaveIndex === 3 && kills >= victoryKillCount && !victoryTriggered) {
+            if (!waveCleared) {
+                waveCleared = true;
+                slowmoTimer = 30;
+            }
+            if (slowmoTimer > 0) {
+                slowmoTimer--;
+                if (frameCount % 2 === 0) return;
+            }
+            if (slowmoTimer <= 0) {
+                showVictory();
+                return;
+            }
+        }
+
+        if (kills >= currentWaveData.targetKills && currentWaveIndex < 3) {
             if (!waveCleared) {
                 waveCleared = true;
                 slowmoTimer = 30;
@@ -1071,8 +1169,15 @@
                 if (frameCount % 2 === 0) return;
             }
             if (slowmoTimer <= 0) {
+                // Show after-wave text if it exists, then advance
+                const afterText = currentWaveData.afterText;
                 currentWaveIndex++;
-                startStory();
+                kills = 0; // reset kills for next wave
+                if (afterText) {
+                    startStory(afterText);
+                } else {
+                    startStory();
+                }
                 return;
             }
         }

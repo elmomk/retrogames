@@ -587,6 +587,7 @@ window.addEventListener('keydown', e => {
     if (gameState === 'TITLE' && (e.code === 'Enter' || e.code === 'KeyZ' || e.code === 'KeyX')) { startGame(); }
     if (gameState === 'GAMEOVER' && (e.code === 'Enter' || e.code === 'KeyZ' || e.code === 'KeyX')) { resetToTitle(); }
     if (gameState === 'VICTORY' && (e.code === 'Enter' || e.code === 'KeyZ' || e.code === 'KeyX')) { resetToTitle(); }
+    if (gameState === 'STORY' && (e.code === 'Enter' || e.code === 'KeyZ' || e.code === 'KeyX')) { advanceStory(); }
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
 
@@ -652,7 +653,7 @@ window.addEventListener('mouseup', resetJoy);
 
 ['jump','attack','dash','shuriken'].forEach(name => {
     const el = document.getElementById('btn-'+name);
-    const press = e => { e.preventDefault(); touchBtns[name]=true; el.classList.add('active'); if(gameState==='TITLE') startGame(); if(gameState==='GAMEOVER'||gameState==='VICTORY') resetToTitle(); };
+    const press = e => { e.preventDefault(); touchBtns[name]=true; el.classList.add('active'); if(gameState==='TITLE') startGame(); if(gameState==='GAMEOVER'||gameState==='VICTORY') resetToTitle(); if(gameState==='STORY') advanceStory(); };
     const release = e => { if(e.type!=='mouseup'&&e.type!=='mouseleave') e.preventDefault(); touchBtns[name]=false; el.classList.remove('active'); };
     el.addEventListener('touchstart', press, {passive:false});
     el.addEventListener('touchend', release, {passive:false});
@@ -683,13 +684,261 @@ let entities = [], projectiles = [], particles = [], pickups = [];
 let level = null;
 
 // ============================================================
+// MULTI-LEVEL & STORY SYSTEM
+// ============================================================
+let currentLevel = 0;
+
+const LEVEL_NAMES = [
+    'TRIAL OF SPEED',
+    'TRIAL OF COURAGE',
+    'TRIAL OF TRUTH'
+];
+
+const LEVEL_SUBTITLES = [
+    'Bamboo Forest',
+    'Castle Rooftops',
+    'Demon Shrine'
+];
+
+// Story text arrays — each entry is one screen of text
+const STORY_PRE = [
+    // Level 0 intro
+    [
+        "You are Kaede, a ninja of the Shadow Lotus clan.",
+        "",
+        "Accused of assassinating the Shogun, you have been",
+        "stripped of your rank and marked for death.",
+        "",
+        "Your master, Sensei Takeshi, cast you out.",
+        "But you know the truth -- you were framed.",
+        "",
+        "The real assassin used Shadow Lotus techniques.",
+        "The traitor is within your own clan.",
+        "",
+        "To clear your name, you must complete the",
+        "Three Trials of the Crimson Oath --",
+        "ancient tests that reveal the truth",
+        "to anyone who survives them.",
+    ],
+    [
+        "--- THE FIRST TRIAL: SPEED ---",
+        "",
+        "The first trial tests your swiftness.",
+        "Race through the Bamboo Forest before",
+        "dawn breaks.",
+        "",
+        "The forest itself will try to stop you --",
+        "its guardians see all intruders as threats.",
+    ],
+    // Level 1 intro
+    [
+        "--- THE SECOND TRIAL: COURAGE ---",
+        "",
+        "The second trial tests your courage.",
+        "Infiltrate Castle Kuroda, where the",
+        "Shogun was killed.",
+        "",
+        "The castle is now haunted by his guardsmen",
+        "who refuse to leave their posts,",
+        "even in death.",
+    ],
+    // Level 2 intro
+    [
+        "--- THE FINAL TRIAL: TRUTH ---",
+        "",
+        "The final trial reveals the truth.",
+        "Sensei Takeshi awaits at the Crimson Shrine.",
+        "",
+        "He knew you would come.",
+        "He has always known.",
+    ],
+];
+
+const STORY_POST = [
+    // After level 0
+    [
+        "You emerge from the forest as the first",
+        "light breaks. In the clearing ahead,",
+        "you find a scroll. It reads:",
+        "",
+        "'The Shogun's killer moved like wind",
+        " through still air. Only two in the",
+        " Shadow Lotus possess such speed --",
+        " you, and your master.'",
+    ],
+    // After level 1
+    [
+        "Deep in the castle archives, you find",
+        "the assassination report.",
+        "",
+        "The killing blow came from above --",
+        "from the rafters. But the guards found",
+        "no entry point.",
+        "",
+        "Whoever did this had a key.",
+        "",
+        "Only two people had keys to the Shogun's",
+        "private chambers: the head of security...",
+        "and Sensei Takeshi.",
+    ],
+    // After level 2 (victory)
+    [
+        "TAKESHI:",
+        "'You were always my finest student, Kaede.",
+        " Too fine. The Shogun ordered the Shadow",
+        " Lotus destroyed. I killed him to save our",
+        " clan. I framed you because... you would",
+        " have tried to stop me.'",
+        "",
+        "Takeshi kneels, offering his sword.",
+        "'The clan is safe. My crime is mine alone.",
+        " Take my blade and lead them, Kaede.'",
+        "",
+        "You take the sword.",
+        "The Crimson Oath is complete.",
+        "",
+        "The truth is revealed -- not the truth you",
+        "wanted, but the truth you needed.",
+        "Your master was a murderer, and a hero.",
+        "Now the burden passes to you.",
+    ],
+];
+
+// Environmental signs per level: [{tileX, text}]
+const ENV_SIGNS = [
+    // Level 0
+    [
+        { tx: 20, text: "The forest remembers..." },
+        { tx: 45, text: "Speed is the shadow's first weapon" },
+        { tx: 65, text: "Run, Kaede. Do not look back." },
+    ],
+    // Level 1
+    [
+        { tx: 15, text: "The Shogun's blood still stains these stones" },
+        { tx: 50, text: "Who benefits from the Shogun's death?" },
+        { tx: 75, text: "The guards see only enemies now" },
+    ],
+    // Level 2
+    [
+        { tx: 20, text: "Your master's blade hangs here..." },
+        { tx: 50, text: "Truth cuts deeper than any sword" },
+        { tx: 70, text: "TAKESHI: 'You were always my finest student...'" },
+    ],
+];
+
+// Story screen state
+let storyLines = [];
+let storyCharIndex = 0;
+let storyLineIndex = 0;
+let storyFullText = '';
+let storyDisplayed = '';
+let storyTypeTimer = 0;
+let storyCallback = null; // function to call when story dismissed
+let storySkipReady = false;
+const STORY_CHAR_DELAY = 2; // frames per character
+
+function showStory(lines, callback) {
+    gameState = 'STORY';
+    storyLines = lines;
+    storyCharIndex = 0;
+    storyLineIndex = 0;
+    storyFullText = lines.join('\n');
+    storyDisplayed = '';
+    storyTypeTimer = 0;
+    storySkipReady = false;
+    storyCallback = callback;
+}
+
+function updateStory() {
+    storyTypeTimer++;
+    if (storyTypeTimer >= STORY_CHAR_DELAY && storyCharIndex < storyFullText.length) {
+        storyCharIndex++;
+        storyDisplayed = storyFullText.substring(0, storyCharIndex);
+        storyTypeTimer = 0;
+    }
+    if (storyCharIndex >= storyFullText.length) {
+        storySkipReady = true;
+    }
+}
+
+function drawStoryScreen() {
+    // Dark background
+    const grad = ctx.createLinearGradient(0, 0, 0, GH);
+    grad.addColorStop(0, '#050008');
+    grad.addColorStop(1, '#100020');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, GW, GH);
+
+    // Decorative border
+    ctx.strokeStyle = '#800';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(30, 30, GW - 60, GH - 60);
+    ctx.strokeStyle = '#400';
+    ctx.strokeRect(34, 34, GW - 68, GH - 68);
+
+    // Draw text
+    ctx.font = '10px "Press Start 2P"';
+    ctx.textAlign = 'left';
+    const lines = storyDisplayed.split('\n');
+    const startY = 80;
+    const lineH = 18;
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.startsWith('---')) {
+            ctx.fillStyle = '#e44';
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = '#f00';
+        } else if (line.startsWith('TAKESHI:') || line.startsWith("'")) {
+            ctx.fillStyle = '#fa0';
+            ctx.shadowBlur = 0;
+        } else {
+            ctx.fillStyle = '#ccc';
+            ctx.shadowBlur = 0;
+        }
+        ctx.fillText(line, 60, startY + i * lineH);
+    }
+    ctx.shadowBlur = 0;
+
+    // Prompt
+    if (storySkipReady && Math.floor(frameCount / 30) % 2 === 0) {
+        ctx.fillStyle = '#ff0';
+        ctx.font = '9px "Press Start 2P"';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS Z / ENTER TO CONTINUE', GW / 2, GH - 50);
+    } else if (!storySkipReady) {
+        ctx.fillStyle = '#666';
+        ctx.font = '8px "Press Start 2P"';
+        ctx.textAlign = 'center';
+        ctx.fillText('PRESS Z / ENTER TO SKIP', GW / 2, GH - 50);
+    }
+}
+
+function advanceStory() {
+    if (!storySkipReady) {
+        // Skip to end of text
+        storyCharIndex = storyFullText.length;
+        storyDisplayed = storyFullText;
+        storySkipReady = true;
+    } else {
+        // Advance
+        if (storyCallback) storyCallback();
+    }
+}
+
+// ============================================================
 // LEVEL DATA
 // ============================================================
 // Tile types: 0=air, 1=ground, 2=wall, 3=platform(passthrough top), 4=spikes, 5=bamboo(bg)
-function buildLevel() {
-    // Level is a tile map. Each tile is 16x16.
-    // Level width in tiles: ~250 = 4000px
-    const W = 260, H = 30; // 30 tiles high = 480px
+function buildLevel(lvl) {
+    if (lvl === undefined) lvl = currentLevel;
+    // Each level is self-contained with its own tile map
+    const H = 30;
+    let W;
+
+    if (lvl === 0) W = 90;
+    else if (lvl === 1) W = 100;
+    else W = 95;
+
     const tiles = [];
     for (let y = 0; y < H; y++) {
         tiles[y] = [];
@@ -697,109 +946,145 @@ function buildLevel() {
     }
 
     // Ground floor
-    for (let x = 0; x < W; x++) {
-        tiles[H-1][x] = 1;
-        tiles[H-2][x] = 1;
-        // Gaps/pits
-        if ((x > 30 && x < 34) || (x > 70 && x < 74) || (x > 130 && x < 134) ||
-            (x > 180 && x < 184) || (x > 220 && x < 224)) {
-            tiles[H-1][x] = 0; tiles[H-2][x] = 0;
-            tiles[H-1][x] = 4; // spikes at bottom of pit visual
+    function addGround(gapList) {
+        for (let x = 0; x < W; x++) {
+            tiles[H-1][x] = 1;
+            tiles[H-2][x] = 1;
+            let isGap = false;
+            for (const [gs, ge] of gapList) {
+                if (x > gs && x < ge) { isGap = true; break; }
+            }
+            if (isGap) {
+                tiles[H-1][x] = 4; tiles[H-2][x] = 0;
+            }
         }
     }
 
-    // Walls for wall-jumping
     function addWall(x, yStart, yEnd) {
-        for (let y = yStart; y <= yEnd; y++) { if (y>=0&&y<H) tiles[y][x] = 2; }
+        for (let y = yStart; y <= yEnd; y++) { if (y>=0&&y<H&&x>=0&&x<W) tiles[y][x] = 2; }
     }
 
-    // Platforms
     function addPlatform(x, y, len, type) {
         for (let i = 0; i < len; i++) { if (x+i<W && y>=0 && y<H) tiles[y][x+i] = type || 3; }
     }
 
-    // Section 1: Tutorial area (0-40)
-    addPlatform(8, 24, 5);
-    addPlatform(15, 21, 4);
-    addPlatform(21, 18, 5);
-    addPlatform(10, 17, 3);
+    if (lvl === 0) {
+        // LEVEL 1: TRIAL OF SPEED - Bamboo Forest (tiles 0-85 from original)
+        addGround([[30, 34], [70, 74]]);
 
-    // Wall jump section
-    addWall(28, 15, 27);
-    addWall(32, 12, 27);
-    addPlatform(29, 14, 3);
-    addPlatform(33, 11, 4);
+        // Section 1: Tutorial area (0-40)
+        addPlatform(8, 24, 5);
+        addPlatform(15, 21, 4);
+        addPlatform(21, 18, 5);
+        addPlatform(10, 17, 3);
 
-    // Section 2: Forest platforms (40-90)
-    addPlatform(42, 24, 6);
-    addPlatform(50, 22, 4);
-    addPlatform(46, 19, 5);
-    addPlatform(55, 20, 3);
-    addPlatform(60, 17, 6);
-    addPlatform(52, 15, 3);
-    addPlatform(58, 13, 4);
+        // Wall jump section
+        addWall(28, 15, 27);
+        addWall(32, 12, 27);
+        addPlatform(29, 14, 3);
+        addPlatform(33, 11, 4);
 
-    addWall(68, 10, 27);
-    addWall(72, 8, 27);
-    addPlatform(69, 14, 3);
-    addPlatform(64, 22, 4);
-    addPlatform(73, 10, 5);
+        // Section 2: Forest platforms (40-85)
+        addPlatform(42, 24, 6);
+        addPlatform(50, 22, 4);
+        addPlatform(46, 19, 5);
+        addPlatform(55, 20, 3);
+        addPlatform(60, 17, 6);
+        addPlatform(52, 15, 3);
+        addPlatform(58, 13, 4);
 
-    // Section 3: Dense combat area (90-140)
-    addPlatform(82, 24, 8);
-    addPlatform(92, 22, 6);
-    addPlatform(86, 19, 5);
-    addPlatform(100, 20, 4);
-    addPlatform(95, 16, 6);
-    addPlatform(106, 18, 5);
-    addPlatform(102, 14, 4);
-    addPlatform(112, 22, 5);
-    addPlatform(110, 16, 3);
+        addWall(68, 10, 27);
+        addWall(72, 8, 27);
+        addPlatform(69, 14, 3);
+        addPlatform(64, 22, 4);
+        addPlatform(73, 10, 5);
 
-    addWall(118, 10, 27);
-    addWall(122, 8, 27);
-    addPlatform(119, 12, 3);
-    addPlatform(123, 9, 4);
+        // End platform
+        addPlatform(80, 24, 10, 1);
+        addPlatform(80, 23, 10, 1);
+        for (let y = 0; y < H-2; y++) { tiles[y][W-1] = 2; tiles[y][W-2] = 2; }
 
-    // Section 4: Vertical challenge (140-190)
-    addPlatform(136, 25, 4);
-    addPlatform(142, 23, 3);
-    addPlatform(138, 20, 4);
-    addPlatform(146, 18, 3);
-    addPlatform(150, 21, 4);
-    addPlatform(144, 15, 4);
-    addPlatform(155, 16, 5);
-    addPlatform(160, 13, 4);
-    addPlatform(152, 11, 3);
+    } else if (lvl === 1) {
+        // LEVEL 2: TRIAL OF COURAGE - Castle Rooftops (denser combat, castle theme)
+        addGround([[30, 34], [55, 59], [80, 84]]);
 
-    addWall(165, 8, 27);
-    addWall(169, 6, 27);
-    addPlatform(166, 10, 3);
-    addPlatform(170, 7, 4);
+        // Dense combat platforms
+        addPlatform(8, 24, 8);
+        addPlatform(18, 22, 6);
+        addPlatform(12, 19, 5);
+        addPlatform(26, 20, 4);
+        addPlatform(21, 16, 6);
+        addPlatform(32, 18, 5);
+        addPlatform(28, 14, 4);
+        addPlatform(38, 22, 5);
+        addPlatform(36, 16, 3);
 
-    addPlatform(174, 22, 6);
-    addPlatform(176, 18, 4);
-    addPlatform(182, 20, 3);
+        addWall(44, 10, 27);
+        addWall(48, 8, 27);
+        addPlatform(45, 12, 3);
+        addPlatform(49, 9, 4);
 
-    // Section 5: Final stretch (190-250)
-    addPlatform(192, 24, 5);
-    addPlatform(199, 22, 4);
-    addPlatform(195, 18, 5);
-    addPlatform(205, 20, 6);
-    addPlatform(212, 17, 4);
-    addPlatform(208, 14, 3);
-    addPlatform(218, 22, 5);
-    addPlatform(216, 15, 4);
+        // Vertical challenge section
+        addPlatform(54, 25, 4);
+        addPlatform(60, 23, 3);
+        addPlatform(56, 20, 4);
+        addPlatform(64, 18, 3);
+        addPlatform(68, 21, 4);
+        addPlatform(62, 15, 4);
+        addPlatform(72, 16, 5);
+        addPlatform(76, 13, 4);
+        addPlatform(70, 11, 3);
 
-    addWall(225, 8, 27);
-    addWall(229, 6, 27);
-    addPlatform(226, 10, 3);
-    addPlatform(230, 8, 4);
+        addWall(82, 8, 27);
+        addWall(86, 6, 27);
+        addPlatform(83, 10, 3);
+        addPlatform(87, 7, 4);
 
-    // End platform
-    addPlatform(240, 24, 15, 1);
-    addPlatform(240, 23, 15, 1);
-    for (let y = 0; y < H-2; y++) { tiles[y][254] = 2; tiles[y][255] = 2; }
+        // End platform
+        addPlatform(90, 24, 10, 1);
+        addPlatform(90, 23, 10, 1);
+        for (let y = 0; y < H-2; y++) { tiles[y][W-1] = 2; tiles[y][W-2] = 2; }
+
+    } else {
+        // LEVEL 3: TRIAL OF TRUTH - Demon Shrine (final level)
+        addGround([[25, 29], [50, 54], [75, 79]]);
+
+        // Shrine approach
+        addPlatform(8, 24, 5);
+        addPlatform(15, 22, 4);
+        addPlatform(11, 18, 5);
+        addPlatform(21, 20, 6);
+        addPlatform(28, 17, 4);
+        addPlatform(24, 14, 3);
+
+        addWall(34, 8, 27);
+        addWall(38, 6, 27);
+        addPlatform(35, 10, 3);
+        addPlatform(39, 8, 4);
+
+        // Inner shrine - more platforms
+        addPlatform(42, 24, 6);
+        addPlatform(44, 18, 4);
+        addPlatform(50, 20, 3);
+        addPlatform(55, 22, 5);
+        addPlatform(53, 16, 5);
+        addPlatform(60, 18, 4);
+        addPlatform(58, 13, 3);
+
+        addWall(66, 8, 27);
+        addWall(70, 6, 27);
+        addPlatform(67, 10, 3);
+        addPlatform(71, 7, 4);
+
+        addPlatform(74, 22, 4);
+        addPlatform(76, 16, 4);
+        addPlatform(80, 20, 3);
+
+        // End platform - Takeshi's arena
+        addPlatform(84, 24, 11, 1);
+        addPlatform(84, 23, 11, 1);
+        for (let y = 0; y < H-2; y++) { tiles[y][W-1] = 2; tiles[y][W-2] = 2; }
+    }
 
     return { tiles, W, H, pw: W*TILE, ph: H*TILE };
 }
@@ -1548,32 +1833,41 @@ function drawLevel() {
             const sx = tx * TILE - camera.x, sy = ty * TILE - camera.y;
 
             if (t === 1) {
-                // Ground
+                // Ground - themed by level
                 const above = tileAt(tx, ty-1);
                 if (above === 0 || above === 3 || above === 4) {
-                    ctx.fillStyle = '#2a5'; // grass top
-                    ctx.fillRect(sx, sy, TILE, 3);
-                    ctx.fillStyle = '#543';
+                    if (currentLevel === 1) {
+                        ctx.fillStyle = '#556'; // stone top
+                        ctx.fillRect(sx, sy, TILE, 3);
+                        ctx.fillStyle = '#334';
+                    } else if (currentLevel === 2) {
+                        ctx.fillStyle = '#633'; // crimson stone top
+                        ctx.fillRect(sx, sy, TILE, 3);
+                        ctx.fillStyle = '#422';
+                    } else {
+                        ctx.fillStyle = '#2a5'; // grass top
+                        ctx.fillRect(sx, sy, TILE, 3);
+                        ctx.fillStyle = '#543';
+                    }
                     ctx.fillRect(sx, sy+3, TILE, TILE-3);
                 } else {
-                    ctx.fillStyle = '#432';
+                    ctx.fillStyle = currentLevel === 1 ? '#334' : currentLevel === 2 ? '#322' : '#432';
                     ctx.fillRect(sx, sy, TILE, TILE);
-                    // Texture
-                    ctx.fillStyle = '#3a2';
+                    ctx.fillStyle = currentLevel === 1 ? '#445' : currentLevel === 2 ? '#433' : '#3a2';
                     if ((tx+ty)%3===0) ctx.fillRect(sx+4, sy+4, 2, 2);
                 }
             } else if (t === 2) {
-                // Wall
-                ctx.fillStyle = '#445';
+                // Wall - themed
+                ctx.fillStyle = currentLevel === 1 ? '#445' : currentLevel === 2 ? '#534' : '#445';
                 ctx.fillRect(sx, sy, TILE, TILE);
-                ctx.fillStyle = '#556';
+                ctx.fillStyle = currentLevel === 1 ? '#556' : currentLevel === 2 ? '#645' : '#556';
                 ctx.fillRect(sx+2, sy+2, TILE-4, TILE-4);
-                if ((tx+ty)%2===0) { ctx.fillStyle='#334'; ctx.fillRect(sx+4,sy+6,4,2); }
+                if ((tx+ty)%2===0) { ctx.fillStyle = currentLevel === 2 ? '#423' : '#334'; ctx.fillRect(sx+4,sy+6,4,2); }
             } else if (t === 3) {
-                // Platform
-                ctx.fillStyle = '#654';
+                // Platform - themed
+                ctx.fillStyle = currentLevel === 1 ? '#556' : currentLevel === 2 ? '#644' : '#654';
                 ctx.fillRect(sx, sy, TILE, 5);
-                ctx.fillStyle = '#876';
+                ctx.fillStyle = currentLevel === 1 ? '#778' : currentLevel === 2 ? '#866' : '#876';
                 ctx.fillRect(sx, sy, TILE, 2);
             } else if (t === 4) {
                 // Spikes
@@ -1595,12 +1889,27 @@ function drawLevel() {
 // BACKGROUND / PARALLAX
 // ============================================================
 function drawBackground() {
-    // Sky gradient
+    // Sky gradient - varies by level
     const grad = ctx.createLinearGradient(0, 0, 0, GH);
-    grad.addColorStop(0, '#0a0618');
-    grad.addColorStop(0.4, '#1a0830');
-    grad.addColorStop(0.7, '#2d1045');
-    grad.addColorStop(1, '#1a0625');
+    if (currentLevel === 1) {
+        // Castle Rooftops - dark blue/grey
+        grad.addColorStop(0, '#060812');
+        grad.addColorStop(0.4, '#0c1020');
+        grad.addColorStop(0.7, '#151a30');
+        grad.addColorStop(1, '#0a0d1a');
+    } else if (currentLevel === 2) {
+        // Demon Shrine - crimson tint
+        grad.addColorStop(0, '#120205');
+        grad.addColorStop(0.4, '#200810');
+        grad.addColorStop(0.7, '#30101a');
+        grad.addColorStop(1, '#1a060d');
+    } else {
+        // Bamboo Forest - purple night
+        grad.addColorStop(0, '#0a0618');
+        grad.addColorStop(0.4, '#1a0830');
+        grad.addColorStop(0.7, '#2d1045');
+        grad.addColorStop(1, '#1a0625');
+    }
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, GW, GH);
 
@@ -1712,7 +2021,12 @@ function drawHUD() {
     ctx.fillStyle = '#aaa';
     ctx.font = '9px "Press Start 2P"';
     ctx.textAlign = 'center';
-    ctx.fillText('BAMBOO FOREST', GW/2, 18);
+    ctx.fillText(LEVEL_NAMES[currentLevel] || 'BAMBOO FOREST', GW/2, 18);
+
+    // Level subtitle
+    ctx.fillStyle = '#666';
+    ctx.font = '7px "Press Start 2P"';
+    ctx.fillText(LEVEL_SUBTITLES[currentLevel] || '', GW/2, 30);
 
     ctx.restore();
 }
@@ -1764,9 +2078,16 @@ function drawTitleScreen() {
     ctx.shadowBlur = 0;
 
     // Subtitle
-    ctx.fillStyle = '#888';
-    ctx.font = '10px "Press Start 2P"';
-    ctx.fillText('A NINJA ACTION PLATFORMER', GW/2, 195);
+    ctx.fillStyle = '#c44';
+    ctx.font = '12px "Press Start 2P"';
+    ctx.shadowBlur = 10; ctx.shadowColor = '#f00';
+    ctx.fillText('THE CRIMSON OATH', GW/2, 195);
+    ctx.shadowBlur = 0;
+
+    // Tagline
+    ctx.fillStyle = '#777';
+    ctx.font = '8px "Press Start 2P"';
+    ctx.fillText('A tale of honor and betrayal', GW/2, 215);
 
     // Blink "PRESS START"
     if (Math.floor(frameCount/30) % 2 === 0) {
@@ -1831,59 +2152,72 @@ function spawnLevelEntities() {
     projectiles = [];
     particles = [];
 
-    // Guards on ground sections
-    const guardPositions = [
-        [200, 25], [400, 25], [600, 25], [900, 25],
-        [1200, 25], [1500, 25], [1800, 25], [2100, 25],
-        [2500, 25], [2800, 25], [3200, 25], [3600, 25],
-    ];
-    for (const [gx, gy] of guardPositions) {
-        // Find ground below spawn point
-        let spawnY = gy * TILE;
-        for (let ty = gy; ty < level.H; ty++) {
-            if (isSolid(Math.floor(gx/TILE), ty)) { spawnY = ty * TILE - 26; break; }
+    function spawnGuard(gx) {
+        const tileX = Math.floor(gx / TILE);
+        let spawnY = 25 * TILE;
+        for (let ty = 20; ty < level.H; ty++) {
+            if (isSolid(tileX, ty)) { spawnY = ty * TILE - 26; break; }
         }
         entities.push(new Enemy(gx, spawnY, 'guard'));
     }
 
-    // Archers on platforms
-    const archerPositions = [
-        [15*TILE, 20*TILE], [60*TILE, 16*TILE], [95*TILE, 15*TILE],
-        [110*TILE, 15*TILE], [155*TILE, 15*TILE], [212*TILE, 16*TILE],
-    ];
-    for (const [ax, ay] of archerPositions) {
-        // Find platform below
+    function spawnArcher(ax, ay) {
         let spawnY = ay;
-        const tx = Math.floor(ax/TILE);
-        for (let ty = Math.floor(ay/TILE); ty < level.H; ty++) {
+        const tx = Math.floor(ax / TILE);
+        for (let ty = Math.floor(ay / TILE); ty < level.H; ty++) {
             const t = tileAt(tx, ty);
             if (t === 1 || t === 2 || t === 3) { spawnY = ty * TILE - 26; break; }
         }
         entities.push(new Enemy(ax, spawnY, 'archer'));
     }
 
-    // Static pickups scattered through level
-    const scrollPositions = [
-        [12*TILE, 22*TILE], [22*TILE, 16*TILE], [50*TILE, 20*TILE],
-        [73*TILE, 8*TILE], [102*TILE, 12*TILE], [144*TILE, 13*TILE],
-        [170*TILE, 5*TILE], [208*TILE, 12*TILE], [230*TILE, 6*TILE],
-    ];
-    for (const [sx, sy] of scrollPositions) {
-        pickups.push({ x: sx, y: sy, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
-    }
+    if (currentLevel === 0) {
+        // Level 1: Bamboo Forest - moderate enemies
+        spawnGuard(200); spawnGuard(400); spawnGuard(600); spawnGuard(900);
+        spawnArcher(15*TILE, 20*TILE);
+        spawnArcher(60*TILE, 16*TILE);
 
-    const healthPositions = [
-        [35*TILE, 24*TILE], [85*TILE, 17*TILE], [150*TILE, 19*TILE], [240*TILE, 22*TILE],
-    ];
-    for (const [hx, hy] of healthPositions) {
-        pickups.push({ x: hx, y: hy, w: 12, h: 12, type: 'health', vy: 0, life: 999999 });
-    }
+        // Pickups
+        pickups.push({ x: 12*TILE, y: 22*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 22*TILE, y: 16*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 50*TILE, y: 20*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 73*TILE, y: 8*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 35*TILE, y: 24*TILE, w: 12, h: 12, type: 'health', vy: 0, life: 999999 });
+        pickups.push({ x: 55*TILE, y: 18*TILE, w: 12, h: 12, type: 'ammo', vy: 0, life: 999999 });
 
-    const ammoPositions = [
-        [55*TILE, 18*TILE], [120*TILE, 10*TILE], [195*TILE, 16*TILE],
-    ];
-    for (const [ax, ay] of ammoPositions) {
-        pickups.push({ x: ax, y: ay, w: 12, h: 12, type: 'ammo', vy: 0, life: 999999 });
+    } else if (currentLevel === 1) {
+        // Level 2: Castle Rooftops - higher enemy density
+        spawnGuard(150); spawnGuard(300); spawnGuard(450); spawnGuard(600);
+        spawnGuard(800); spawnGuard(950); spawnGuard(1100); spawnGuard(1300);
+        spawnArcher(21*TILE, 15*TILE);
+        spawnArcher(36*TILE, 15*TILE);
+        spawnArcher(62*TILE, 14*TILE);
+        spawnArcher(76*TILE, 12*TILE);
+
+        // Pickups
+        pickups.push({ x: 10*TILE, y: 22*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 49*TILE, y: 8*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 70*TILE, y: 10*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 30*TILE, y: 18*TILE, w: 12, h: 12, type: 'health', vy: 0, life: 999999 });
+        pickups.push({ x: 65*TILE, y: 20*TILE, w: 12, h: 12, type: 'health', vy: 0, life: 999999 });
+        pickups.push({ x: 45*TILE, y: 10*TILE, w: 12, h: 12, type: 'ammo', vy: 0, life: 999999 });
+
+    } else {
+        // Level 3: Demon Shrine - tough enemies
+        spawnGuard(150); spawnGuard(350); spawnGuard(500); spawnGuard(700);
+        spawnGuard(900); spawnGuard(1050); spawnGuard(1200);
+        spawnArcher(15*TILE, 16*TILE);
+        spawnArcher(28*TILE, 16*TILE);
+        spawnArcher(53*TILE, 15*TILE);
+        spawnArcher(76*TILE, 15*TILE);
+
+        // Pickups
+        pickups.push({ x: 20*TILE, y: 18*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 39*TILE, y: 6*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 67*TILE, y: 8*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 48*TILE, y: 20*TILE, w: 12, h: 12, type: 'health', vy: 0, life: 999999 });
+        pickups.push({ x: 78*TILE, y: 20*TILE, w: 12, h: 12, type: 'health', vy: 0, life: 999999 });
+        pickups.push({ x: 58*TILE, y: 12*TILE, w: 12, h: 12, type: 'ammo', vy: 0, life: 999999 });
     }
 }
 
@@ -1892,14 +2226,47 @@ function spawnLevelEntities() {
 // ============================================================
 function startGame() {
     initAudio();
-    gameState = 'PLAYING';
+    currentLevel = 0;
     score = 0;
-    level = buildLevel();
+    // Show the first story intro (main backstory), then level 1 intro, then play
+    showStory(STORY_PRE[0], function() {
+        showStory(STORY_PRE[1], function() {
+            beginLevel();
+        });
+    });
+}
+
+function beginLevel() {
+    gameState = 'PLAYING';
+    level = buildLevel(currentLevel);
     player = new Player(3 * TILE, 24 * TILE);
     camera = new Camera();
     camera.x = 0;
     camera.y = level.ph - GH;
     spawnLevelEntities();
+}
+
+function advanceLevel() {
+    // Show post-level story
+    const postIndex = currentLevel;
+    showStory(STORY_POST[postIndex], function() {
+        currentLevel++;
+        if (currentLevel > 2) {
+            // Game complete!
+            gameState = 'VICTORY';
+            if (score > hiScore) {
+                hiScore = score;
+                localStorage.setItem('shadowBlade_hi', hiScore);
+            }
+        } else {
+            // Show pre-level story for next level then begin it
+            // STORY_PRE indices: 0=backstory, 1=level0 intro, 2=level1 intro, 3=level2 intro
+            const preIndex = currentLevel + 1; // +1 because index 0 is the backstory
+            showStory(STORY_PRE[preIndex], function() {
+                beginLevel();
+            });
+        }
+    });
 }
 
 function resetToTitle() {
@@ -1936,13 +2303,10 @@ function update() {
         if (!player.dead) {
             player.update(input);
 
-            // Victory check: player reached end platform area
-            if (player.x > 240 * TILE) {
-                gameState = 'VICTORY';
-                if (score > hiScore) {
-                    hiScore = score;
-                    localStorage.setItem('shadowBlade_hi', hiScore);
-                }
+            // Level end check: player reached end platform area
+            const endZone = (level.W - 12) * TILE;
+            if (player.x > endZone) {
+                advanceLevel();
             }
         } else {
             player.update(input);
@@ -1988,6 +2352,8 @@ function update() {
             camera.follow(player);
             updateParticles();
         }
+    } else if (gameState === 'STORY') {
+        updateStory();
     } else {
         // Title animations
         pollInput();
@@ -1998,34 +2364,68 @@ function update() {
 // MAIN DRAW
 // ============================================================
 function drawVictoryScreen() {
-    ctx.fillStyle = 'rgba(0,0,0,0.75)';
+    // Full dark background for final victory
+    const grad = ctx.createLinearGradient(0, 0, 0, GH);
+    grad.addColorStop(0, 'rgba(5,0,0,0.95)');
+    grad.addColorStop(1, 'rgba(30,0,0,0.95)');
+    ctx.fillStyle = grad;
     ctx.fillRect(0, 0, GW, GH);
 
-    ctx.fillStyle = '#0f0';
-    ctx.font = '28px "Press Start 2P"';
+    // Title
+    ctx.fillStyle = '#e44';
+    ctx.font = '22px "Press Start 2P"';
     ctx.textAlign = 'center';
-    ctx.shadowBlur = 20; ctx.shadowColor = '#0f0';
-    ctx.fillText('LEVEL COMPLETE', GW/2, GH/2 - 50);
+    ctx.shadowBlur = 20; ctx.shadowColor = '#f00';
+    ctx.fillText('THE CRIMSON OATH', GW/2, 60);
     ctx.shadowBlur = 0;
 
-    ctx.fillStyle = '#ff0';
+    ctx.fillStyle = '#fa0';
     ctx.font = '14px "Press Start 2P"';
-    ctx.fillText('SCORE: ' + score, GW/2, GH/2);
+    ctx.fillText('COMPLETE', GW/2, 90);
+
+    // Ending text
+    ctx.font = '8px "Press Start 2P"';
+    ctx.fillStyle = '#ccc';
+    ctx.textAlign = 'center';
+    const endLines = [
+        "The three trials are finished.",
+        "The truth stands revealed.",
+        "",
+        "Sensei Takeshi saved the Shadow Lotus",
+        "by slaying the Shogun who ordered",
+        "the clan's destruction.",
+        "",
+        "He framed his finest student to shield",
+        "the clan from retribution.",
+        "",
+        "Now Kaede carries the Crimson Blade",
+        "and leads the Shadow Lotus forward.",
+        "",
+        "The oath is fulfilled.",
+    ];
+    for (let i = 0; i < endLines.length; i++) {
+        ctx.fillText(endLines[i], GW/2, 130 + i * 16);
+    }
+
+    // Score
+    ctx.fillStyle = '#ff0';
+    ctx.font = '12px "Press Start 2P"';
+    ctx.fillText('FINAL SCORE: ' + score, GW/2, GH - 100);
 
     ctx.fillStyle = '#c80';
     ctx.font = '10px "Press Start 2P"';
-    ctx.fillText('HI-SCORE: ' + hiScore, GW/2, GH/2 + 30);
+    ctx.fillText('HI-SCORE: ' + hiScore, GW/2, GH - 78);
 
     if (score >= hiScore) {
         ctx.fillStyle = '#0ff';
         ctx.font = '10px "Press Start 2P"';
-        ctx.fillText('NEW HIGH SCORE!', GW/2, GH/2 + 55);
+        ctx.fillText('NEW HIGH SCORE!', GW/2, GH - 56);
     }
 
     if (Math.floor(frameCount/30) % 2 === 0) {
         ctx.fillStyle = '#fff';
-        ctx.font = '12px "Press Start 2P"';
-        ctx.fillText('PRESS START TO CONTINUE', GW/2, GH/2 + 90);
+        ctx.font = '10px "Press Start 2P"';
+        ctx.fillText('PRESS START TO RETURN', GW/2, GH - 30);
     }
 }
 
@@ -2054,6 +2454,8 @@ function draw() {
 
     if (gameState === 'TITLE') {
         drawTitleScreen();
+    } else if (gameState === 'STORY') {
+        drawStoryScreen();
     } else if (gameState === 'PLAYING' || gameState === 'GAMEOVER' || gameState === 'VICTORY') {
         // Apply screen shake
         ctx.save();
@@ -2076,6 +2478,30 @@ function draw() {
         ctx.restore();
 
         drawHUD();
+
+        // Environmental text signs
+        if (gameState === 'PLAYING' && player && ENV_SIGNS[currentLevel]) {
+            ctx.save();
+            ctx.font = '8px "Press Start 2P"';
+            ctx.textAlign = 'center';
+            for (const sign of ENV_SIGNS[currentLevel]) {
+                const signWorldX = sign.tx * TILE;
+                const dist = Math.abs(player.x - signWorldX);
+                if (dist < 120) {
+                    const alpha = Math.max(0, 1 - dist / 120) * 0.7;
+                    ctx.globalAlpha = alpha * (0.7 + Math.sin(frameCount * 0.04) * 0.3);
+                    ctx.fillStyle = currentLevel === 0 ? '#4a8' : currentLevel === 1 ? '#a66' : '#c44';
+                    ctx.shadowBlur = 6;
+                    ctx.shadowColor = ctx.fillStyle;
+                    const sx = signWorldX - camera.x;
+                    const sy = 70 + Math.sin(frameCount * 0.03) * 4;
+                    ctx.fillText(sign.text, sx, sy);
+                    ctx.shadowBlur = 0;
+                }
+            }
+            ctx.globalAlpha = 1;
+            ctx.restore();
+        }
 
         // "GO" arrow indicator
         if (gameState === 'PLAYING') {
@@ -2131,6 +2557,7 @@ canvas.addEventListener('click', () => {
     initAudio();
     if (gameState === 'TITLE') startGame();
     else if (gameState === 'GAMEOVER' || gameState === 'VICTORY') resetToTitle();
+    else if (gameState === 'STORY') advanceStory();
 });
 
 requestAnimationFrame(gameLoop);
