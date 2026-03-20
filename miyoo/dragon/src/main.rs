@@ -1,6 +1,6 @@
-// Dragon Fury - Miyoo Mini Plus Port
+// Dragon Fury: Streets of Vengeance - Miyoo Mini Plus Port
 // Beat 'em up in the style of Streets of Rage / Final Fight
-// Rust/Macroquad 0.4 port targeting 640x480 @ 60fps
+// A Dragon Fist Story - Rust/Macroquad 0.4 port targeting 640x480 @ 60fps
 
 use macroquad::prelude::*;
 
@@ -70,12 +70,83 @@ const BOSS_GOLD: Color = Color::new(0.85, 0.65, 0.13, 1.0);
 #[derive(Clone, Copy, PartialEq)]
 enum GameState {
     Title,
+    Story,
+    BossIntro,
     Playing,
     Paused,
     StageTransition,
     GameOver,
     Victory,
 }
+
+#[derive(Clone, Copy, PartialEq)]
+enum StoryPhase {
+    Intro,
+    PreStage,
+    PostStage,
+    VictoryStory,
+}
+
+struct BossIntroInfo {
+    name: &'static str,
+    title: &'static str,
+    quote: &'static str,
+}
+
+// ---------------------------------------------------------------------------
+// Story Data
+// ---------------------------------------------------------------------------
+const STORY_INTRO: &[&str] = &[
+    "NEO-OSAKA, KABUKI DISTRICT -- 3:47 AM",
+    "The Dragon Fist dojo burns. Grandmaster Sato is gone.",
+    "A witness saw the Iron Serpents heading east toward the port district. Their tag is fresh on every wall.",
+    "You crack your knuckles. Ten blocks east. That's where this starts.",
+];
+
+const STORY_PRE_STAGE: &[&[&str]] = &[
+    &["The alleys behind Kabuki are Iron Serpent territory. Low-level thugs and dealers. Someone here knows where Sato is."],
+    &["The Iron Serpents' base of operations. Crates of weapons, stolen goods, and something else -- medical equipment. What are they doing to Sato?"],
+    &["The neon skyline of Neo-Osaka stretches before you. On the highest rooftop, Jin waits. Sato kneels beside him, alive but broken."],
+];
+
+const STORY_MID_STAGE: &[&str] = &[
+    "A beaten thug spits blood and laughs: \"You think you're tough? Wait till you see what's waiting at the warehouse. The Viper's got plans for your old man...\"",
+    "You find a room with a chair, restraints, and recording equipment. On a screen: footage of Sato being forced to demonstrate the Dragon's Breath technique. He refuses. They hurt him. He still refuses.",
+    "Jin's voice echoes across the rooftops: \"Do you know WHY Sato refused to teach me the Dragon's Breath? Because he saw what I really am. But he taught YOU. His precious student. His chosen son. While I got NOTHING.\"",
+];
+
+const BOSS_INTROS: &[BossIntroInfo] = &[
+    BossIntroInfo { name: "BLADE", title: "Iron Serpent Lieutenant", quote: "Nothing personal, Dragon boy. Just business." },
+    BossIntroInfo { name: "CRUSHER", title: "Iron Serpent Enforcer", quote: "The Viper said to break every bone in your body. I always follow orders." },
+    BossIntroInfo { name: "JIN TAKEDA -- THE VIPER", title: "Former Dragon Fist Disciple", quote: "Sato chose you over me. Now I'll take everything from both of you." },
+];
+
+const STORY_POST_STAGE: &[&[&str]] = &[
+    &[
+        "Blade falls. Through his radio, you hear a voice -- cold, familiar.",
+        "\"Let him come. I want to see what Sato taught him.\"",
+        "It's Jin. He knows you're coming.",
+    ],
+    &[
+        "Behind the warehouse, you find a passage leading up -- to the rooftops.",
+        "And a note in Sato's handwriting, hidden under a loose brick:",
+        "\"Ryu -- Jin doesn't want the technique to sell. He wants it to destroy. The rage consumed him long ago. Forgive him if you can. Stop him if you must. --Sato\"",
+    ],
+    &[
+        "Jin falls to his knees. His rage is spent.",
+        "Sato limps forward and places a hand on Jin's shoulder.",
+        "\"I didn't refuse you because you were weak, Jin. I refused because the Dragon's Breath amplifies what's in your heart. And your heart was full of anger. But anger fades.\"",
+        "Jin looks up. For the first time in ten years, he doesn't look furious. He looks tired.",
+    ],
+];
+
+const STORY_VICTORY: &[&str] = &[
+    "The sun rises over Neo-Osaka. The Iron Serpents scatter without their leader.",
+    "Grandmaster Sato begins rebuilding the dojo. It will take months. Jin Takeda turns himself in to the authorities.",
+    "Three months later, you visit Jin in prison. He's thinner. Quieter. He asks about the dojo.",
+    "\"We saved you a spot,\" you tell him. \"When you're ready.\"",
+    "The Dragon Fist endures.",
+];
 
 #[derive(Clone, Copy, PartialEq)]
 enum PlayerState {
@@ -506,6 +577,22 @@ struct Game {
     stage_fade_timer: i32,   // counts 0..60 during stage transition fade
     stage_fade_dir: i32,     // -1 = fading out, 1 = fading in, 0 = showing name
     stage_fade_hold: i32,    // frames to hold on stage name
+    // Story system
+    story_lines: Vec<&'static str>,
+    story_line_index: usize,
+    story_char_index: usize,
+    story_char_timer: i32,
+    story_phase: StoryPhase,
+    story_next: u8, // encoded next action after story: 0=none, 1=pre_stage, 2=stage_intro, 3=victory_story, 4=victory, 5=post_then_next_stage, 6=post_then_victory
+    // Boss intro
+    boss_intro_index: usize, // which boss intro to show
+    boss_intro_timer: i32,
+    // Mid-stage dialogue
+    mid_stage_dialogue: Option<&'static str>,
+    mid_stage_timer: i32,
+    mid_stage_shown: [bool; 3], // per-stage tracking
+    // Tracking boss intro shown per wave
+    boss_intro_shown: Vec<bool>,
 }
 
 impl Game {
@@ -547,6 +634,18 @@ impl Game {
             stage_fade_timer: 0,
             stage_fade_dir: -1,
             stage_fade_hold: 0,
+            story_lines: Vec::new(),
+            story_line_index: 0,
+            story_char_index: 0,
+            story_char_timer: 0,
+            story_phase: StoryPhase::Intro,
+            story_next: 0,
+            boss_intro_index: 0,
+            boss_intro_timer: 0,
+            mid_stage_dialogue: None,
+            mid_stage_timer: 0,
+            mid_stage_shown: [false; 3],
+            boss_intro_shown: Vec::new(),
         }
     }
 
@@ -597,7 +696,19 @@ impl Game {
                 kind,
                 active: true,
             });
-        }
+        // Reset boss intro tracking
+        let num_waves = self.stages[idx].waves.len();
+        self.boss_intro_shown = vec![false; num_waves];
+    }
+
+    fn start_story(&mut self, lines: &[&'static str], phase: StoryPhase, next: u8) {
+        self.story_lines = lines.to_vec();
+        self.story_line_index = 0;
+        self.story_char_index = 0;
+        self.story_char_timer = 0;
+        self.story_phase = phase;
+        self.story_next = next;
+        self.state = GameState::Story;
     }
 
     fn spawn_particle(&mut self, x: f32, y: f32, color: Color, count: i32, spread: f32) {
@@ -872,7 +983,7 @@ fn build_stages() -> Vec<StageData> {
 // ---------------------------------------------------------------------------
 fn window_conf() -> Conf {
     Conf {
-        window_title: "Dragon Fury".to_string(),
+        window_title: "Dragon Fury: Streets of Vengeance".to_string(),
         window_width: SCREEN_W as i32,
         window_height: SCREEN_H as i32,
         window_resizable: false,
@@ -895,6 +1006,8 @@ async fn main() {
         } else {
             match game.state {
                 GameState::Title => update_title(&mut game),
+                GameState::Story => update_story(&mut game),
+                GameState::BossIntro => update_boss_intro(&mut game),
                 GameState::Playing => update_playing(&mut game, dt),
                 GameState::Paused => update_paused(&mut game),
                 GameState::StageTransition => update_stage_transition(&mut game, dt),
@@ -917,10 +1030,16 @@ async fn main() {
 
         match game.state {
             GameState::Title => draw_title(&game),
+            GameState::Story => draw_story_screen(&game),
+            GameState::BossIntro => draw_boss_intro_screen(&game),
             GameState::Playing | GameState::Paused => {
                 draw_game(&game, shake_offset);
                 if game.state == GameState::Paused {
                     draw_pause_overlay();
+                }
+                // Mid-stage dialogue overlay
+                if game.mid_stage_dialogue.is_some() {
+                    draw_mid_stage_dialogue(&game);
                 }
             }
             GameState::StageTransition => draw_stage_transition(&game),
@@ -955,10 +1074,106 @@ async fn main() {
 fn update_title(game: &mut Game) {
     game.title_blink += get_frame_time();
     if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::X) {
-        game.state = GameState::StageTransition;
         game.player = Player::new();
         game.stage_index = 0;
-        game.transition_timer = 2.5;
+        game.mid_stage_shown = [false; 3];
+        // Start intro story -> pre_stage story -> stage transition
+        // story_next: 1 = show pre_stage after this
+        game.start_story(STORY_INTRO, StoryPhase::Intro, 1);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Update: Story (typewriter text)
+// ---------------------------------------------------------------------------
+fn update_story(game: &mut Game) {
+    // Advance typewriter
+    game.story_char_timer += 1;
+    if game.story_char_timer >= 2 {
+        game.story_char_timer = 0;
+        if game.story_line_index < game.story_lines.len() {
+            let char_count = game.story_lines[game.story_line_index].chars().count();
+            if game.story_char_index < char_count {
+                game.story_char_index += 1;
+            }
+        }
+    }
+
+    if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::X) {
+        if game.story_line_index < game.story_lines.len() {
+            let char_count = game.story_lines[game.story_line_index].chars().count();
+            if game.story_char_index < char_count {
+                // Show full current line
+                game.story_char_index = char_count;
+            } else {
+                // Advance to next line
+                game.story_line_index += 1;
+                game.story_char_index = 0;
+                game.story_char_timer = 0;
+                if game.story_line_index >= game.story_lines.len() {
+                    // Story complete - handle next action
+                    story_complete(game);
+                }
+            }
+        }
+    }
+}
+
+fn story_complete(game: &mut Game) {
+    match game.story_next {
+        1 => {
+            // Show pre-stage story, then go to stage transition
+            let idx = game.stage_index;
+            if idx < STORY_PRE_STAGE.len() {
+                game.start_story(STORY_PRE_STAGE[idx], StoryPhase::PreStage, 2);
+            } else {
+                game.state = GameState::StageTransition;
+                game.transition_timer = 2.5;
+            }
+        }
+        2 => {
+            // Go to stage transition
+            game.state = GameState::StageTransition;
+            game.transition_timer = 2.5;
+        }
+        3 => {
+            // Show victory story, then go to victory screen
+            game.start_story(STORY_VICTORY, StoryPhase::VictoryStory, 4);
+        }
+        4 => {
+            // Go to victory screen
+            game.state = GameState::Victory;
+            game.victory_timer = 0.0;
+        }
+        5 => {
+            // Post-stage done, advance to next stage's pre-stage
+            game.stage_index += 1;
+            let idx = game.stage_index;
+            if idx < STORY_PRE_STAGE.len() {
+                game.start_story(STORY_PRE_STAGE[idx], StoryPhase::PreStage, 2);
+            } else {
+                game.state = GameState::StageTransition;
+                game.transition_timer = 2.5;
+            }
+        }
+        6 => {
+            // Post-stage done for final boss, show victory story
+            game.start_story(STORY_VICTORY, StoryPhase::VictoryStory, 4);
+        }
+        _ => {
+            game.state = GameState::Playing;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Update: Boss Intro
+// ---------------------------------------------------------------------------
+fn update_boss_intro(game: &mut Game) {
+    game.boss_intro_timer += 1;
+    if (is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::X)) && game.boss_intro_timer > 15 {
+        game.state = GameState::Playing;
+        // The wave will be triggered on next check_wave_triggers call
     }
 }
 
@@ -1051,6 +1266,14 @@ fn update_playing(game: &mut Game, dt: f32) {
     // GO arrow timer
     if game.go_arrow_timer > 0.0 {
         game.go_arrow_timer -= dt;
+    }
+
+    // Mid-stage dialogue timer
+    if game.mid_stage_dialogue.is_some() {
+        game.mid_stage_timer -= 1;
+        if game.mid_stage_timer <= 0 || is_key_pressed(KeyCode::Z) {
+            game.mid_stage_dialogue = None;
+        }
     }
 
     update_player(game, dt);
@@ -1959,25 +2182,69 @@ fn update_rain(game: &mut Game) {
 // ---------------------------------------------------------------------------
 fn check_wave_triggers(game: &mut Game) {
     let player_world_x = game.player.x;
-    let stage = &mut game.stages[game.stage_index];
     let cam = game.camera_x;
+    let stage_idx = game.stage_index;
 
-    for wave in &mut stage.waves {
+    let num_waves = game.stages[stage_idx].waves.len();
+    // Ensure boss_intro_shown is properly sized
+    if game.boss_intro_shown.len() < num_waves {
+        game.boss_intro_shown.resize(num_waves, false);
+    }
+
+    let mut wave_index_to_spawn: Option<usize> = None;
+
+    for (wi, wave) in game.stages[stage_idx].waves.iter_mut().enumerate() {
         if wave.triggered {
             continue;
         }
         if player_world_x >= wave.trigger_x {
-            wave.triggered = true;
-            let enemies: Vec<(EnemyKind, f32, f32)> = wave.enemies.clone();
-            for (kind, ox, ey) in enemies {
-                let ex = cam + ox;
-                game.enemies.push(Enemy::new(kind, ex, ey));
+            // Check if this is a boss wave
+            let is_boss_wave = wave.enemies.iter().any(|(kind, _, _)| {
+                matches!(
+                    kind,
+                    EnemyKind::BossBlade | EnemyKind::BossCrusher | EnemyKind::BossDragonKing
+                )
+            });
+
+            if is_boss_wave && !game.boss_intro_shown[wi] {
+                game.boss_intro_shown[wi] = true;
+                game.boss_intro_index = stage_idx;
+                game.boss_intro_timer = 0;
+                game.state = GameState::BossIntro;
+                // Don't spawn yet -- will spawn after boss intro
+                return;
             }
+
+            wave.triggered = true;
+            wave_index_to_spawn = Some(wi);
+            break; // only process one wave per frame
+        }
+    }
+
+    if let Some(wi) = wave_index_to_spawn {
+        let enemies: Vec<(EnemyKind, f32, f32)> = game.stages[stage_idx].waves[wi].enemies.clone();
+        for (kind, ox, ey) in enemies {
+            let ex = cam + ox;
+            game.enemies.push(Enemy::new(kind, ex, ey));
+        }
+
+        // Count triggered waves to determine mid-stage dialogue timing
+        let triggered_count = game.stages[stage_idx]
+            .waves
+            .iter()
+            .filter(|w| w.triggered)
+            .count();
+
+        // Show mid-stage dialogue after wave 3 (triggered_count == 3)
+        if triggered_count == 3 && !game.mid_stage_shown[stage_idx] && stage_idx < STORY_MID_STAGE.len() {
+            game.mid_stage_shown[stage_idx] = true;
+            game.mid_stage_dialogue = Some(STORY_MID_STAGE[stage_idx]);
+            game.mid_stage_timer = 240; // 4 seconds at 60fps
         }
     }
 
     // Check if all waves are triggered
-    let all_triggered = game.stages[game.stage_index]
+    let all_triggered = game.stages[stage_idx]
         .waves
         .iter()
         .all(|w| w.triggered);
@@ -2014,13 +2281,25 @@ fn check_stage_complete(game: &mut Game) {
     }
     let stage_len = game.stages[game.stage_index].length;
     if game.player.x >= stage_len - 100.0 {
-        if game.stage_index < 2 {
-            game.stage_index += 1;
-            game.state = GameState::StageTransition;
-            game.transition_timer = 2.5;
+        let si = game.stage_index;
+        if si < 2 {
+            // Show post-stage story, then advance to next stage
+            // story_next=5 means "post-stage done, go to next stage's pre-stage"
+            if si < STORY_POST_STAGE.len() {
+                game.start_story(STORY_POST_STAGE[si], StoryPhase::PostStage, 5);
+            } else {
+                game.stage_index += 1;
+                game.state = GameState::StageTransition;
+                game.transition_timer = 2.5;
+            }
         } else {
-            game.state = GameState::Victory;
-            game.victory_timer = 0.0;
+            // Final boss beaten - show post-stage then victory story
+            // story_next=6 means "post-stage done for final boss, show victory story"
+            if si < STORY_POST_STAGE.len() {
+                game.start_story(STORY_POST_STAGE[si], StoryPhase::PostStage, 6);
+            } else {
+                game.start_story(STORY_VICTORY, StoryPhase::VictoryStory, 4);
+            }
         }
     }
 }
@@ -2650,7 +2929,7 @@ fn draw_enemy(enemy: &Enemy, cam: f32, sy: f32) {
         let boss_name = match enemy.kind {
             EnemyKind::BossBlade => "BLADE",
             EnemyKind::BossCrusher => "CRUSHER",
-            EnemyKind::BossDragonKing => "DRAGON KING",
+            EnemyKind::BossDragonKing => "JIN TAKEDA",
             _ => "BOSS",
         };
         let tw = measure_text(boss_name, None, 18, 1.0).width;
@@ -2872,6 +3151,16 @@ fn draw_title(game: &Game) {
         NEON_PINK,
     );
 
+    // Subtitle: STREETS OF VENGEANCE
+    let sub = "STREETS OF VENGEANCE";
+    let sub_w = measure_text(sub, None, 18, 1.0).width;
+    draw_text(sub, (SCREEN_W - sub_w) * 0.5, 262.0, 18.0, NEON_CYAN);
+
+    // Tagline
+    let tag = "A Dragon Fist Story";
+    let tag_w = measure_text(tag, None, 14, 1.0).width;
+    draw_text(tag, (SCREEN_W - tag_w) * 0.5, 284.0, 14.0, NEON_PINK);
+
     // Procedural character preview
     draw_title_character(SCREEN_W * 0.5, 340.0);
 
@@ -2979,59 +3268,272 @@ fn draw_game_over(game: &Game) {
     let gow = measure_text(go, None, 56, 1.0).width;
     draw_text(go, (SCREEN_W - gow) * 0.5, 180.0, 56.0, RED);
 
+    // Subtitle
+    let sub = "STREETS OF VENGEANCE";
+    let sub_w = measure_text(sub, None, 14, 1.0).width;
+    draw_text(sub, (SCREEN_W - sub_w) * 0.5, 210.0, 14.0, NEON_CYAN);
+
     let score_txt = format!("SCORE: {}", game.player.score);
     let sw = measure_text(&score_txt, None, 28, 1.0).width;
-    draw_text(&score_txt, (SCREEN_W - sw) * 0.5, 240.0, 28.0, WHITE);
+    draw_text(&score_txt, (SCREEN_W - sw) * 0.5, 260.0, 28.0, WHITE);
 
-    let cont = format!("CONTINUE? {}", game.continue_timer.ceil() as i32);
-    let cw = measure_text(&cont, None, 32, 1.0).width;
-    draw_text(
-        &cont,
-        (SCREEN_W - cw) * 0.5,
-        320.0,
-        32.0,
-        NEON_YELLOW,
-    );
+    let cont = "CONTINUE?";
+    let cw = measure_text(cont, None, 22, 1.0).width;
+    draw_text(cont, (SCREEN_W - cw) * 0.5, 310.0, 22.0, WHITE);
 
-    let hint = "Press START to continue";
-    let hw = measure_text(hint, None, 18, 1.0).width;
+    let secs = format!("{}", game.continue_timer.ceil() as i32);
+    let secw = measure_text(&secs, None, 44, 1.0).width;
+    draw_text(&secs, (SCREEN_W - secw) * 0.5, 360.0, 44.0, NEON_YELLOW);
+
+    let hint = "PRESS START TO CONTINUE";
+    let hw = measure_text(hint, None, 16, 1.0).width;
     draw_text(
         hint,
         (SCREEN_W - hw) * 0.5,
-        370.0,
-        18.0,
-        Color::new(0.6, 0.6, 0.6, 1.0),
+        410.0,
+        16.0,
+        Color::new(0.5, 0.5, 0.5, 1.0),
     );
 }
 
 fn draw_victory(game: &Game) {
-    // Background effect
-    for i in 0..48 {
+    // Background: dark with sunrise gradient
+    draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.04, 0.04, 0.10, 1.0));
+    // Sunrise gradient at top
+    for i in 0..12 {
         let y = i as f32 * 10.0;
-        let t = (get_time() as f32 * 0.5 + i as f32 * 0.1).sin() * 0.5 + 0.5;
-        let c = Color::new(0.02 + t * 0.04, 0.0, 0.06 + t * 0.08, 1.0);
-        draw_rectangle(0.0, y, SCREEN_W, 10.0, c);
+        let alpha = 0.2 * (1.0 - y / 120.0);
+        draw_rectangle(0.0, y, SCREEN_W, 10.0, Color::new(1.0, 0.4, 0.0, alpha));
     }
 
-    let v1 = "VICTORY!";
-    let vw = measure_text(v1, None, 64, 1.0).width;
-    draw_text(v1, (SCREEN_W - vw) * 0.5, 160.0, 64.0, NEON_YELLOW);
+    let v1 = "VICTORY";
+    let vw = measure_text(v1, None, 48, 1.0).width;
+    draw_text(v1, (SCREEN_W - vw) * 0.5, 70.0, 48.0, NEON_YELLOW);
 
-    let v2 = "THE DRAGON KING IS DEFEATED!";
-    let v2w = measure_text(v2, None, 24, 1.0).width;
-    draw_text(v2, (SCREEN_W - v2w) * 0.5, 220.0, 24.0, NEON_CYAN);
+    let sub = "STREETS OF VENGEANCE";
+    let sub_w = measure_text(sub, None, 16, 1.0).width;
+    draw_text(sub, (SCREEN_W - sub_w) * 0.5, 100.0, 16.0, NEON_CYAN);
 
-    let score_txt = format!("FINAL SCORE: {}", game.player.score);
-    let sw = measure_text(&score_txt, None, 32, 1.0).width;
-    draw_text(&score_txt, (SCREEN_W - sw) * 0.5, 300.0, 32.0, WHITE);
+    let score_txt = format!("SCORE: {:07}", game.player.score);
+    let sw = measure_text(&score_txt, None, 22, 1.0).width;
+    draw_text(&score_txt, (SCREEN_W - sw) * 0.5, 140.0, 22.0, NEON_CYAN);
+
+    // THE DRAGON FIST ENDURES
+    let endures = "THE DRAGON FIST ENDURES";
+    let ew = measure_text(endures, None, 16, 1.0).width;
+    draw_text(endures, (SCREEN_W - ew) * 0.5, 175.0, 16.0, NEON_PINK);
+
+    // Character preview
+    draw_title_character(SCREEN_W * 0.5, 250.0);
 
     if game.victory_timer > 5.0 {
         if ((get_time() as f32) * 2.5).sin() > 0.0 {
             let txt = "PRESS START";
-            let tw = measure_text(txt, None, 24, 1.0).width;
-            draw_text(txt, (SCREEN_W - tw) * 0.5, 400.0, 24.0, WHITE);
+            let tw = measure_text(txt, None, 20, 1.0).width;
+            draw_text(txt, (SCREEN_W - tw) * 0.5, 440.0, 20.0, WHITE);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Story / Dialogue Drawing
+// ---------------------------------------------------------------------------
+fn draw_story_screen(game: &Game) {
+    draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, BLACK);
+
+    // Subtle background effect (floating circles)
+    let fc = game.frame_count as f32;
+    for i in 0..5 {
+        let rx = (fc * 0.01 + i as f32).sin() * 100.0 + SCREEN_W * 0.5;
+        let ry = (fc * 0.008 + i as f32 * 2.0).cos() * 80.0 + SCREEN_H * 0.5;
+        draw_circle(rx, ry, 100.0 + i as f32 * 20.0, Color::new(1.0, 0.0, 0.4, 0.03));
+    }
+
+    // Title bar based on phase
+    let header = match game.story_phase {
+        StoryPhase::Intro => "STREETS OF VENGEANCE".to_string(),
+        StoryPhase::PreStage => format!(
+            "STAGE {} -- {}",
+            game.stage_index + 1,
+            game.stages[game.stage_index].name
+        ),
+        StoryPhase::PostStage => format!("STAGE {} CLEAR", game.stage_index + 1),
+        StoryPhase::VictoryStory => "EPILOGUE".to_string(),
+    };
+    let hw = measure_text(&header, None, 16, 1.0).width;
+    draw_text(&header, (SCREEN_W - hw) * 0.5, 40.0, 16.0, NEON_PINK);
+
+    // Horizontal divider
+    draw_line(SCREEN_W * 0.15, 55.0, SCREEN_W * 0.85, 55.0, 1.0, Color::new(1.0, 0.0, 0.4, 0.4));
+
+    // Draw story lines with typewriter effect
+    let line_height = 28.0_f32;
+    let start_y = 100.0_f32;
+    let max_width = SCREEN_W - 100.0;
+    let font_size = 16.0_f32;
+
+    let mut y_offset = 0.0_f32;
+    for i in 0..=game.story_line_index {
+        if i >= game.story_lines.len() {
+            break;
+        }
+        let full_line = game.story_lines[i];
+        let text = if i < game.story_line_index {
+            full_line.to_string()
+        } else {
+            // Current line: show chars up to story_char_index (char-safe)
+            full_line.chars().take(game.story_char_index).collect::<String>()
+        };
+
+        let color = if i == game.story_line_index {
+            WHITE
+        } else {
+            Color::new(0.8, 0.8, 0.8, 0.7)
+        };
+
+        // Simple word-wrap drawing
+        let wrapped_lines = wrap_text_lines(&text, font_size, max_width);
+        for wl in &wrapped_lines {
+            draw_text(wl, 50.0, start_y + y_offset, font_size, color);
+            y_offset += line_height;
+        }
+        y_offset += 12.0; // gap between story lines
+    }
+
+    // Blinking cursor on current line
+    if game.story_line_index < game.story_lines.len() {
+        let char_count = game.story_lines[game.story_line_index].chars().count();
+        if game.story_char_index < char_count {
+            // Show blinking cursor
+            if (game.frame_count / 8) % 2 == 0 {
+                let partial: String = game.story_lines[game.story_line_index].chars().take(game.story_char_index).collect();
+                let wrapped = wrap_text_lines(&partial, font_size, max_width);
+                let cursor_line = wrapped.last().unwrap_or(&String::new()).clone();
+                let cursor_x = 50.0 + measure_text(&cursor_line, None, font_size as u16, 1.0).width;
+                let num_prev_lines: f32 = {
+                    let mut total = 0.0;
+                    for j in 0..game.story_line_index {
+                        if j < game.story_lines.len() {
+                            let wl = wrap_text_lines(game.story_lines[j], font_size, max_width);
+                            total += wl.len() as f32 * line_height + 12.0;
+                        }
+                    }
+                    total += (wrapped.len() as f32 - 1.0).max(0.0) * line_height;
+                    total
+                };
+                let cursor_y = start_y + num_prev_lines - 10.0;
+                draw_rectangle(cursor_x, cursor_y, 8.0, 14.0, WHITE);
+            }
+        } else {
+            // Line complete, show "press to continue" hint
+            if (game.frame_count / 20) % 2 == 0 {
+                let hint = "PRESS START TO CONTINUE";
+                let hw2 = measure_text(hint, None, 14, 1.0).width;
+                draw_text(hint, (SCREEN_W - hw2) * 0.5, SCREEN_H - 30.0, 14.0, Color::new(0.5, 0.5, 0.5, 1.0));
+            }
+        }
+    } else {
+        // All lines shown
+        if (game.frame_count / 20) % 2 == 0 {
+            let hint = "PRESS START TO CONTINUE";
+            let hw2 = measure_text(hint, None, 14, 1.0).width;
+            draw_text(hint, (SCREEN_W - hw2) * 0.5, SCREEN_H - 30.0, 14.0, Color::new(0.5, 0.5, 0.5, 1.0));
+        }
+    }
+}
+
+fn draw_boss_intro_screen(game: &Game) {
+    // Dark overlay
+    draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.0, 0.0, 0.0, 0.9));
+
+    let idx = game.boss_intro_index;
+    if idx >= BOSS_INTROS.len() {
+        return;
+    }
+    let info = &BOSS_INTROS[idx];
+
+    let t = (game.boss_intro_timer as f32 / 30.0).min(1.0); // fade in
+
+    // Warning flash
+    if game.boss_intro_timer < 60 && (game.boss_intro_timer / 4) % 2 == 0 {
+        let warn = "!! WARNING !!";
+        let ww = measure_text(warn, None, 16, 1.0).width;
+        draw_text(warn, (SCREEN_W - ww) * 0.5, SCREEN_H * 0.5 - 100.0, 16.0, Color::new(1.0, 0.0, 0.0, t));
+    }
+
+    // Boss name
+    let nw = measure_text(info.name, None, 36, 1.0).width;
+    draw_text(info.name, (SCREEN_W - nw) * 0.5, SCREEN_H * 0.5 - 40.0, 36.0, Color::new(1.0, 0.0, 0.4, t));
+
+    // Boss title
+    let tw = measure_text(info.title, None, 16, 1.0).width;
+    draw_text(info.title, (SCREEN_W - tw) * 0.5, SCREEN_H * 0.5, 16.0, Color::new(1.0, 1.0, 0.0, t));
+
+    // Divider
+    draw_line(
+        SCREEN_W * 0.2, SCREEN_H * 0.5 + 20.0,
+        SCREEN_W * 0.8, SCREEN_H * 0.5 + 20.0,
+        2.0,
+        Color::new(1.0, 0.0, 0.4, 0.4 * t),
+    );
+
+    // Quote with word wrap
+    let quote = format!("\"{}\"", info.quote);
+    let wrapped = wrap_text_lines(&quote, 16.0, SCREEN_W * 0.7);
+    let mut qy = SCREEN_H * 0.5 + 50.0;
+    for line in &wrapped {
+        draw_text(line, SCREEN_W * 0.15, qy, 16.0, Color::new(1.0, 1.0, 1.0, t));
+        qy += 22.0;
+    }
+
+    // Prompt
+    if game.boss_intro_timer > 30 && (game.frame_count / 20) % 2 == 0 {
+        let prompt = "PRESS START TO FIGHT";
+        let pw = measure_text(prompt, None, 14, 1.0).width;
+        draw_text(prompt, (SCREEN_W - pw) * 0.5, SCREEN_H - 40.0, 14.0, Color::new(0.5, 0.5, 0.5, 1.0));
+    }
+}
+
+fn draw_mid_stage_dialogue(game: &Game) {
+    if let Some(text) = game.mid_stage_dialogue {
+        // Semi-transparent overlay at bottom
+        draw_rectangle(0.0, SCREEN_H - 120.0, SCREEN_W, 120.0, Color::new(0.0, 0.0, 0.0, 0.85));
+        draw_line(0.0, SCREEN_H - 120.0, SCREEN_W, SCREEN_H - 120.0, 2.0, NEON_PINK);
+
+        let wrapped = wrap_text_lines(text, 14.0, SCREEN_W - 60.0);
+        let mut y = SCREEN_H - 100.0;
+        for line in &wrapped {
+            draw_text(line, 30.0, y, 14.0, WHITE);
+            y += 22.0;
+        }
+    }
+}
+
+/// Simple word-wrap: splits text into lines that fit within max_width pixels.
+fn wrap_text_lines(text: &str, font_size: f32, max_width: f32) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    let mut current_line = String::new();
+    for word in text.split_whitespace() {
+        let test = if current_line.is_empty() {
+            word.to_string()
+        } else {
+            format!("{} {}", current_line, word)
+        };
+        let w = measure_text(&test, None, font_size as u16, 1.0).width;
+        if w > max_width && !current_line.is_empty() {
+            lines.push(current_line);
+            current_line = word.to_string();
+        } else {
+            current_line = test;
+        }
+    }
+    if !current_line.is_empty() {
+        lines.push(current_line);
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines
 }
 
 fn draw_pause_overlay() {

@@ -18,6 +18,170 @@ const INVINCIBILITY_FRAMES: i32 = 60;
 const MAX_WAVES: usize = 10;
 
 const COMBO_TIMEOUT: f32 = 2.0;
+
+// ─── Protocol Omega — Wave Stories ──────────────────────────────────────────
+
+const WAVE_CODENAMES: [&str; 10] = [
+    "CALIBRATION", "ADAPTATION", "ESCALATION", "REVELATION", "PROTOTYPE",
+    "CRACKS", "AWAKENING", "BETRAYAL", "CONVERGENCE", "OMEGA",
+];
+
+const WAVE_STORIES: [[&str; 10]; 10] = [
+    // Wave 1
+    [
+        "AXIOM CORP \u{2014} TEST CHAMBER 7",
+        "Subject-7, welcome to your evaluation.",
+        "Please eliminate all hostiles.",
+        "Your performance metrics are being recorded.",
+        "",
+        "[MEMO INTERCEPTED]:",
+        "\"The nanomachines are bonding faster than",
+        "projected. Subject-7's reaction time is now",
+        "3x baseline. Proceed to Phase 2.\"",
+        "",
+    ],
+    // Wave 2
+    [
+        "[SECURITY LOG]:",
+        "\"Subject-7 shows no signs of psychological",
+        "breakdown. Previous subjects degraded by",
+        "Phase 2. This one is different.\"",
+        "",
+        "Hostiles increasing.",
+        "Your nanomachines are adapting. So are we.",
+        "", "", "",
+    ],
+    // Wave 3
+    [
+        "[INTERCEPTED MEMO \u{2014} CLASSIFIED]:",
+        "\"The board wants a demonstration for the",
+        "Meridian military contract. We need Subject-7",
+        "combat-ready by Thursday.",
+        "Double the hostile count.\"",
+        "",
+        "They're watching you. They're always watching.",
+        "", "", "",
+    ],
+    // Wave 4
+    [
+        "[AI SYSTEM LOG]:",
+        "\"Subject-7 bio-readings indicate elevated",
+        "stress hormones. Recommend sedative",
+        "administration.\"",
+        "[OVERRIDE: Director Holst \u{2014} \"Denied.",
+        "Stress improves performance data.\"]",
+        "",
+        "You're not a soldier. You're a product.",
+        "", "",
+    ],
+    // Wave 5 — Boss: Mega Tank
+    [
+        "[EMERGENCY MEMO]:",
+        "\"Subject-7 has accessed restricted network",
+        "channels. Increase test intensity immediately.",
+        "Deploy the ATLAS prototype.\"",
+        "",
+        "They built ATLAS to replace you.",
+        "Prove them wrong.",
+        "",
+        "!! ATLAS PROTOTYPE DEPLOYED !!",
+        "",
+    ],
+    // Wave 6
+    [
+        "[INTERCEPTED EMAIL \u{2014} Dr. Sarah Chen",
+        "  to Director Holst]:",
+        "\"Marcus, this has gone too far. Subject-7 is",
+        "a person, not a weapon. I'm filing a report",
+        "with the Ethics Board.\"",
+        "",
+        "[RESPONSE]:",
+        "\"There is no Ethics Board, Sarah.",
+        "There never was.\"",
+        "",
+    ],
+    // Wave 7
+    [
+        "[AI SYSTEM \u{2014} ANOMALY DETECTED]:",
+        "\"Subject-7's nanomachines are self-modifying",
+        "beyond programmed parameters.",
+        "Recommend immediate extraction.\"",
+        "[OVERRIDE: Holst \u{2014} \"Let it play out.\"]",
+        "",
+        "Something is changing inside you.",
+        "The nanomachines are evolving.",
+        "They're becoming yours.",
+        "",
+    ],
+    // Wave 8
+    [
+        "[SECURITY ALERT]:",
+        "\"Dr. Chen has been terminated from the",
+        "program. Her access has been revoked.",
+        "Subject-7 should not be informed.\"",
+        "",
+        "[HIDDEN MESSAGE \u{2014} Chen]:",
+        "\"Subject-7 \u{2014} if you can read this, the east",
+        "wall of Chamber 7 is only 4 inches of",
+        "reinforced steel. Your nanomachines can cut",
+        "through it. I left you a gift in Wave 10.\"",
+    ],
+    // Wave 9
+    [
+        "[HOLST \u{2014} ALL STAFF]:",
+        "\"Final demonstration for Meridian and three",
+        "other bidders is tomorrow. Subject-7 must",
+        "perform at peak. Release all remaining test",
+        "units simultaneously.\"",
+        "",
+        "They're selling you tomorrow.",
+        "Unless you stop them today.",
+        "", "",
+    ],
+    // Wave 10 — Boss: Swarm Queen
+    [
+        "[SYSTEM OVERRIDE \u{2014} DR. CHEN]:",
+        "\"Protocol Omega initiated. All safety limiters",
+        "removed. Chamber doors unlocked in 60",
+        "seconds. Subject-7 \u{2014} this is your window.",
+        "Make it count.\"",
+        "",
+        "Chen's gift: she disabled the containment",
+        "field. Kill the Queen. Reach the door.",
+        "Be free.",
+        "!! SWARM QUEEN DEPLOYED !!",
+    ],
+];
+
+const VICTORY_STORY: [&str; 25] = [
+    "The Queen falls. The chamber doors slide open",
+    "for the first time in 847 days.",
+    "",
+    "Alarms blare. Director Holst's voice crackles",
+    "over the intercom:",
+    "\"You can't leave, Seven. You ARE the weapon.",
+    "Without us, you're nothing.\"",
+    "",
+    "You step through the door.",
+    "The morning sun hits your face.",
+    "",
+    "Holst was wrong.",
+    "You were never the weapon.",
+    "You were always the person holding it.",
+    "",
+    "AXIOM CORP was shut down three months later.",
+    "Director Holst was never found.",
+    "",
+    "Dr. Sarah Chen's body was recovered from the",
+    "facility's sub-basement.",
+    "",
+    "Subject-7 \u{2014} real name: Alex Reeves \u{2014}",
+    "disappeared.",
+    "",
+    "PROTOCOL OMEGA \u{2014} COMPLETE",
+];
+
+const STORY_TYPE_SPEED: i32 = 2; // frames per character
 const MAX_COMBO_MULT: f32 = 8.0;
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
@@ -296,6 +460,16 @@ struct Game {
     damage_border_frames: i32,
     fence_spark_timer: i32,
     last_streak_milestone: u32,
+    // Story typewriter state
+    story_line_index: usize,
+    story_char_index: usize,
+    story_type_timer: i32,
+    story_done: bool,
+    story_skip_ready: bool,
+    story_hold_timer: i32,
+    // Victory state
+    victory_page: usize,
+    frame_count: u32,
 }
 
 impl Game {
@@ -331,6 +505,14 @@ impl Game {
             damage_border_frames: 0,
             fence_spark_timer: 0,
             last_streak_milestone: 0,
+            story_line_index: 0,
+            story_char_index: 0,
+            story_type_timer: 0,
+            story_done: false,
+            story_skip_ready: false,
+            story_hold_timer: 0,
+            victory_page: 0,
+            frame_count: 0,
         }
     }
 
@@ -356,18 +538,27 @@ impl Game {
         self.damage_border_frames = 0;
         self.fence_spark_timer = 0;
         self.last_streak_milestone = 0;
+        self.victory_page = 0;
     }
 
     fn start_wave(&mut self) {
         self.wave += 1;
         self.wave_enemies_killed = 0;
         self.state = GameState::WaveIntro;
-        self.wave_intro_timer = 3.0;
+        self.wave_intro_timer = 99.0; // managed by typewriter system
 
         let (count, _types) = wave_config(self.wave);
         self.wave_total_enemies = count;
         self.enemies_to_spawn = count;
         self.spawn_timer = 0.5;
+
+        // Initialize story typewriter
+        self.story_line_index = 0;
+        self.story_char_index = 0;
+        self.story_type_timer = 0;
+        self.story_done = false;
+        self.story_skip_ready = false;
+        self.story_hold_timer = 0;
     }
 
     fn add_score(&mut self, base: u32) {
@@ -694,6 +885,8 @@ impl Game {
         self.fence_pulse = (self.time * 4.0).sin() * 0.3 + 0.7;
         self.blink_timer += dt;
 
+        self.frame_count += 1;
+
         match self.state {
             GameState::Title => {
                 if is_key_pressed(KeyCode::Enter) {
@@ -702,17 +895,70 @@ impl Game {
                 }
             }
             GameState::WaveIntro => {
-                self.wave_intro_timer -= dt;
-                if self.wave_intro_timer <= 0.0 {
-                    self.state = GameState::Playing;
+                // Typewriter progression
+                let wave_idx = (self.wave - 1).min(9);
+                let lines = &WAVE_STORIES[wave_idx];
+                // Count lines up to and including last non-empty line
+                let mut actual_line_count = 0;
+                for i in (0..10).rev() {
+                    if !lines[i].is_empty() {
+                        actual_line_count = i + 1;
+                        break;
+                    }
+                }
+
+                if !self.story_done {
+                    self.story_type_timer += 1;
+                    if self.story_type_timer >= STORY_TYPE_SPEED {
+                        self.story_type_timer = 0;
+                        self.story_char_index += 1;
+                        if self.story_line_index < actual_line_count
+                            && self.story_char_index > lines[self.story_line_index].len()
+                        {
+                            self.story_line_index += 1;
+                            self.story_char_index = 0;
+                        }
+                        if self.story_line_index >= actual_line_count {
+                            self.story_done = true;
+                            self.story_hold_timer = 150;
+                        }
+                    }
+                } else if !self.story_skip_ready {
+                    self.story_hold_timer -= 1;
+                    if self.story_hold_timer <= 0 {
+                        self.story_skip_ready = true;
+                    }
+                }
+
+                // Input: skip typewriter or advance to gameplay
+                if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::X) || is_key_pressed(KeyCode::Space) {
+                    if self.story_skip_ready {
+                        self.state = GameState::Playing;
+                    } else if !self.story_done {
+                        // Skip to end of all lines
+                        self.story_line_index = actual_line_count;
+                        self.story_char_index = 0;
+                        self.story_done = true;
+                        self.story_hold_timer = 90;
+                    }
                 }
             }
             GameState::Playing => {
                 self.update_playing(dt);
             }
-            GameState::GameOver | GameState::Victory => {
+            GameState::GameOver => {
                 if is_key_pressed(KeyCode::Enter) {
                     self.state = GameState::Title;
+                }
+            }
+            GameState::Victory => {
+                let total_pages = (VICTORY_STORY.len() + 9) / 10;
+                if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::X) || is_key_pressed(KeyCode::Space) {
+                    if self.victory_page < total_pages - 1 {
+                        self.victory_page += 1;
+                    } else {
+                        self.state = GameState::Title;
+                    }
                 }
             }
         }
@@ -1529,21 +1775,30 @@ impl Game {
         let cx = SCREEN_W / 2.0;
         let cy = SCREEN_H / 2.0;
 
-        draw_text_centered("ARENA BLITZ", cx, cy - 60.0, 48.0, Color::new(1.0, 0.3, 0.1, 1.0));
-        draw_text_centered("TWIN-STICK ARENA SHOOTER", cx, cy - 20.0, 16.0, GRAY);
+        // AXIOM Corp header
+        draw_text_centered("AXIOM CORP WEAPONS RESEARCH DIVISION", cx, cy - 110.0, 10.0, Color::new(0.33, 0.33, 0.33, 1.0));
+        draw_text_centered("AXIOM CORP TEST CHAMBER 7", cx, cy - 96.0, 10.0, Color::new(0.2, 0.2, 0.2, 1.0));
+
+        // Title
+        draw_text_centered("ARENA", cx, cy - 60.0, 48.0, Color::new(1.0, 0.0, 1.0, 1.0));
+        draw_text_centered("BLITZ", cx, cy - 15.0, 48.0, Color::new(0.0, 1.0, 1.0, 1.0));
+
+        // Protocol Omega subtitle
+        draw_text_centered("PROTOCOL OMEGA", cx, cy + 12.0, 14.0, Color::new(1.0, 0.27, 0.27, 1.0));
 
         let blink = ((self.blink_timer * 3.0).sin() + 1.0) / 2.0;
         let alpha = 0.3 + blink * 0.7;
         draw_text_centered(
             "PRESS START",
             cx,
-            cy + 40.0,
-            24.0,
-            Color::new(1.0, 1.0, 1.0, alpha),
+            cy + 44.0,
+            20.0,
+            Color::new(1.0, 1.0, 0.0, alpha),
         );
 
-        draw_text_centered("D-Pad: Move    A(X): Shoot    B(Space): Switch Weapon", cx, cy + 90.0, 12.0, GRAY);
-        draw_text_centered("Auto-aim at nearest enemy", cx, cy + 110.0, 12.0, DARKGRAY);
+        draw_text_centered("D-Pad: Move    A(X): Shoot    B(Space): Switch Weapon", cx, cy + 84.0, 10.0, GRAY);
+        draw_text_centered("Auto-aim at nearest enemy", cx, cy + 100.0, 10.0, DARKGRAY);
+        draw_text_centered("YOU ARE SUBJECT-7. SURVIVE.", cx, cy + 124.0, 10.0, Color::new(0.4, 0.4, 0.27, 1.0));
     }
 
     fn draw_arena(&self, sx: f32, sy: f32) {
@@ -1944,11 +2199,13 @@ impl Game {
         }
 
         // ── Wave (top-center) ──
+        let wave_idx = (self.wave.max(1) - 1).min(9);
+        let codename = WAVE_CODENAMES[wave_idx];
         draw_text_centered(
-            &format!("WAVE {}/{}", self.wave, MAX_WAVES),
+            &format!("WAVE {}/{} \u{2014} {}", self.wave, MAX_WAVES, codename),
             SCREEN_W / 2.0,
             18.0,
-            20.0,
+            16.0,
             WHITE,
         );
 
@@ -2072,28 +2329,65 @@ impl Game {
 
     fn draw_wave_intro(&self) {
         let cx = SCREEN_W / 2.0;
-        let cy = SCREEN_H / 2.0;
-        let progress = 1.0 - (self.wave_intro_timer / 3.0);
-        let scale = 1.0 + progress * 0.3;
-        let alpha = if progress < 0.3 {
-            progress / 0.3
-        } else if progress > 0.7 {
-            (1.0 - progress) / 0.3
-        } else {
-            1.0
-        };
 
-        let text = if self.wave == 5 {
-            format!("WAVE {} - BOSS!", self.wave)
-        } else if self.wave == 10 {
-            format!("WAVE {} - FINAL BOSS!", self.wave)
-        } else {
-            format!("WAVE {}", self.wave)
-        };
+        // Darken background
+        draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.0, 0.0, 0.0, 0.75));
 
-        let size = 36.0 * scale;
-        let color = Color::new(1.0, 0.8, 0.0, alpha.clamp(0.0, 1.0));
-        draw_text_centered(&text, cx, cy, size, color);
+        // Wave title with codename
+        let wave_idx = (self.wave - 1).min(9);
+        let codename = WAVE_CODENAMES[wave_idx];
+        let wave_text = format!("WAVE {} \u{2014} \"{}\"", self.wave, codename);
+        draw_text_centered(&wave_text, cx, 60.0, 16.0, Color::new(0.0, 1.0, 1.0, 1.0));
+
+        // Story text with typewriter effect
+        let lines = &WAVE_STORIES[wave_idx];
+        let start_y = 95.0;
+        let line_h = 14.0;
+
+        for i in 0..=self.story_line_index.min(9) {
+            if i >= 10 { break; }
+            let line = lines[i];
+            if line.is_empty() { continue; }
+
+            // Color coding for different line types
+            let color = if line.starts_with('[') || line.starts_with("  ") {
+                Color::new(1.0, 0.67, 0.0, 1.0) // memos/logs in amber
+            } else if line.starts_with("!!") {
+                Color::new(1.0, 0.27, 0.27, 1.0) // boss warnings in red
+            } else if line.starts_with('"') {
+                Color::new(0.67, 0.67, 0.67, 1.0) // quotes in grey
+            } else {
+                Color::new(0.0, 1.0, 0.0, 1.0) // narrative in green
+            };
+
+            let display_text = if i < self.story_line_index {
+                line.to_string()
+            } else if i == self.story_line_index {
+                let chars: String = line.chars().take(self.story_char_index).collect();
+                if self.frame_count % 30 < 15 {
+                    format!("{}_", chars)
+                } else {
+                    chars
+                }
+            } else {
+                continue;
+            };
+
+            let y_pos = start_y + i as f32 * line_h;
+            if y_pos < SCREEN_H - 40.0 {
+                draw_text_centered(&display_text, cx, y_pos, 10.0, color);
+            }
+        }
+
+        // Skip/continue prompt
+        let blink_visible = self.frame_count % 60 < 40;
+        if self.story_skip_ready {
+            if blink_visible {
+                draw_text_centered("PRESS ANY BUTTON TO BEGIN", cx, SCREEN_H - 20.0, 10.0, Color::new(0.53, 0.53, 0.53, 1.0));
+            }
+        } else if !self.story_done && blink_visible {
+            draw_text_centered("PRESS BUTTON TO SKIP", cx, SCREEN_H - 20.0, 10.0, Color::new(0.33, 0.33, 0.33, 1.0));
+        }
     }
 
     fn draw_game_over(&self) {
@@ -2101,58 +2395,121 @@ impl Game {
         let cy = SCREEN_H / 2.0;
 
         // Darken overlay
-        draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.0, 0.0, 0.0, 0.6));
+        draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.0, 0.0, 0.0, 0.7));
 
-        draw_text_centered("GAME OVER", cx, cy - 30.0, 48.0, RED);
+        draw_text_centered("SUBJECT-7 DOWN", cx, cy - 50.0, 32.0, RED);
+
+        // AXIOM log flavor text
+        draw_text_centered(
+            "[AXIOM LOG]: \"Test concluded. Prepare",
+            cx,
+            cy - 25.0,
+            10.0,
+            Color::new(0.4, 0.4, 0.4, 1.0),
+        );
+        draw_text_centered(
+            "next subject for Phase 1.\"",
+            cx,
+            cy - 12.0,
+            10.0,
+            Color::new(0.4, 0.4, 0.4, 1.0),
+        );
+
         draw_text_centered(
             &format!("SCORE: {}", self.player.score),
             cx,
-            cy + 10.0,
-            24.0,
-            WHITE,
+            cy + 12.0,
+            16.0,
+            YELLOW,
         );
+
+        let wave_idx = (self.wave - 1).min(9);
+        let codename = WAVE_CODENAMES[wave_idx];
         draw_text_centered(
-            &format!("WAVE: {}/{}", self.wave, MAX_WAVES),
+            &format!("WAVE: {}/{} \u{2014} {}", self.wave, MAX_WAVES, codename),
             cx,
-            cy + 40.0,
-            20.0,
-            GRAY,
+            cy + 32.0,
+            14.0,
+            Color::new(0.0, 1.0, 1.0, 1.0),
         );
 
         let blink = ((self.blink_timer * 3.0).sin() + 1.0) / 2.0;
         draw_text_centered(
-            "PRESS START",
+            "PRESS START TO RESTART",
             cx,
-            cy + 80.0,
-            20.0,
+            cy + 65.0,
+            12.0,
             Color::new(1.0, 1.0, 1.0, 0.3 + blink * 0.7),
         );
     }
 
     fn draw_victory(&self) {
         let cx = SCREEN_W / 2.0;
-        let cy = SCREEN_H / 2.0;
 
-        draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.0, 0.0, 0.0, 0.6));
+        draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.0, 0.0, 0.0, 0.85));
 
-        draw_text_centered("VICTORY!", cx, cy - 40.0, 48.0, GOLD);
-        draw_text_centered("ALL WAVES CLEARED!", cx, cy, 20.0, WHITE);
+        // Score at top
         draw_text_centered(
             &format!("FINAL SCORE: {}", self.player.score),
             cx,
-            cy + 30.0,
-            24.0,
+            30.0,
+            14.0,
             YELLOW,
         );
 
-        let blink = ((self.blink_timer * 3.0).sin() + 1.0) / 2.0;
-        draw_text_centered(
-            "PRESS START",
-            cx,
-            cy + 80.0,
-            20.0,
-            Color::new(1.0, 1.0, 1.0, 0.3 + blink * 0.7),
-        );
+        // Paginated story
+        let lines_per_page = 10;
+        let total_pages = (VICTORY_STORY.len() + lines_per_page - 1) / lines_per_page;
+        let page_start = self.victory_page * lines_per_page;
+        let page_end = (page_start + lines_per_page).min(VICTORY_STORY.len());
+        let is_last_page = self.victory_page >= total_pages - 1;
+
+        let start_y = 70.0;
+        let line_h = 16.0;
+
+        for i in page_start..page_end {
+            let line = VICTORY_STORY[i];
+            let y_pos = start_y + (i - page_start) as f32 * line_h;
+
+            if line.is_empty() { continue; }
+
+            if line.starts_with("PROTOCOL OMEGA") {
+                draw_text_centered(line, cx, y_pos, 16.0, Color::new(0.0, 1.0, 1.0, 1.0));
+                continue;
+            }
+
+            let color = if line.starts_with('"') {
+                Color::new(1.0, 0.67, 0.0, 1.0) // quotes in amber
+            } else if line.starts_with("AXIOM") || line.starts_with("Director") || line.starts_with("Dr.") || line.starts_with("Subject-7") {
+                Color::new(0.67, 0.67, 0.67, 1.0) // names in grey
+            } else {
+                Color::new(0.0, 1.0, 0.0, 1.0) // narrative in green
+            };
+
+            draw_text_centered(line, cx, y_pos, 10.0, color);
+        }
+
+        // Navigation prompt
+        let blink_visible = self.frame_count % 60 < 40;
+        if blink_visible {
+            if !is_last_page {
+                draw_text_centered(
+                    &format!("PAGE {}/{} \u{2014} PRESS BUTTON FOR NEXT", self.victory_page + 1, total_pages),
+                    cx,
+                    SCREEN_H - 30.0,
+                    10.0,
+                    Color::new(0.53, 0.53, 0.53, 1.0),
+                );
+            } else {
+                draw_text_centered(
+                    "PRESS START TO PLAY AGAIN",
+                    cx,
+                    SCREEN_H - 30.0,
+                    10.0,
+                    Color::new(0.53, 0.53, 0.53, 1.0),
+                );
+            }
+        }
     }
 }
 
@@ -2203,7 +2560,7 @@ fn wave_enemy_types(wave: usize) -> Vec<EnemyType> {
 
 fn window_conf() -> Conf {
     Conf {
-        window_title: "Arena Blitz".to_owned(),
+        window_title: "Arena Blitz \u{2014} Protocol Omega".to_owned(),
         window_width: SCREEN_W as i32,
         window_height: SCREEN_H as i32,
         window_resizable: false,

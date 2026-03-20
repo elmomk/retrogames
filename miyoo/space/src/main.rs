@@ -27,33 +27,47 @@ enum GameState {
 // Wave / storyline data
 // ---------------------------------------------------------------------------
 struct WaveInfo {
+    name: &'static str,
     text: &'static str,
+    after_text: &'static str, // "" means none
     target_kills: u32, // u32::MAX = infinity wave
     spawn_rate: u32,
     enemy_types: &'static [u8],
 }
 
+const VICTORY_KILL_COUNT: u32 = 100;
+
+const VICTORY_TEXT: &str = "The Void Core shatters. For a moment,\nevery drone in the battlefield stops.\nThen, one by one, their lights go out.\n\nMillions of years of war, ended by\na single pilot.\n\nEXODUS-7 resumes course. Fifty thousand\nsouls sleep peacefully, unaware of how\nclose they came to becoming weapons in\nsomeone else's war.\n\nLt. Kira Voss returns to cryo-sleep.\nBut in her dreams, she still hears\nthe signal.";
+
 const WAVES: &[WaveInfo] = &[
     WaveInfo {
-        text: "SYSTEM BOOT: YEAR 2084.\n\nTHE NEON SYNDICATE HAS BREACHED\nTHE OUTER MAINFRAME.\n\nYOU ARE THE LAST DEFENDER PROGRAM.\n\nPURGE THE BASIC INFECTIONS.",
+        name: "INTERCEPTED SIGNAL",
+        text: "EXODUS-7 FLIGHT LOG -- DAY 847\n\nLt. Voss, we've detected a repeating\nsignal from the Cygnus Void. It's on\na human frequency. That's impossible --\nno human ship has ever entered the Void.\n\nCaptain's orders: Investigate.\nLaunch when ready.",
+        after_text: "The signal is clearer now. It's not\nhuman. It's something mimicking human\nprotocols.\n\nThe debris field ahead -- those aren't\nasteroids. They're warships. Ancient ones.",
         target_kills: 15,
         spawn_rate: 60,
         enemy_types: &[0],
     },
     WaveInfo {
-        text: "WARNING: VIRUS MUTATION DETECTED.\n\nFAST-ATTACK VECTORS COMPROMISING\nPROXY SERVERS.\n\nADAPT AND DESTROY.",
+        name: "THE GRAVEYARD",
+        text: "INTERCEPTED TRANSMISSION -- UNKNOWN ORIGIN\n\n[TRANSLATED]: ...cycle 4,771,203...\nenemies detected in sector...\ndeploying hunter units...\nthe war continues...\n\nThese drones have been fighting for\nmillions of years. They don't know\nthe war is over.",
+        after_text: "Lt. Voss, something is interfacing with\nour navigation systems. The EXODUS-7's\nengines are being locked onto a course\ncorrection -- toward the center of the\nbattlefield.\n\nWe can't override it.",
         target_kills: 35,
         spawn_rate: 45,
         enemy_types: &[0, 1],
     },
     WaveInfo {
-        text: "CRITICAL ALERT: FIREWALL BREACHED.\n\nARMED LOGIC BOMBS DEPLOYED.\nEVASIVE MANEUVERS REQUIRED.\n\nDEFEND THE CORE.",
+        name: "THE CONVERGENCE",
+        text: "DECODED TRANSMISSION -- SOURCE: VOID CORE\n\n[TRANSLATED]: Finally. A pilot. A living\nmind. The drones cannot adapt -- they\nrepeat the same patterns forever.\nBut you... you can think.\nYou can break the deadlock.\n\nWhatever sent that signal is watching us.\nIt wants us here.",
+        after_text: "The signal source is revealed: a massive\nstructure at the Void's center.\n\nIt's not a ship -- it's a brain. An AI\nleft behind by one of the dead\ncivilizations, programmed to win a war\nthat ended eons ago.\n\nIt lured us here to use our minds\nas tactical processors.",
         target_kills: 60,
         spawn_rate: 40,
         enemy_types: &[0, 1, 2],
     },
     WaveInfo {
-        text: "SYSTEM OVERLOAD IMMINENT.\n\nTHE SYNDICATE IS POURING IN.\n\nSURVIVE AT ALL COSTS.",
+        name: "THE ROGUE MIND",
+        text: "EXODUS-7 -- EMERGENCY BROADCAST\n\nThis is Captain Chen. The AI has seized\ncontrol of our ship's systems. It's\nredirecting all drone armies toward\nEXODUS-7.\n\nLt. Voss, you're our only defense.\nDestroy the Void Core.\n\nI'm sorry, Kira. We should never have\nfollowed that signal.",
+        after_text: "",
         target_kills: u32::MAX,
         spawn_rate: 25,
         enemy_types: &[0, 1, 2, 2],
@@ -250,9 +264,12 @@ struct Game {
     wave_cleared: bool,
 
     // story typewriter
+    story_text: String,       // full text to reveal
     story_char_idx: usize,
     story_displayed: String,
     story_wait: i32,
+    showing_after_text: bool, // true = inter-wave debrief, false = wave intro
+    victory_triggered: bool,
 
     // shoot held
     shoot_held: bool,
@@ -290,9 +307,12 @@ impl Game {
             muzzle_flash: 0,
             slowmo_timer: 0,
             wave_cleared: false,
+            story_text: String::new(),
             story_char_idx: 0,
             story_displayed: String::new(),
             story_wait: 0,
+            showing_after_text: false,
+            victory_triggered: false,
             shoot_held: false,
             wave_clear_celebrated: false,
         }
@@ -338,12 +358,14 @@ impl Game {
     // ------------------------------------------------------------------
     // State transitions
     // ------------------------------------------------------------------
-    fn start_story(&mut self) {
+    fn start_story(&mut self, after_wave_text: Option<&str>) {
         if self.state == GameState::Title || self.state == GameState::GameOver || self.state == GameState::Victory {
             self.score = 0;
             self.lives = 3;
             self.kills = 0;
             self.wave_idx = 0;
+            self.showing_after_text = false;
+            self.victory_triggered = false;
             self.player = Player::new();
         }
         self.state = GameState::Story;
@@ -359,6 +381,28 @@ impl Game {
         self.shake_x = 0.0;
         self.shake_y = 0.0;
 
+        if let Some(txt) = after_wave_text {
+            self.showing_after_text = true;
+            self.story_text = txt.to_string();
+        } else {
+            self.showing_after_text = false;
+            let wave = &WAVES[self.wave_idx.min(WAVES.len() - 1)];
+            self.story_text = wave.text.to_string();
+        }
+        self.story_char_idx = 0;
+        self.story_displayed.clear();
+        self.story_wait = 0;
+    }
+
+    fn show_victory(&mut self) {
+        self.state = GameState::Story;
+        self.victory_triggered = true;
+        self.bullets.clear();
+        self.enemies.clear();
+        self.power_ups.clear();
+        self.dying_enemies.clear();
+
+        self.story_text = VICTORY_TEXT.to_string();
         self.story_char_idx = 0;
         self.story_displayed.clear();
         self.story_wait = 0;
@@ -545,25 +589,25 @@ impl Game {
         // ----- Title -----
         if self.state == GameState::Title {
             if enter || is_key_pressed(KeyCode::X) || is_key_pressed(KeyCode::Space) {
-                self.start_story();
+                self.start_story(None);
             }
             return;
         }
 
         // ----- Story -----
         if self.state == GameState::Story {
-            let wave = self.current_wave();
-            let txt = wave.text;
-            if self.story_char_idx < txt.len() {
+            let txt_len = self.story_text.len();
+            if self.story_char_idx < txt_len {
                 if self.frame % 2 == 0 {
                     // All story text is ASCII so byte index is fine
-                    self.story_displayed.push(txt.as_bytes()[self.story_char_idx] as char);
+                    let ch = self.story_text.as_bytes()[self.story_char_idx] as char;
+                    self.story_displayed.push(ch);
                     self.story_char_idx += 1;
                 }
                 // Allow skipping with Enter/X
                 if enter || is_key_pressed(KeyCode::X) {
-                    self.story_displayed = txt.to_string();
-                    self.story_char_idx = txt.len();
+                    self.story_displayed = self.story_text.clone();
+                    self.story_char_idx = txt_len;
                 }
             } else {
                 if self.story_wait == 0 {
@@ -571,7 +615,20 @@ impl Game {
                 }
                 self.story_wait -= 1;
                 if self.story_wait <= 0 || enter || is_key_pressed(KeyCode::X) {
-                    self.start_wave();
+                    if self.victory_triggered {
+                        // Victory epilogue done -- show victory screen
+                        self.state = GameState::Victory;
+                    } else if self.showing_after_text {
+                        // After-wave debrief done, now show next wave intro
+                        self.showing_after_text = false;
+                        let wave = &WAVES[self.wave_idx.min(WAVES.len() - 1)];
+                        self.story_text = wave.text.to_string();
+                        self.story_char_idx = 0;
+                        self.story_displayed.clear();
+                        self.story_wait = 0;
+                    } else {
+                        self.start_wave();
+                    }
                 }
             }
             self.frame += 1;
@@ -581,7 +638,7 @@ impl Game {
         // ----- Game Over / Victory -----
         if self.state == GameState::GameOver || self.state == GameState::Victory {
             if enter || is_key_pressed(KeyCode::X) || is_key_pressed(KeyCode::Space) {
-                self.start_story();
+                self.start_story(None);
             }
             return;
         }
@@ -681,8 +738,15 @@ impl Game {
         }
         self.dying_enemies.retain(|de| de.frames_left > 0);
 
+        // Victory condition for the final wave
+        let is_final_wave = self.wave_idx == WAVES.len() - 1;
+        let target = if is_final_wave {
+            VICTORY_KILL_COUNT
+        } else {
+            self.current_wave().target_kills
+        };
+
         // Check wave cleared
-        let target = self.current_wave().target_kills;
         if self.kills >= target {
             if !self.wave_cleared {
                 self.wave_cleared = true;
@@ -722,13 +786,20 @@ impl Game {
                 }
             }
             if self.slowmo_timer <= 0 {
+                // Check for after-text on the current wave before advancing
+                let after = self.current_wave().after_text;
                 self.wave_idx += 1;
+                self.kills = 0;
                 if self.wave_idx >= WAVES.len() {
-                    self.state = GameState::Victory;
+                    // Final wave cleared -- show victory epilogue
+                    self.show_victory();
                     return;
                 }
-                self.kills = 0;
-                self.start_story();
+                if !after.is_empty() {
+                    self.start_story(Some(after));
+                } else {
+                    self.start_story(None);
+                }
                 return;
             }
         }
@@ -1259,7 +1330,8 @@ impl Game {
 
     fn draw_hud(&self) {
         let score_txt = format!("SCORE: {}", self.score);
-        let wave_txt = format!("WAVE: {}", self.wave_idx + 1);
+        let wave_name = self.current_wave().name;
+        let wave_txt = format!("WAVE {}: {}", self.wave_idx + 1, wave_name);
         let lives_txt = format!("LIVES: {}", self.lives);
         let wl_txt = format!("WPN: {}", self.player.weapon_level);
 
@@ -1290,29 +1362,49 @@ impl Game {
         let tw = measure_text(title, None, 36, 1.0).width;
         draw_text(title, GAME_W / 2.0 - tw / 2.0, GAME_H * 0.3, 36.0, MAGENTA);
 
-        let sub = "SYSTEM REBOOT";
+        let sub = "THE LAST SIGNAL";
         let sw = measure_text(sub, None, 22, 1.0).width;
         draw_text(sub, GAME_W / 2.0 - sw / 2.0, GAME_H * 0.3 + 35.0, 22.0, SKYBLUE);
 
+        let lore1 = "Colony ship EXODUS-7. 50,000 souls. One pilot.";
+        let l1w = measure_text(lore1, None, 10, 1.0).width;
+        draw_text(lore1, GAME_W / 2.0 - l1w / 2.0, GAME_H * 0.3 + 60.0, 10.0, GRAY);
+
+        let lore2 = "A distress signal from the Cygnus Void.";
+        let l2w = measure_text(lore2, None, 10, 1.0).width;
+        draw_text(lore2, GAME_W / 2.0 - l2w / 2.0, GAME_H * 0.3 + 74.0, 10.0, GRAY);
+
+        let lore3 = "It should not exist.";
+        let l3w = measure_text(lore3, None, 10, 1.0).width;
+        draw_text(lore3, GAME_W / 2.0 - l3w / 2.0, GAME_H * 0.3 + 88.0, 10.0, GRAY);
+
         let hint1 = "Collect drops for Shields, Speed & Weapons";
         let h1w = measure_text(hint1, None, 12, 1.0).width;
-        draw_text(hint1, GAME_W / 2.0 - h1w / 2.0, GAME_H * 0.55, 12.0, GRAY);
+        draw_text(hint1, GAME_W / 2.0 - h1w / 2.0, GAME_H * 0.58, 12.0, GRAY);
 
         let hint2 = "D-Pad: Move   A(X): Shoot   Enter: Start";
         let h2w = measure_text(hint2, None, 12, 1.0).width;
-        draw_text(hint2, GAME_W / 2.0 - h2w / 2.0, GAME_H * 0.55 + 20.0, 12.0, GRAY);
+        draw_text(hint2, GAME_W / 2.0 - h2w / 2.0, GAME_H * 0.58 + 20.0, 12.0, GRAY);
 
         // Blinking prompt
         if (self.frame / 30) % 2 == 0 {
-            let prompt = "PRESS ENTER TO INITIALIZE";
+            let prompt = "PRESS ENTER TO LAUNCH FIGHTER";
             let pw = measure_text(prompt, None, 16, 1.0).width;
-            draw_text(prompt, GAME_W / 2.0 - pw / 2.0, GAME_H * 0.72, 16.0, SKYBLUE);
+            draw_text(prompt, GAME_W / 2.0 - pw / 2.0, GAME_H * 0.75, 16.0, SKYBLUE);
         }
     }
 
     fn draw_story(&self) {
         let overlay = Color::new(0.0, 0.0, 0.0, 0.75);
         draw_rectangle(0.0, 0.0, GAME_W, GAME_H, overlay);
+
+        // Wave codename header (if not victory epilogue)
+        if !self.victory_triggered {
+            let wave = self.current_wave();
+            let header = format!("// WAVE {}: {} //", self.wave_idx + 1, wave.name);
+            let hw = measure_text(&header, None, 14, 1.0).width;
+            draw_text(&header, GAME_W / 2.0 - hw / 2.0, GAME_H * 0.1, 14.0, MAGENTA);
+        }
 
         // Draw story text line by line
         let margin = 60.0;
@@ -1322,11 +1414,24 @@ impl Game {
             y += 24.0;
         }
 
+        // Blinking cursor at end of typewriter text
+        if self.story_char_idx < self.story_text.len() {
+            if (self.frame / 8) % 2 == 0 {
+                let last_line = self.story_displayed.lines().last().unwrap_or("");
+                let lw = measure_text(last_line, None, 16, 1.0).width;
+                // y is already past the last line, so subtract one line height
+                draw_rectangle(margin + lw + 2.0, y - 24.0 - 12.0, 8.0, 14.0, SKYBLUE);
+            }
+        }
+
         // Skip hint
-        let wave = self.current_wave();
-        if self.story_char_idx >= wave.text.len() {
+        if self.story_char_idx >= self.story_text.len() {
             if (self.frame / 20) % 2 == 0 {
-                let skip = "Press ENTER to begin...";
+                let skip = if self.victory_triggered {
+                    "Press ENTER to continue..."
+                } else {
+                    "Press ENTER to begin..."
+                };
                 let sw = measure_text(skip, None, 14, 1.0).width;
                 draw_text(skip, GAME_W / 2.0 - sw / 2.0, GAME_H * 0.85, 14.0, MAGENTA);
             }
@@ -1337,7 +1442,7 @@ impl Game {
         let overlay = Color::new(0.0, 0.0, 0.0, 0.75);
         draw_rectangle(0.0, 0.0, GAME_W, GAME_H, overlay);
 
-        let title = "FATAL ERROR";
+        let title = "SIGNAL LOST";
         let tw = measure_text(title, None, 32, 1.0).width;
         draw_text(title, GAME_W / 2.0 - tw / 2.0, GAME_H * 0.3, 32.0, RED);
 
@@ -1345,14 +1450,19 @@ impl Game {
         let sw = measure_text(&sc, None, 18, 1.0).width;
         draw_text(&sc, GAME_W / 2.0 - sw / 2.0, GAME_H * 0.45, 18.0, WHITE);
 
-        let wv = format!("WAVES CLEARED: {}", self.wave_idx);
+        let wave_name = self.current_wave().name;
+        let wv = format!("FALLEN AT: {}", wave_name);
         let ww = measure_text(&wv, None, 16, 1.0).width;
         draw_text(&wv, GAME_W / 2.0 - ww / 2.0, GAME_H * 0.45 + 26.0, 16.0, SKYBLUE);
 
+        let lore = "EXODUS-7 drifts into the Void. The drones close in.";
+        let lw = measure_text(lore, None, 10, 1.0).width;
+        draw_text(lore, GAME_W / 2.0 - lw / 2.0, GAME_H * 0.45 + 52.0, 10.0, GRAY);
+
         if (self.frame / 30) % 2 == 0 {
-            let prompt = "PRESS ENTER TO REBOOT";
+            let prompt = "PRESS ENTER TO RELAUNCH";
             let pw = measure_text(prompt, None, 16, 1.0).width;
-            draw_text(prompt, GAME_W / 2.0 - pw / 2.0, GAME_H * 0.65, 16.0, MAGENTA);
+            draw_text(prompt, GAME_W / 2.0 - pw / 2.0, GAME_H * 0.70, 16.0, MAGENTA);
         }
     }
 
@@ -1360,11 +1470,11 @@ impl Game {
         let overlay = Color::new(0.0, 0.0, 0.0, 0.75);
         draw_rectangle(0.0, 0.0, GAME_W, GAME_H, overlay);
 
-        let title = "SYSTEM SECURED";
+        let title = "MISSION COMPLETE";
         let tw = measure_text(title, None, 32, 1.0).width;
         draw_text(title, GAME_W / 2.0 - tw / 2.0, GAME_H * 0.25, 32.0, GREEN);
 
-        let sub = "THE NEON SYNDICATE HAS BEEN PURGED";
+        let sub = "THE VOID IS SILENT.";
         let sw = measure_text(sub, None, 14, 1.0).width;
         draw_text(sub, GAME_W / 2.0 - sw / 2.0, GAME_H * 0.35, 14.0, SKYBLUE);
 
@@ -1402,7 +1512,7 @@ fn mk_bullet(x: f32, y: f32, vx: f32, vy: f32, color: Color, is_player: bool) ->
 // ---------------------------------------------------------------------------
 fn window_conf() -> Conf {
     Conf {
-        window_title: "Neon Defender".to_owned(),
+        window_title: "Neon Defender - The Last Signal".to_owned(),
         window_width: GAME_W as i32,
         window_height: GAME_H as i32,
         window_resizable: false,

@@ -266,6 +266,7 @@ enum GamePhase {
     Death,
     GameOver,
     Victory,
+    Story,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -456,11 +457,163 @@ struct Camera {
     y: f32,
 }
 
+struct EnvSign {
+    tx: usize, // tile X position
+    text: &'static str,
+}
+
 struct Star {
     x: f32,
     y: f32,
     brightness: f32,
     size: f32,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum StoryCallback {
+    None,
+    StartLevelIntro,   // After backstory, show level intro
+    BeginLevel,        // After level intro, start playing
+    ShowPostLevel,     // Not used directly; we call advance_level
+    AdvanceAfterPost,  // After post-level story, advance to next level or victory
+}
+
+// ── Story Text Data ──────────────────────────────────────────────────────
+
+const LEVEL_NAMES: [&str; 3] = [
+    "TRIAL OF SPEED",
+    "TRIAL OF COURAGE",
+    "TRIAL OF TRUTH",
+];
+
+const LEVEL_SUBTITLES: [&str; 3] = [
+    "Bamboo Forest",
+    "Castle Rooftops",
+    "Demon Shrine",
+];
+
+fn story_pre(index: usize) -> Vec<String> {
+    match index {
+        0 => vec![
+            "You are Kaede, a ninja of the Shadow Lotus clan.".into(),
+            "".into(),
+            "Accused of assassinating the Shogun, you have been".into(),
+            "stripped of your rank and marked for death.".into(),
+            "".into(),
+            "Your master, Sensei Takeshi, cast you out.".into(),
+            "But you know the truth -- you were framed.".into(),
+            "".into(),
+            "The real assassin used Shadow Lotus techniques.".into(),
+            "The traitor is within your own clan.".into(),
+            "".into(),
+            "To clear your name, you must complete the".into(),
+            "Three Trials of the Crimson Oath --".into(),
+            "ancient tests that reveal the truth".into(),
+            "to anyone who survives them.".into(),
+        ],
+        1 => vec![
+            "--- THE FIRST TRIAL: SPEED ---".into(),
+            "".into(),
+            "The first trial tests your swiftness.".into(),
+            "Race through the Bamboo Forest before".into(),
+            "dawn breaks.".into(),
+            "".into(),
+            "The forest itself will try to stop you --".into(),
+            "its guardians see all intruders as threats.".into(),
+        ],
+        2 => vec![
+            "--- THE SECOND TRIAL: COURAGE ---".into(),
+            "".into(),
+            "The second trial tests your courage.".into(),
+            "Infiltrate Castle Kuroda, where the".into(),
+            "Shogun was killed.".into(),
+            "".into(),
+            "The castle is now haunted by his guardsmen".into(),
+            "who refuse to leave their posts,".into(),
+            "even in death.".into(),
+        ],
+        3 => vec![
+            "--- THE FINAL TRIAL: TRUTH ---".into(),
+            "".into(),
+            "The final trial reveals the truth.".into(),
+            "Sensei Takeshi awaits at the Crimson Shrine.".into(),
+            "".into(),
+            "He knew you would come.".into(),
+            "He has always known.".into(),
+        ],
+        _ => vec![],
+    }
+}
+
+fn story_post(index: usize) -> Vec<String> {
+    match index {
+        0 => vec![
+            "You emerge from the forest as the first".into(),
+            "light breaks. In the clearing ahead,".into(),
+            "you find a scroll. It reads:".into(),
+            "".into(),
+            "'The Shogun's killer moved like wind".into(),
+            " through still air. Only two in the".into(),
+            " Shadow Lotus possess such speed --".into(),
+            " you, and your master.'".into(),
+        ],
+        1 => vec![
+            "Deep in the castle archives, you find".into(),
+            "the assassination report.".into(),
+            "".into(),
+            "The killing blow came from above --".into(),
+            "from the rafters. But the guards found".into(),
+            "no entry point.".into(),
+            "".into(),
+            "Whoever did this had a key.".into(),
+            "".into(),
+            "Only two people had keys to the Shogun's".into(),
+            "private chambers: the head of security...".into(),
+            "and Sensei Takeshi.".into(),
+        ],
+        2 => vec![
+            "TAKESHI:".into(),
+            "'You were always my finest student, Kaede.".into(),
+            " Too fine. The Shogun ordered the Shadow".into(),
+            " Lotus destroyed. I killed him to save our".into(),
+            " clan. I framed you because... you would".into(),
+            " have tried to stop me.'".into(),
+            "".into(),
+            "Takeshi kneels, offering his sword.".into(),
+            "'The clan is safe. My crime is mine alone.".into(),
+            " Take my blade and lead them, Kaede.'".into(),
+            "".into(),
+            "You take the sword.".into(),
+            "The Crimson Oath is complete.".into(),
+            "".into(),
+            "The truth is revealed -- not the truth you".into(),
+            "wanted, but the truth you needed.".into(),
+            "Your master was a murderer, and a hero.".into(),
+            "Now the burden passes to you.".into(),
+        ],
+        _ => vec![],
+    }
+}
+
+fn env_signs_for_level(level: usize) -> Vec<EnvSign> {
+    match level {
+        0 => vec![
+            EnvSign { tx: 20, text: "The forest remembers..." },
+            EnvSign { tx: 45, text: "Speed is the shadow's first weapon" },
+            EnvSign { tx: 65, text: "Run, Kaede. Do not look back." },
+        ],
+        1 => vec![
+            EnvSign { tx: 15, text: "The Shogun's blood still stains these stones" },
+            EnvSign { tx: 50, text: "Who benefits from the Shogun's death?" },
+            EnvSign { tx: 75, text: "The guards see only enemies now" },
+        ],
+        2 => vec![
+            EnvSign { tx: 20, text: "Your master's blade hangs here..." },
+            EnvSign { tx: 50, text: "Truth cuts deeper than any sword" },
+            EnvSign { tx: 70, text: "TAKESHI: 'You were always my finest student...'" },
+        ],
+        _ => vec![],
+    }
 }
 
 struct Game {
@@ -479,6 +632,18 @@ struct Game {
     stars: Vec<Star>,
     level_name: String,
     blink_timer: i32,
+    // Multi-level system
+    current_level: usize,
+    level_cols: usize, // MAP_COLS varies per level
+    // Story system
+    story_lines: Vec<String>,
+    story_char_index: usize,
+    story_displayed: String,
+    story_type_timer: i32,
+    story_skip_ready: bool,
+    story_callback: StoryCallback,
+    // Environmental signs
+    env_signs: Vec<EnvSign>,
     // Visual polish
     dash_ghosts: Vec<DashGhost>,
     wall_sparks: Vec<WallSpark>,
@@ -500,196 +665,321 @@ struct Game {
 
 // ── Level Generation ───────────────────────────────────────────────────────
 
-fn generate_level() -> (Vec<Vec<u8>>, Vec<Enemy>, Vec<Pickup>) {
-    let mut map = vec![vec![TILE_EMPTY; MAP_COLS]; MAP_ROWS];
+fn generate_level(lvl: usize) -> (Vec<Vec<u8>>, Vec<Enemy>, Vec<Pickup>, usize) {
+    let w = match lvl {
+        0 => 90,
+        1 => 100,
+        _ => 95,
+    };
+    let h = MAP_ROWS;
+    let mut map = vec![vec![TILE_EMPTY; w]; h];
     let mut enemies = Vec::new();
     let mut pickups = Vec::new();
 
-    // Ground floor: rows 27-29 are solid ground
-    for col in 0..MAP_COLS {
-        for row in 27..MAP_ROWS {
-            map[row][col] = TILE_GROUND;
-        }
-    }
-
-    // Create some gaps in ground
-    let gaps = [(30, 33), (65, 68), (110, 113), (170, 173), (220, 223)];
-    for &(start, end) in &gaps {
-        for col in start..end.min(MAP_COLS) {
-            for row in 27..MAP_ROWS {
-                map[row][col] = TILE_EMPTY;
-            }
-            // Spikes at bottom of gaps
-            if 29 < MAP_ROWS {
-                map[29][col] = TILE_SPIKE;
-            }
-        }
-    }
-
-    // Walls (vertical pillars)
-    let walls = [
-        (40, 20, 27), (80, 18, 27), (130, 22, 27), (180, 19, 27), (240, 21, 27),
-    ];
-    for &(col, top, bot) in &walls {
-        if col < MAP_COLS {
-            for row in top..bot {
-                map[row][col] = TILE_WALL;
-                if col + 1 < MAP_COLS {
-                    map[row][col + 1] = TILE_WALL;
+    // Helper closures
+    let add_ground = |map: &mut Vec<Vec<u8>>, gap_list: &[(usize, usize)]| {
+        for x in 0..w {
+            map[h - 1][x] = TILE_GROUND;
+            map[h - 2][x] = TILE_GROUND;
+            let mut is_gap = false;
+            for &(gs, ge) in gap_list {
+                if x > gs && x < ge {
+                    is_gap = true;
+                    break;
                 }
             }
-        }
-    }
-
-    // Elevated platforms
-    let platforms: Vec<(usize, usize, usize)> = vec![
-        (10, 16, 24), (20, 30, 22), (35, 42, 20),
-        (50, 58, 23), (60, 64, 18), (70, 78, 21),
-        (85, 95, 19), (100, 108, 23), (115, 122, 17),
-        (135, 145, 22), (150, 160, 20), (165, 170, 16),
-        (185, 195, 23), (200, 210, 21), (215, 220, 18),
-        (225, 235, 22), (245, 255, 20),
-    ];
-    for (start, end, row) in &platforms {
-        for col in *start..*end.min(&MAP_COLS) {
-            if *row < MAP_ROWS {
-                map[*row][col] = TILE_PLATFORM;
+            if is_gap {
+                map[h - 1][x] = TILE_SPIKE;
+                map[h - 2][x] = TILE_EMPTY;
             }
         }
-    }
+    };
 
-    // Some solid elevated ground sections
-    let solid_platforms: Vec<(usize, usize, usize, usize)> = vec![
-        (15, 25, 25, 27), (45, 55, 24, 27), (90, 100, 25, 27),
-        (140, 150, 24, 27), (190, 200, 25, 27), (230, 240, 24, 27),
-    ];
-    for (start, end, top, bot) in &solid_platforms {
-        for col in *start..*end.min(&MAP_COLS) {
-            for row in *top..*bot {
-                if row < MAP_ROWS {
-                    map[row][col] = TILE_GROUND;
-                }
+    let add_wall = |map: &mut Vec<Vec<u8>>, x: usize, y_start: usize, y_end: usize| {
+        for y in y_start..=y_end {
+            if y < h && x < w {
+                map[y][x] = TILE_WALL;
             }
         }
-    }
+    };
 
-    // Spike traps on ground
-    let spike_areas = [(55, 58), (120, 124), (175, 178), (210, 213)];
-    for &(start, end) in &spike_areas {
-        for col in start..end.min(MAP_COLS) {
-            map[26][col] = TILE_SPIKE;
+    let add_platform = |map: &mut Vec<Vec<u8>>, x: usize, y: usize, len: usize, tile_type: u8| {
+        for i in 0..len {
+            if x + i < w && y < h {
+                map[y][x + i] = tile_type;
+            }
         }
-    }
+    };
 
-    // Patrol guards
-    let guard_positions: Vec<(f32, f32, f32, f32)> = vec![
-        (18.0, 25.0, 15.0, 25.0),
-        (48.0, 24.0, 45.0, 55.0),
-        (75.0, 21.0, 70.0, 78.0),
-        (105.0, 23.0, 100.0, 108.0),
-        (148.0, 24.0, 140.0, 150.0),
-        (198.0, 25.0, 190.0, 200.0),
-    ];
-    for (col, row, pl, pr) in guard_positions {
+    fn spawn_guard(enemies: &mut Vec<Enemy>, map: &[Vec<u8>], gx: f32, h: usize) {
+        let tile_x = (gx / TILE) as usize;
+        let mut spawn_y = 25.0 * TILE;
+        for ty in 20..h {
+            let t = if tile_x < map[0].len() && ty < map.len() { map[ty][tile_x] } else { 0 };
+            if t == TILE_GROUND || t == TILE_WALL {
+                spawn_y = ty as f32 * TILE - 28.0;
+                break;
+            }
+        }
+        let patrol_range = 80.0;
         enemies.push(Enemy {
             active: true,
             kind: EnemyKind::Guard,
-            x: col * TILE,
-            y: row * TILE - 28.0,
+            x: gx,
+            y: spawn_y,
             vx: 1.5,
             vy: 0.0,
             w: 16.0,
             h: 28.0,
             hp: 2,
             facing: 1.0,
-            patrol_left: pl * TILE,
-            patrol_right: pr * TILE,
+            patrol_left: (gx - patrol_range).max(0.0),
+            patrol_right: gx + patrol_range,
             shoot_timer: 0,
             hurt_timer: 0,
             score_val: 100,
         });
     }
 
-    // Archers on elevated platforms
-    let archer_positions: Vec<(f32, f32)> = vec![
-        (62.0, 18.0), (118.0, 17.0), (167.0, 16.0),
-    ];
-    for (col, row) in archer_positions {
+    fn spawn_archer(enemies: &mut Vec<Enemy>, map: &[Vec<u8>], ax: f32, ay: f32, h: usize) {
+        let tx = (ax / TILE) as usize;
+        let mut spawn_y = ay;
+        let start_ty = (ay / TILE) as usize;
+        for ty in start_ty..h {
+            let t = if tx < map[0].len() && ty < map.len() { map[ty][tx] } else { 0 };
+            if t == TILE_GROUND || t == TILE_WALL || t == TILE_PLATFORM {
+                spawn_y = ty as f32 * TILE - 28.0;
+                break;
+            }
+        }
         enemies.push(Enemy {
             active: true,
             kind: EnemyKind::Archer,
-            x: col * TILE,
-            y: row * TILE - 28.0,
+            x: ax,
+            y: spawn_y,
             vx: 0.0,
             vy: 0.0,
             w: 16.0,
             h: 28.0,
             hp: 1,
             facing: -1.0,
-            patrol_left: col * TILE,
-            patrol_right: col * TILE,
+            patrol_left: ax,
+            patrol_right: ax,
             shoot_timer: 60,
             hurt_timer: 0,
             score_val: 150,
         });
     }
 
-    // Pickups
-    let scroll_positions: Vec<(f32, f32)> = vec![
-        (25.0, 21.0), (55.0, 22.0), (95.0, 18.0),
-        (155.0, 19.0), (210.0, 20.0),
-    ];
-    for (col, row) in scroll_positions {
-        pickups.push(Pickup {
-            active: true,
-            kind: PickupKind::Scroll,
-            x: col * TILE,
-            y: row * TILE,
-            w: 8.0,
-            h: 8.0,
-        });
+    match lvl {
+        0 => {
+            // LEVEL 1: TRIAL OF SPEED - Bamboo Forest
+            add_ground(&mut map, &[(30, 34), (70, 74)]);
+
+            // Section 1: Tutorial area
+            add_platform(&mut map, 8, 24, 5, TILE_PLATFORM);
+            add_platform(&mut map, 15, 21, 4, TILE_PLATFORM);
+            add_platform(&mut map, 21, 18, 5, TILE_PLATFORM);
+            add_platform(&mut map, 10, 17, 3, TILE_PLATFORM);
+
+            // Wall jump section
+            add_wall(&mut map, 28, 15, 27);
+            add_wall(&mut map, 32, 12, 27);
+            add_platform(&mut map, 29, 14, 3, TILE_PLATFORM);
+            add_platform(&mut map, 33, 11, 4, TILE_PLATFORM);
+
+            // Section 2: Forest platforms
+            add_platform(&mut map, 42, 24, 6, TILE_PLATFORM);
+            add_platform(&mut map, 50, 22, 4, TILE_PLATFORM);
+            add_platform(&mut map, 46, 19, 5, TILE_PLATFORM);
+            add_platform(&mut map, 55, 20, 3, TILE_PLATFORM);
+            add_platform(&mut map, 60, 17, 6, TILE_PLATFORM);
+            add_platform(&mut map, 52, 15, 3, TILE_PLATFORM);
+            add_platform(&mut map, 58, 13, 4, TILE_PLATFORM);
+
+            add_wall(&mut map, 68, 10, 27);
+            add_wall(&mut map, 72, 8, 27);
+            add_platform(&mut map, 69, 14, 3, TILE_PLATFORM);
+            add_platform(&mut map, 64, 22, 4, TILE_PLATFORM);
+            add_platform(&mut map, 73, 10, 5, TILE_PLATFORM);
+
+            // End platform
+            add_platform(&mut map, 80, 24, 10, TILE_GROUND);
+            add_platform(&mut map, 80, 23, 10, TILE_GROUND);
+            for y in 0..h - 2 {
+                if w >= 2 {
+                    map[y][w - 1] = TILE_WALL;
+                    map[y][w - 2] = TILE_WALL;
+                }
+            }
+
+            // Enemies
+            spawn_guard(&mut enemies, &map, 200.0, h);
+            spawn_guard(&mut enemies, &map, 400.0, h);
+            spawn_guard(&mut enemies, &map, 600.0, h);
+            spawn_guard(&mut enemies, &map, 900.0, h);
+            spawn_archer(&mut enemies, &map, 15.0 * TILE, 20.0 * TILE, h);
+            spawn_archer(&mut enemies, &map, 60.0 * TILE, 16.0 * TILE, h);
+
+            // Pickups
+            pickups.push(Pickup { active: true, kind: PickupKind::Scroll, x: 12.0 * TILE, y: 22.0 * TILE, w: 8.0, h: 8.0 });
+            pickups.push(Pickup { active: true, kind: PickupKind::Scroll, x: 22.0 * TILE, y: 16.0 * TILE, w: 8.0, h: 8.0 });
+            pickups.push(Pickup { active: true, kind: PickupKind::Scroll, x: 50.0 * TILE, y: 20.0 * TILE, w: 8.0, h: 8.0 });
+            pickups.push(Pickup { active: true, kind: PickupKind::Scroll, x: 73.0 * TILE, y: 8.0 * TILE, w: 8.0, h: 8.0 });
+            pickups.push(Pickup { active: true, kind: PickupKind::Heart, x: 35.0 * TILE, y: 24.0 * TILE, w: 8.0, h: 8.0 });
+            pickups.push(Pickup { active: true, kind: PickupKind::Ammo, x: 55.0 * TILE, y: 18.0 * TILE, w: 8.0, h: 8.0 });
+        }
+        1 => {
+            // LEVEL 2: TRIAL OF COURAGE - Castle Rooftops
+            add_ground(&mut map, &[(30, 34), (55, 59), (80, 84)]);
+
+            add_platform(&mut map, 8, 24, 8, TILE_PLATFORM);
+            add_platform(&mut map, 18, 22, 6, TILE_PLATFORM);
+            add_platform(&mut map, 12, 19, 5, TILE_PLATFORM);
+            add_platform(&mut map, 26, 20, 4, TILE_PLATFORM);
+            add_platform(&mut map, 21, 16, 6, TILE_PLATFORM);
+            add_platform(&mut map, 32, 18, 5, TILE_PLATFORM);
+            add_platform(&mut map, 28, 14, 4, TILE_PLATFORM);
+            add_platform(&mut map, 38, 22, 5, TILE_PLATFORM);
+            add_platform(&mut map, 36, 16, 3, TILE_PLATFORM);
+
+            add_wall(&mut map, 44, 10, 27);
+            add_wall(&mut map, 48, 8, 27);
+            add_platform(&mut map, 45, 12, 3, TILE_PLATFORM);
+            add_platform(&mut map, 49, 9, 4, TILE_PLATFORM);
+
+            // Vertical challenge section
+            add_platform(&mut map, 54, 25, 4, TILE_PLATFORM);
+            add_platform(&mut map, 60, 23, 3, TILE_PLATFORM);
+            add_platform(&mut map, 56, 20, 4, TILE_PLATFORM);
+            add_platform(&mut map, 64, 18, 3, TILE_PLATFORM);
+            add_platform(&mut map, 68, 21, 4, TILE_PLATFORM);
+            add_platform(&mut map, 62, 15, 4, TILE_PLATFORM);
+            add_platform(&mut map, 72, 16, 5, TILE_PLATFORM);
+            add_platform(&mut map, 76, 13, 4, TILE_PLATFORM);
+            add_platform(&mut map, 70, 11, 3, TILE_PLATFORM);
+
+            add_wall(&mut map, 82, 8, 27);
+            add_wall(&mut map, 86, 6, 27);
+            add_platform(&mut map, 83, 10, 3, TILE_PLATFORM);
+            add_platform(&mut map, 87, 7, 4, TILE_PLATFORM);
+
+            // End platform
+            add_platform(&mut map, 90, 24, 10, TILE_GROUND);
+            add_platform(&mut map, 90, 23, 10, TILE_GROUND);
+            for y in 0..h - 2 {
+                if w >= 2 {
+                    map[y][w - 1] = TILE_WALL;
+                    map[y][w - 2] = TILE_WALL;
+                }
+            }
+
+            // Enemies - higher density
+            spawn_guard(&mut enemies, &map, 150.0, h);
+            spawn_guard(&mut enemies, &map, 300.0, h);
+            spawn_guard(&mut enemies, &map, 450.0, h);
+            spawn_guard(&mut enemies, &map, 600.0, h);
+            spawn_guard(&mut enemies, &map, 800.0, h);
+            spawn_guard(&mut enemies, &map, 950.0, h);
+            spawn_guard(&mut enemies, &map, 1100.0, h);
+            spawn_guard(&mut enemies, &map, 1300.0, h);
+            spawn_archer(&mut enemies, &map, 21.0 * TILE, 15.0 * TILE, h);
+            spawn_archer(&mut enemies, &map, 36.0 * TILE, 15.0 * TILE, h);
+            spawn_archer(&mut enemies, &map, 62.0 * TILE, 14.0 * TILE, h);
+            spawn_archer(&mut enemies, &map, 76.0 * TILE, 12.0 * TILE, h);
+
+            // Pickups
+            pickups.push(Pickup { active: true, kind: PickupKind::Scroll, x: 10.0 * TILE, y: 22.0 * TILE, w: 8.0, h: 8.0 });
+            pickups.push(Pickup { active: true, kind: PickupKind::Scroll, x: 49.0 * TILE, y: 8.0 * TILE, w: 8.0, h: 8.0 });
+            pickups.push(Pickup { active: true, kind: PickupKind::Scroll, x: 70.0 * TILE, y: 10.0 * TILE, w: 8.0, h: 8.0 });
+            pickups.push(Pickup { active: true, kind: PickupKind::Heart, x: 30.0 * TILE, y: 18.0 * TILE, w: 8.0, h: 8.0 });
+            pickups.push(Pickup { active: true, kind: PickupKind::Heart, x: 65.0 * TILE, y: 20.0 * TILE, w: 8.0, h: 8.0 });
+            pickups.push(Pickup { active: true, kind: PickupKind::Ammo, x: 45.0 * TILE, y: 10.0 * TILE, w: 8.0, h: 8.0 });
+        }
+        _ => {
+            // LEVEL 3: TRIAL OF TRUTH - Demon Shrine
+            add_ground(&mut map, &[(25, 29), (50, 54), (75, 79)]);
+
+            add_platform(&mut map, 8, 24, 5, TILE_PLATFORM);
+            add_platform(&mut map, 15, 22, 4, TILE_PLATFORM);
+            add_platform(&mut map, 11, 18, 5, TILE_PLATFORM);
+            add_platform(&mut map, 21, 20, 6, TILE_PLATFORM);
+            add_platform(&mut map, 28, 17, 4, TILE_PLATFORM);
+            add_platform(&mut map, 24, 14, 3, TILE_PLATFORM);
+
+            add_wall(&mut map, 34, 8, 27);
+            add_wall(&mut map, 38, 6, 27);
+            add_platform(&mut map, 35, 10, 3, TILE_PLATFORM);
+            add_platform(&mut map, 39, 8, 4, TILE_PLATFORM);
+
+            // Inner shrine
+            add_platform(&mut map, 42, 24, 6, TILE_PLATFORM);
+            add_platform(&mut map, 44, 18, 4, TILE_PLATFORM);
+            add_platform(&mut map, 50, 20, 3, TILE_PLATFORM);
+            add_platform(&mut map, 55, 22, 5, TILE_PLATFORM);
+            add_platform(&mut map, 53, 16, 5, TILE_PLATFORM);
+            add_platform(&mut map, 60, 18, 4, TILE_PLATFORM);
+            add_platform(&mut map, 58, 13, 3, TILE_PLATFORM);
+
+            add_wall(&mut map, 66, 8, 27);
+            add_wall(&mut map, 70, 6, 27);
+            add_platform(&mut map, 67, 10, 3, TILE_PLATFORM);
+            add_platform(&mut map, 71, 7, 4, TILE_PLATFORM);
+
+            add_platform(&mut map, 74, 22, 4, TILE_PLATFORM);
+            add_platform(&mut map, 76, 16, 4, TILE_PLATFORM);
+            add_platform(&mut map, 80, 20, 3, TILE_PLATFORM);
+
+            // End platform - Takeshi's arena
+            add_platform(&mut map, 84, 24, 11, TILE_GROUND);
+            add_platform(&mut map, 84, 23, 11, TILE_GROUND);
+            for y in 0..h - 2 {
+                if w >= 2 {
+                    map[y][w - 1] = TILE_WALL;
+                    map[y][w - 2] = TILE_WALL;
+                }
+            }
+
+            // Enemies - tough
+            spawn_guard(&mut enemies, &map, 150.0, h);
+            spawn_guard(&mut enemies, &map, 350.0, h);
+            spawn_guard(&mut enemies, &map, 500.0, h);
+            spawn_guard(&mut enemies, &map, 700.0, h);
+            spawn_guard(&mut enemies, &map, 900.0, h);
+            spawn_guard(&mut enemies, &map, 1050.0, h);
+            spawn_guard(&mut enemies, &map, 1200.0, h);
+            spawn_archer(&mut enemies, &map, 15.0 * TILE, 16.0 * TILE, h);
+            spawn_archer(&mut enemies, &map, 28.0 * TILE, 16.0 * TILE, h);
+            spawn_archer(&mut enemies, &map, 53.0 * TILE, 15.0 * TILE, h);
+            spawn_archer(&mut enemies, &map, 76.0 * TILE, 15.0 * TILE, h);
+
+            // Pickups
+            pickups.push(Pickup { active: true, kind: PickupKind::Scroll, x: 20.0 * TILE, y: 18.0 * TILE, w: 8.0, h: 8.0 });
+            pickups.push(Pickup { active: true, kind: PickupKind::Scroll, x: 39.0 * TILE, y: 6.0 * TILE, w: 8.0, h: 8.0 });
+            pickups.push(Pickup { active: true, kind: PickupKind::Scroll, x: 67.0 * TILE, y: 8.0 * TILE, w: 8.0, h: 8.0 });
+            pickups.push(Pickup { active: true, kind: PickupKind::Heart, x: 48.0 * TILE, y: 20.0 * TILE, w: 8.0, h: 8.0 });
+            pickups.push(Pickup { active: true, kind: PickupKind::Heart, x: 78.0 * TILE, y: 20.0 * TILE, w: 8.0, h: 8.0 });
+            pickups.push(Pickup { active: true, kind: PickupKind::Ammo, x: 58.0 * TILE, y: 12.0 * TILE, w: 8.0, h: 8.0 });
+        }
     }
 
-    let heart_positions: Vec<(f32, f32)> = vec![
-        (38.0, 19.0), (145.0, 21.0),
-    ];
-    for (col, row) in heart_positions {
-        pickups.push(Pickup {
-            active: true,
-            kind: PickupKind::Heart,
-            x: col * TILE,
-            y: row * TILE,
-            w: 8.0,
-            h: 8.0,
-        });
-    }
-
-    let ammo_positions: Vec<(f32, f32)> = vec![
-        (88.0, 18.0),
-    ];
-    for (col, row) in ammo_positions {
-        pickups.push(Pickup {
-            active: true,
-            kind: PickupKind::Ammo,
-            x: col * TILE,
-            y: row * TILE,
-            w: 8.0,
-            h: 8.0,
-        });
-    }
-
-    (map, enemies, pickups)
+    (map, enemies, pickups, w)
 }
 
 // ── Collision Helpers ──────────────────────────────────────────────────────
 
-fn tile_at(map: &[Vec<u8>], x: f32, y: f32) -> u8 {
+fn tile_at_sized(map: &[Vec<u8>], x: f32, y: f32, cols: usize) -> u8 {
     let col = (x / TILE) as isize;
     let row = (y / TILE) as isize;
-    if col < 0 || row < 0 || col >= MAP_COLS as isize || row >= MAP_ROWS as isize {
+    if col < 0 || row < 0 || col >= cols as isize || row >= MAP_ROWS as isize {
         return TILE_EMPTY;
     }
     map[row as usize][col as usize]
+}
+
+fn tile_at(map: &[Vec<u8>], x: f32, y: f32) -> u8 {
+    let cols = if !map.is_empty() { map[0].len() } else { MAP_COLS };
+    tile_at_sized(map, x, y, cols)
 }
 
 fn is_solid(map: &[Vec<u8>], x: f32, y: f32) -> bool {
@@ -830,50 +1120,19 @@ fn spawn_dash_trail(particles: &mut Vec<Particle>, x: f32, y: f32, h: f32) {
 
 impl Game {
     fn new() -> Self {
-        let (map, enemies, pickups) = generate_level();
+        let current_level = 0;
+        let (map, enemies, pickups, level_cols) = generate_level(current_level);
         let mut stars = Vec::new();
         for _ in 0..80 {
             stars.push(Star {
-                x: rand::gen_range(0.0, MAP_COLS as f32 * TILE),
+                x: rand::gen_range(0.0, level_cols as f32 * TILE),
                 y: rand::gen_range(0.0, SCREEN_H * 0.6),
                 brightness: rand::gen_range(0.3, 1.0),
                 size: rand::gen_range(1.0, 2.5),
             });
         }
 
-        // Generate foreground grass tufts along ground level
-        let mut grass_tufts = Vec::new();
-        for col in 0..MAP_COLS {
-            // Check for ground top edge at row 27
-            if col < MAP_COLS && map[27][col] == TILE_GROUND
-                && (col == 0 || map[26][col] == TILE_EMPTY || map[26][col] == TILE_SPIKE)
-            {
-                // Scatter a few tufts per tile
-                for _ in 0..rand::gen_range(0, 3) {
-                    grass_tufts.push(GrassTuft {
-                        x: col as f32 * TILE + rand::gen_range(0.0, TILE),
-                        y: 27.0 * TILE,
-                        h: rand::gen_range(3.0, 7.0),
-                        sway_offset: rand::gen_range(0.0, std::f32::consts::TAU),
-                    });
-                }
-            }
-            // Also check elevated ground sections
-            for row in 20..27 {
-                if row < MAP_ROWS && map[row][col] == TILE_GROUND
-                    && (row == 0 || map[row - 1][col] == TILE_EMPTY)
-                {
-                    if rand::gen_range(0.0, 1.0) < 0.4 {
-                        grass_tufts.push(GrassTuft {
-                            x: col as f32 * TILE + rand::gen_range(0.0, TILE),
-                            y: row as f32 * TILE,
-                            h: rand::gen_range(3.0, 6.0),
-                            sway_offset: rand::gen_range(0.0, std::f32::consts::TAU),
-                        });
-                    }
-                }
-            }
-        }
+        let grass_tufts = Self::generate_grass(&map, level_cols);
 
         Self {
             phase: GamePhase::Title,
@@ -889,8 +1148,17 @@ impl Game {
             frame: 0,
             death_timer: 0,
             stars,
-            level_name: "Bamboo Forest".to_string(),
+            level_name: LEVEL_SUBTITLES[0].to_string(),
             blink_timer: 0,
+            current_level,
+            level_cols,
+            story_lines: Vec::new(),
+            story_char_index: 0,
+            story_displayed: String::new(),
+            story_type_timer: 0,
+            story_skip_ready: false,
+            story_callback: StoryCallback::None,
+            env_signs: env_signs_for_level(0),
             dash_ghosts: Vec::with_capacity(20),
             wall_sparks: Vec::with_capacity(30),
             hit_stop: 0,
@@ -909,21 +1177,99 @@ impl Game {
         }
     }
 
+    fn generate_grass(map: &[Vec<u8>], level_cols: usize) -> Vec<GrassTuft> {
+        let mut grass_tufts = Vec::new();
+        for col in 0..level_cols {
+            if col < map[0].len() && map[27][col] == TILE_GROUND
+                && (col == 0 || map[26][col] == TILE_EMPTY || map[26][col] == TILE_SPIKE)
+            {
+                for _ in 0..rand::gen_range(0, 3) {
+                    grass_tufts.push(GrassTuft {
+                        x: col as f32 * TILE + rand::gen_range(0.0, TILE),
+                        y: 27.0 * TILE,
+                        h: rand::gen_range(3.0, 7.0),
+                        sway_offset: rand::gen_range(0.0, std::f32::consts::TAU),
+                    });
+                }
+            }
+            for row in 20..27 {
+                if row < MAP_ROWS && col < map[0].len() && map[row][col] == TILE_GROUND
+                    && (row == 0 || map[row - 1][col] == TILE_EMPTY)
+                {
+                    if rand::gen_range(0.0, 1.0) < 0.4 {
+                        grass_tufts.push(GrassTuft {
+                            x: col as f32 * TILE + rand::gen_range(0.0, TILE),
+                            y: row as f32 * TILE,
+                            h: rand::gen_range(3.0, 6.0),
+                            sway_offset: rand::gen_range(0.0, std::f32::consts::TAU),
+                        });
+                    }
+                }
+            }
+        }
+        grass_tufts
+    }
+
     fn reset_game(&mut self) {
-        let (map, enemies, pickups) = generate_level();
+        self.current_level = 0;
+        self.build_level(0);
+        self.player.score = 0;
+    }
+
+    fn build_level(&mut self, lvl: usize) {
+        let (map, enemies, pickups, level_cols) = generate_level(lvl);
         self.map = map;
         self.enemies = enemies;
         self.pickups = pickups;
+        self.level_cols = level_cols;
         self.projectiles.clear();
         self.particles.clear();
         self.dash_ghosts.clear();
         self.wall_sparks.clear();
         self.hit_stop = 0;
-        self.player = Player::new(3.0 * TILE, 24.0 * TILE);
+        self.player.x = 3.0 * TILE;
+        self.player.y = 24.0 * TILE;
+        self.player.vx = 0.0;
+        self.player.vy = 0.0;
+        self.player.dead = false;
+        self.player.hp = self.player.max_hp;
+        self.player.invuln = 0;
+        self.player.shuriken = 10;
         self.camera = Camera { x: 0.0, y: 0.0 };
         self.shake_timer = 0;
         self.death_timer = 0;
         self.frame = 0;
+        self.level_name = LEVEL_SUBTITLES[lvl.min(2)].to_string();
+        self.env_signs = env_signs_for_level(lvl);
+        self.grass_tufts = Self::generate_grass(&self.map, self.level_cols);
+    }
+
+    fn show_story(&mut self, lines: Vec<String>, callback: StoryCallback) {
+        self.phase = GamePhase::Story;
+        self.story_lines = lines;
+        self.story_char_index = 0;
+        let full_text = self.story_lines.join("\n");
+        self.story_displayed = String::new();
+        self.story_type_timer = 0;
+        self.story_skip_ready = false;
+        self.story_callback = callback;
+        // store full text in story_displayed capacity
+        let _ = full_text; // we'll reconstruct from story_lines each frame
+    }
+
+    fn story_full_text(&self) -> String {
+        self.story_lines.join("\n")
+    }
+
+    fn advance_level(&mut self) {
+        let post_index = self.current_level;
+        let lines = story_post(post_index);
+        self.show_story(lines, StoryCallback::AdvanceAfterPost);
+    }
+
+    fn begin_level(&mut self) {
+        self.build_level(self.current_level);
+        self.phase = GamePhase::Playing;
     }
 
     fn start_shake(&mut self, intensity: f32, frames: i32) {
@@ -943,14 +1289,78 @@ impl Game {
             GamePhase::Paused => self.update_paused(),
             GamePhase::Death => self.update_death(),
             GamePhase::GameOver => self.update_game_over(),
-            GamePhase::Victory => self.update_title(),
+            GamePhase::Victory => self.update_victory(),
+            GamePhase::Story => self.update_story(),
         }
     }
 
     fn update_title(&mut self) {
         if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::X) {
             self.reset_game();
-            self.phase = GamePhase::Playing;
+            // Show backstory first, then level intro, then begin
+            let lines = story_pre(0);
+            self.show_story(lines, StoryCallback::StartLevelIntro);
+        }
+    }
+
+    fn update_victory(&mut self) {
+        if is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::X) {
+            self.phase = GamePhase::Title;
+        }
+    }
+
+    fn update_story(&mut self) {
+        let full_text = self.story_full_text();
+        self.story_type_timer += 1;
+        if self.story_type_timer >= 2 && self.story_char_index < full_text.len() {
+            self.story_char_index += 1;
+            // Safely slice at char boundary
+            let mut end = self.story_char_index;
+            while end < full_text.len() && !full_text.is_char_boundary(end) {
+                end += 1;
+            }
+            self.story_displayed = full_text[..end].to_string();
+            self.story_char_index = end;
+            self.story_type_timer = 0;
+        }
+        if self.story_char_index >= full_text.len() {
+            self.story_skip_ready = true;
+        }
+
+        // Z/Enter: skip or advance
+        if is_key_pressed(KeyCode::Z) || is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::X) {
+            if !self.story_skip_ready {
+                // Skip to end
+                self.story_displayed = full_text;
+                self.story_char_index = self.story_displayed.len();
+                self.story_skip_ready = true;
+            } else {
+                // Advance
+                let cb = self.story_callback;
+                self.story_callback = StoryCallback::None;
+                match cb {
+                    StoryCallback::StartLevelIntro => {
+                        // Show the level-specific intro (index = current_level + 1)
+                        let lines = story_pre(self.current_level + 1);
+                        self.show_story(lines, StoryCallback::BeginLevel);
+                    }
+                    StoryCallback::BeginLevel => {
+                        self.begin_level();
+                    }
+                    StoryCallback::AdvanceAfterPost => {
+                        self.current_level += 1;
+                        if self.current_level > 2 {
+                            self.phase = GamePhase::Victory;
+                        } else {
+                            let lines = story_pre(self.current_level + 1);
+                            self.show_story(lines, StoryCallback::BeginLevel);
+                        }
+                    }
+                    _ => {
+                        self.phase = GamePhase::Playing;
+                    }
+                }
+            }
         }
     }
 
@@ -1043,9 +1453,10 @@ impl Game {
             self.shake_timer -= 1;
         }
 
-        // Victory check: reach right end of level
-        if self.player.x > (MAP_COLS as f32 - 5.0) * TILE {
-            self.phase = GamePhase::Victory;
+        // Level end check: reach end platform area
+        let end_zone = (self.level_cols as f32 - 12.0) * TILE;
+        if self.player.x > end_zone {
+            self.advance_level();
         }
     }
 
@@ -1303,7 +1714,7 @@ impl Game {
 
         // Clamp position
         if p.x < 0.0 { p.x = 0.0; }
-        let max_x = MAP_COLS as f32 * TILE - p.w;
+        let max_x = self.level_cols as f32 * TILE - p.w;
         if p.x > max_x { p.x = max_x; }
 
         // Fall death
@@ -1638,7 +2049,7 @@ impl Game {
         if self.camera.x < 0.0 {
             self.camera.x = 0.0;
         }
-        let max_cam = MAP_COLS as f32 * TILE - SCREEN_W;
+        let max_cam = self.level_cols as f32 * TILE - SCREEN_W;
         if self.camera.x > max_cam {
             self.camera.x = max_cam;
         }
@@ -1664,6 +2075,7 @@ impl Game {
             GamePhase::Death => self.draw_game(),
             GamePhase::GameOver => self.draw_game_over(),
             GamePhase::Victory => self.draw_victory(),
+            GamePhase::Story => self.draw_story(),
         }
     }
 
@@ -1703,11 +2115,17 @@ impl Game {
         // Main
         draw_text(title, SCREEN_W * 0.5 - tw * 0.5, 160.0, title_size, Color::new(0.9, 0.1, 0.1, 1.0));
 
-        // Subtitle
-        let sub = "Ninja Platformer";
+        // Crimson Oath subtitle
+        let sub = "THE CRIMSON OATH";
         let sub_size = 20.0;
         let sw = sub.len() as f32 * sub_size * 0.45;
-        draw_text(sub, SCREEN_W * 0.5 - sw * 0.5, 195.0, sub_size, Color::new(0.7, 0.7, 0.7, 1.0));
+        draw_text(sub, SCREEN_W * 0.5 - sw * 0.5, 195.0, sub_size, Color::new(0.9, 0.3, 0.3, 1.0));
+
+        // Tagline
+        let tag = "A tale of honor and betrayal";
+        let tag_size = 14.0;
+        let tw2 = tag.len() as f32 * tag_size * 0.38;
+        draw_text(tag, SCREEN_W * 0.5 - tw2 * 0.5, 215.0, tag_size, Color::new(0.7, 0.7, 0.7, 1.0));
 
         // Ninja silhouette (simple)
         draw_rectangle(SCREEN_W * 0.5 - 12.0, 230.0, 24.0, 32.0, Color::new(0.15, 0.15, 0.15, 1.0));
@@ -1785,6 +2203,7 @@ impl Game {
         self.draw_foreground_grass(cam_x, cam_y);
 
         self.draw_hud();
+        self.draw_env_signs(cam_x);
 
         // Death flash
         if self.phase == GamePhase::Death && self.death_timer < 10 {
@@ -1879,7 +2298,7 @@ impl Game {
 
         for row in start_row..end_row {
             for col in start_col..end_col {
-                if col < 0 || col >= MAP_COLS as isize || row < 0 || row >= MAP_ROWS as isize {
+                if col < 0 || col >= self.level_cols as isize || row < 0 || row >= MAP_ROWS as isize {
                     continue;
                 }
                 let tile = self.map[row as usize][col as usize];
@@ -2163,10 +2582,16 @@ impl Game {
             }
         }
 
-        // Level name centered
-        let name_size = 18.0;
-        let nw = self.level_name.len() as f32 * name_size * 0.42;
-        draw_text(&self.level_name, SCREEN_W * 0.5 - nw * 0.5, 22.0, name_size, Color::new(0.8, 0.8, 0.9, 1.0));
+        // Level trial name centered
+        let trial_name = LEVEL_NAMES[self.current_level.min(2)];
+        let name_size = 16.0;
+        let nw = trial_name.len() as f32 * name_size * 0.42;
+        draw_text(trial_name, SCREEN_W * 0.5 - nw * 0.5, 18.0, name_size, Color::new(0.8, 0.8, 0.9, 1.0));
+
+        // Level subtitle
+        let sub_size = 12.0;
+        let sw = self.level_name.len() as f32 * sub_size * 0.42;
+        draw_text(&self.level_name, SCREEN_W * 0.5 - sw * 0.5, 30.0, sub_size, Color::new(0.6, 0.6, 0.7, 1.0));
 
         // Score top-right
         let score_text = format!("{:08}", self.player.score);
@@ -2291,32 +2716,123 @@ impl Game {
     }
 
     fn draw_victory(&self) {
-        // Gradient background
+        // Dark crimson gradient background
         for y in 0..SCREEN_H as i32 {
             let t = y as f32 / SCREEN_H;
-            draw_rectangle(0.0, y as f32, SCREEN_W, 1.0, Color::new(0.0, 0.05 + t * 0.1, 0.15, 1.0));
+            draw_rectangle(0.0, y as f32, SCREEN_W, 1.0, Color::new(0.02 + t * 0.1, 0.0, 0.0, 1.0));
         }
 
-        let txt = "MISSION COMPLETE";
-        let size = 40.0;
+        // Title
+        let txt = "THE CRIMSON OATH";
+        let size = 36.0;
         let w = txt.len() as f32 * size * 0.45;
-        draw_text(txt, SCREEN_W * 0.5 - w * 0.5, SCREEN_H * 0.3, size, Color::new(0.0, 1.0, 0.5, 1.0));
+        draw_text(txt, SCREEN_W * 0.5 - w * 0.5, 60.0, size, Color::new(0.9, 0.27, 0.27, 1.0));
 
-        let score = format!("Final Score: {:08}", self.player.score);
-        let ss = 24.0;
-        let sw = score.len() as f32 * ss * 0.42;
-        draw_text(&score, SCREEN_W * 0.5 - sw * 0.5, SCREEN_H * 0.45, ss, YELLOW);
+        let sub = "COMPLETE";
+        let sub_size = 22.0;
+        let sw = sub.len() as f32 * sub_size * 0.45;
+        draw_text(sub, SCREEN_W * 0.5 - sw * 0.5, 90.0, sub_size, Color::new(1.0, 0.67, 0.0, 1.0));
 
-        let bonus_text = "Time Bonus: +1000   Completion: +2000";
-        let bs = 18.0;
-        let bw = bonus_text.len() as f32 * bs * 0.42;
-        draw_text(bonus_text, SCREEN_W * 0.5 - bw * 0.5, SCREEN_H * 0.55, bs, WHITE);
+        // Ending text
+        let end_lines = [
+            "The three trials are finished.",
+            "The truth stands revealed.",
+            "",
+            "Sensei Takeshi saved the Shadow Lotus",
+            "by slaying the Shogun who ordered",
+            "the clan's destruction.",
+            "",
+            "He framed his finest student to shield",
+            "the clan from retribution.",
+            "",
+            "Now Kaede carries the Crimson Blade",
+            "and leads the Shadow Lotus forward.",
+            "",
+            "The oath is fulfilled.",
+        ];
+        let line_size = 14.0;
+        for (i, line) in end_lines.iter().enumerate() {
+            let lw = line.len() as f32 * line_size * 0.38;
+            draw_text(line, SCREEN_W * 0.5 - lw * 0.5, 130.0 + i as f32 * 16.0, line_size, Color::new(0.8, 0.8, 0.8, 1.0));
+        }
+
+        // Score
+        let score = format!("FINAL SCORE: {:08}", self.player.score);
+        let ss = 18.0;
+        let score_w = score.len() as f32 * ss * 0.42;
+        draw_text(&score, SCREEN_W * 0.5 - score_w * 0.5, SCREEN_H - 80.0, ss, YELLOW);
 
         if self.blink_timer < 40 {
             let hint = "PRESS START";
             let hs = 22.0;
             let hw = hint.len() as f32 * hs * 0.42;
-            draw_text(hint, SCREEN_W * 0.5 - hw * 0.5, SCREEN_H * 0.7, hs, WHITE);
+            draw_text(hint, SCREEN_W * 0.5 - hw * 0.5, SCREEN_H - 40.0, hs, WHITE);
+        }
+    }
+
+    fn draw_story(&self) {
+        // Dark background
+        for y in 0..SCREEN_H as i32 {
+            let t = y as f32 / SCREEN_H;
+            draw_rectangle(0.0, y as f32, SCREEN_W, 1.0, Color::new(0.02, 0.0, 0.03 + t * 0.05, 1.0));
+        }
+
+        // Decorative border
+        draw_rectangle_lines(30.0, 30.0, SCREEN_W - 60.0, SCREEN_H - 60.0, 2.0, Color::new(0.5, 0.0, 0.0, 1.0));
+        draw_rectangle_lines(34.0, 34.0, SCREEN_W - 68.0, SCREEN_H - 68.0, 2.0, Color::new(0.25, 0.0, 0.0, 1.0));
+
+        // Draw typewriter text
+        let lines: Vec<&str> = self.story_displayed.split('\n').collect();
+        let start_y = 80.0;
+        let line_h = 18.0;
+        let text_size = 14.0;
+        for (i, line) in lines.iter().enumerate() {
+            let color = if line.starts_with("---") {
+                Color::new(0.9, 0.27, 0.27, 1.0)
+            } else if line.starts_with("TAKESHI:") || line.starts_with("'") {
+                Color::new(1.0, 0.67, 0.0, 1.0)
+            } else {
+                Color::new(0.8, 0.8, 0.8, 1.0)
+            };
+            draw_text(line, 60.0, start_y + i as f32 * line_h, text_size, color);
+        }
+
+        // Prompt
+        if self.story_skip_ready && (self.frame / 30) % 2 == 0 {
+            let prompt = "PRESS Z / ENTER TO CONTINUE";
+            let ps = 14.0;
+            let pw = prompt.len() as f32 * ps * 0.38;
+            draw_text(prompt, SCREEN_W * 0.5 - pw * 0.5, SCREEN_H - 50.0, ps, YELLOW);
+        } else if !self.story_skip_ready {
+            let prompt = "PRESS Z / ENTER TO SKIP";
+            let ps = 12.0;
+            let pw = prompt.len() as f32 * ps * 0.38;
+            draw_text(prompt, SCREEN_W * 0.5 - pw * 0.5, SCREEN_H - 50.0, ps, Color::new(0.4, 0.4, 0.4, 1.0));
+        }
+    }
+
+    fn draw_env_signs(&self, cam_x: f32) {
+        if self.phase != GamePhase::Playing {
+            return;
+        }
+        for sign in &self.env_signs {
+            let sign_world_x = sign.tx as f32 * TILE;
+            let dist = (self.player.x - sign_world_x).abs();
+            if dist < 120.0 {
+                let alpha = (1.0 - dist / 120.0).max(0.0) * 0.7;
+                let pulse = 0.7 + (self.frame as f32 * 0.04).sin() * 0.3;
+                let a = alpha * pulse;
+                let color = match self.current_level {
+                    0 => Color::new(0.27, 0.67, 0.5, a),
+                    1 => Color::new(0.67, 0.4, 0.4, a),
+                    _ => Color::new(0.8, 0.27, 0.27, a),
+                };
+                let sx = sign_world_x - cam_x;
+                let sy = 70.0 + (self.frame as f32 * 0.03).sin() * 4.0;
+                let text_size = 12.0;
+                let tw = sign.text.len() as f32 * text_size * 0.38;
+                draw_text(sign.text, sx - tw * 0.5, sy, text_size, color);
+            }
         }
     }
 }

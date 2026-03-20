@@ -229,6 +229,7 @@ fn create_sprite(art: &[&str], colors: &[Color]) -> Texture2D {
 enum GameState {
     Start,
     Story,
+    LevelStory,
     Playing,
     GameOver,
     Win,
@@ -361,13 +362,68 @@ struct LevelText {
     col: f32,
     row: f32,
     text: &'static str,
+    ghost: bool,
 }
 
 struct LevelDef {
+    name: &'static str,
     lava_speed: f32,
     map: &'static [&'static str],
     texts: &'static [LevelText],
 }
+
+// ---------------------------------------------------------------------------
+// Story data (matches web version)
+// ---------------------------------------------------------------------------
+static STORY_INTRO: &[&str] = &[
+    "The Obsidian Spire has awakened after a thousand years.",
+    "Its corruption spreads across the land --",
+    "forests wither, rivers turn black.",
+    "The Crystal Mages are gone. All but one.",
+    "",
+    "You are Vael, the last of your order.",
+    "The Elder Council has sent you on a final mission:",
+    "ascend the Spire and destroy its heart",
+    "before the corruption consumes everything.",
+];
+
+static STORY_AFTER_LEVEL_1: &[&str] = &[
+    "The walls pulse with a dark rhythm.",
+    "You feel it in your chest -- familiar,",
+    "like a heartbeat that isn't your own.",
+    "",
+    "Something inside the Spire recognizes you.",
+];
+
+static STORY_AFTER_LEVEL_2: &[&str] = &[
+    "The whispers grow louder.",
+    "Fragments of memory flash before your eyes --",
+    "a child running through these very halls, laughing.",
+    "",
+    "Your hands begin to glow with the same",
+    "dark energy as the walls.",
+];
+
+static STORY_VICTORY: &[&str] = &[
+    "You reach the heart chamber.",
+    "The pulsing crystal at the center is... familiar.",
+    "",
+    "You place your hand on it",
+    "and remember everything.",
+    "",
+    "You ARE the heart.",
+    "",
+    "The Crystal Mages didn't send you",
+    "to destroy the Spire --",
+    "they sent you home, hoping you'd merge back",
+    "and end your rebellion.",
+    "",
+    "But you are Vael now.",
+    "You shatter the crystal,",
+    "and the Spire crumbles.",
+    "",
+    "Free at last.",
+];
 
 struct Sprites {
     mage: Texture2D,
@@ -424,14 +480,14 @@ static LEVEL_1_MAP: &[&str] = &[
 ];
 
 static LEVEL_1_TEXTS: &[LevelText] = &[
-    LevelText { col: 2.0, row: 28.0, text: "Welcome to the Obsidian Spire." },
-    LevelText { col: 12.0, row: 26.0, text: "Arrow Keys/D-Pad to Move" },
-    LevelText { col: 14.0, row: 24.0, text: "Z/Space to Jump" },
-    LevelText { col: 4.0, row: 18.0, text: "Press Jump again in mid-air to Double Jump" },
-    LevelText { col: 6.0, row: 14.0, text: "Press X to shoot fireballs" },
-    LevelText { col: 2.0, row: 10.0, text: "Hold Jump to fire your Anchor and mine Stone (%)" },
-    LevelText { col: 2.0, row: 5.0, text: "The Anchor attaches to Bricks (#). Swing!" },
-    LevelText { col: 16.0, row: 5.0, text: "Mine Chests (C) for Gems" },
+    LevelText { col: 2.0, row: 28.0, text: "The corruption starts here. Twisted vines choke the stone.", ghost: false },
+    LevelText { col: 12.0, row: 26.0, text: "Arrow Keys/D-Pad to Move", ghost: false },
+    LevelText { col: 14.0, row: 24.0, text: "Z/Space to Jump", ghost: false },
+    LevelText { col: 4.0, row: 18.0, text: "Press Jump again in mid-air to Double Jump", ghost: false },
+    LevelText { col: 6.0, row: 14.0, text: "Press X to shoot crystal shards", ghost: false },
+    LevelText { col: 2.0, row: 10.0, text: "Hold Jump to fire your Anchor and mine Stone (%)", ghost: false },
+    LevelText { col: 2.0, row: 5.0, text: "The Anchor attaches to Bricks (#). Swing!", ghost: false },
+    LevelText { col: 16.0, row: 5.0, text: "Mine Chests (C) for Gems", ghost: false },
 ];
 
 static LEVEL_2_MAP: &[&str] = &[
@@ -500,13 +556,24 @@ static LEVEL_3_MAP: &[&str] = &[
 ];
 
 static LEVEL_DEFS: [LevelDef; 3] = [
-    LevelDef { lava_speed: 0.1, map: LEVEL_1_MAP, texts: LEVEL_1_TEXTS },
-    LevelDef { lava_speed: 0.3, map: LEVEL_2_MAP, texts: LEVEL_2_TEXTS },
-    LevelDef { lava_speed: 0.5, map: LEVEL_3_MAP, texts: LEVEL_3_TEXTS },
+    LevelDef { name: "THE OVERGROWN DEPTHS", lava_speed: 0.1, map: LEVEL_1_MAP, texts: LEVEL_1_TEXTS },
+    LevelDef { name: "THE FROZEN ARCHIVE", lava_speed: 0.3, map: LEVEL_2_MAP, texts: LEVEL_2_TEXTS },
+    LevelDef { name: "THE LIVING CORE", lava_speed: 0.5, map: LEVEL_3_MAP, texts: LEVEL_3_TEXTS },
 ];
 
-static LEVEL_2_TEXTS: &[LevelText] = &[];
-static LEVEL_3_TEXTS: &[LevelText] = &[];
+static LEVEL_2_TEXTS: &[LevelText] = &[
+    LevelText { col: 3.0, row: 29.0, text: "We tried to contain it...", ghost: true },
+    LevelText { col: 14.0, row: 22.0, text: "The heart was never destroyed...", ghost: true },
+    LevelText { col: 5.0, row: 16.0, text: "it escaped...", ghost: true },
+    LevelText { col: 10.0, row: 9.0, text: "It took the form of a child...", ghost: true },
+    LevelText { col: 4.0, row: 4.0, text: "The archive remembers what you have forgotten.", ghost: true },
+];
+
+static LEVEL_3_TEXTS: &[LevelText] = &[
+    LevelText { col: 2.0, row: 25.0, text: "The walls breathe. The Spire is alive.", ghost: true },
+    LevelText { col: 6.0, row: 14.0, text: "You feel the pull growing stronger...", ghost: true },
+    LevelText { col: 3.0, row: 4.0, text: "TURN BACK, CHILD. YOU CANNOT DESTROY WHAT YOU ARE.", ghost: true },
+];
 
 fn get_level(idx: usize) -> &'static LevelDef {
     &LEVEL_DEFS[idx.min(2)]
@@ -636,6 +703,14 @@ struct World {
     hit_stop_frames: i32,
     dust_motes: Vec<DustMote>,
     trail_particles: Vec<Particle>,
+
+    // Story typewriter state
+    story_lines: &'static [&'static str],
+    story_line_index: usize,
+    story_char_index: usize,
+    story_frame_counter: u64,
+    story_full_text: String,
+    story_is_victory: bool,
 }
 
 impl World {
@@ -678,6 +753,13 @@ impl World {
             hit_stop_frames: 0,
             dust_motes: Vec::new(),
             trail_particles: Vec::new(),
+
+            story_lines: &[],
+            story_line_index: 0,
+            story_char_index: 0,
+            story_frame_counter: 0,
+            story_full_text: String::new(),
+            story_is_victory: false,
         };
         // Initialize ambient dust motes
         for _ in 0..20 {
@@ -777,6 +859,16 @@ impl World {
         if mag > self.shake_magnitude {
             self.shake_magnitude = mag;
         }
+    }
+
+    fn init_story_screen(&mut self, lines: &'static [&'static str], is_victory: bool) {
+        self.story_lines = lines;
+        self.story_line_index = 0;
+        self.story_char_index = 0;
+        self.story_frame_counter = 0;
+        self.story_full_text = String::new();
+        self.story_is_victory = is_victory;
+        self.state = GameState::LevelStory;
     }
 
     fn add_score(&mut self, amount: i32, x: f32, y: f32) {
@@ -1329,9 +1421,14 @@ impl World {
             if overlaps(self.player.x, self.player.y, self.player.w, self.player.h,
                         goal_x, goal_y, goal_w, goal_h)
             {
+                let just_finished = self.current_level;
                 self.current_level += 1;
                 if self.current_level >= 3 {
-                    self.state = GameState::Win;
+                    self.init_story_screen(STORY_VICTORY, true);
+                } else if just_finished == 0 {
+                    self.init_story_screen(STORY_AFTER_LEVEL_1, false);
+                } else if just_finished == 1 {
+                    self.init_story_screen(STORY_AFTER_LEVEL_2, false);
                 } else {
                     self.reset_game(false);
                 }
@@ -1667,9 +1764,11 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
     if world.state == GameState::Playing {
         let score_str = format!("SCORE: {}", world.score);
         draw_text(&score_str, 20.0, 40.0, 20.0, WHITE);
-        let level_str = format!("LEVEL: {}", world.current_level + 1);
-        let lw = measure_text(&level_str, None, 20, 1.0);
-        draw_text(&level_str, SCREEN_W - 20.0 - lw.width, 40.0, 20.0, WHITE);
+        let level_names = ["THE OVERGROWN DEPTHS", "THE FROZEN ARCHIVE", "THE LIVING CORE"];
+        let level_str = level_names[world.current_level.min(2) as usize];
+        let lw = measure_text(level_str, None, 14, 1.0);
+        draw_text(level_str, SCREEN_W - 20.0 - lw.width, 40.0, 14.0,
+            Color::new(0.7, 0.6, 1.0, 0.8));
     }
 
     // ----- SCREEN OVERLAYS -----
@@ -1719,58 +1818,116 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
                         Color::new(1.0, 0.53, 0.0, 0.3));
                 }
             }
-            draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0, SCREEN_H / 2.0 - 20.0, 42.0, WHITE);
+            draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0, SCREEN_H / 2.0 - 40.0, 42.0, WHITE);
+
+            // Subtitle
+            let sub = "The last Crystal Mage ascends";
+            let subm = measure_text(sub, None, 16, 1.0);
+            draw_text(sub, SCREEN_W / 2.0 - subm.width / 2.0, SCREEN_H / 2.0 + 5.0, 16.0,
+                Color::new(0.7, 0.6, 1.0, 0.8));
 
             // Blinking prompt
             let blink = ((world.time_counter * 2.0) as i32) % 2 == 0;
             if blink {
                 let prompt = "Press B/Z/Space to Begin";
                 let pm = measure_text(prompt, None, 20, 1.0);
-                draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 30.0, 20.0,
+                draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 50.0, 20.0,
                     color_u8!(255, 170, 0, 255));
             }
         }
         GameState::Story => {
-            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.0, 0.0, 0.0, 0.9));
-            let lines = [
-                "The Archmage has stolen the Kingdom's Mana Gems.",
-                "He hides at the top of the volcanic Obsidian Spire.",
-                "As a Micro Mage, you must scale the spire,",
-                "reclaim the gems, and outrun the rising lava.",
+            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.02, 0.0, 0.06, 0.95));
+            let story_sets: [&[&str]; 4] = [
+                &[ // Intro
+                    "The Obsidian Spire has awakened after a thousand years.",
+                    "Its corruption spreads — forests wither, rivers turn black.",
+                    "You are Vael, the last Crystal Mage.",
+                    "Ascend the Spire. Destroy its heart.",
+                ],
+                &[ // After Level 1
+                    "The walls pulse with a dark rhythm.",
+                    "You feel it in your chest — familiar,",
+                    "like a heartbeat that isn't your own.",
+                    "Something inside the Spire recognizes you.",
+                ],
+                &[ // After Level 2
+                    "Fragments of memory flash before your eyes —",
+                    "a child running through these halls, laughing.",
+                    "Your hands glow with the same dark energy",
+                    "as the walls. The whispers grow louder.",
+                ],
+                &[ // Victory
+                    "You reach the heart. The pulsing crystal is... familiar.",
+                    "You ARE the heart. A fragment that gained free will.",
+                    "The Mages sent you home, hoping you'd merge back.",
+                    "But you are Vael now. You shatter the crystal.",
+                    "Free at last.",
+                ],
             ];
-            for (idx, line) in lines.iter().enumerate() {
-                let m = measure_text(line, None, 20, 1.0);
+            let idx = world.current_level.min(3) as usize;
+            let lines = story_sets[idx];
+            for (i, line) in lines.iter().enumerate() {
+                let m = measure_text(line, None, 18, 1.0);
                 draw_text(line, SCREEN_W / 2.0 - m.width / 2.0,
-                    SCREEN_H / 2.0 - 60.0 + idx as f32 * 40.0, 20.0, WHITE);
+                    SCREEN_H / 2.0 - 60.0 + i as f32 * 36.0, 18.0,
+                    Color::new(0.78, 0.7, 1.0, 1.0));
             }
-            let prompt = "Press B/Z/Space to enter the Spire...";
-            let pm = measure_text(prompt, None, 20, 1.0);
-            draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 130.0, 20.0,
-                color_u8!(255, 170, 0, 255));
+            let prompt = "Press B/Z/Space to continue...";
+            let pm = measure_text(prompt, None, 16, 1.0);
+            let blink = ((world.time_counter * 2.0) as i32) % 2 == 0;
+            if blink {
+                draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 140.0, 16.0,
+                    color_u8!(255, 170, 0, 255));
+            }
         }
         GameState::GameOver => {
-            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.78, 0.0, 0.0, 0.5));
-            let title = "YOU BURNED";
-            let tm = measure_text(title, None, 48, 1.0);
-            draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0, SCREEN_H / 2.0 - 20.0, 48.0, WHITE);
+            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.3, 0.0, 0.1, 0.7));
+            let title = "THE SPIRE CLAIMS YOU";
+            let tm = measure_text(title, None, 40, 1.0);
+            draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0, SCREEN_H / 2.0 - 40.0, 40.0,
+                Color::new(1.0, 0.2, 0.2, 1.0));
+            let sub = "The corruption swallows another soul...";
+            let subm = measure_text(sub, None, 14, 1.0);
+            draw_text(sub, SCREEN_W / 2.0 - subm.width / 2.0, SCREEN_H / 2.0, 14.0,
+                Color::new(0.7, 0.5, 0.5, 0.8));
             let score_str = format!("FINAL SCORE: {}", world.score);
             let sm = measure_text(&score_str, None, 24, 1.0);
-            draw_text(&score_str, SCREEN_W / 2.0 - sm.width / 2.0, SCREEN_H / 2.0 + 30.0, 24.0, WHITE);
+            draw_text(&score_str, SCREEN_W / 2.0 - sm.width / 2.0, SCREEN_H / 2.0 + 35.0, 24.0, WHITE);
             let prompt = "Press B/Z to Restart";
-            let pm = measure_text(prompt, None, 24, 1.0);
-            draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 70.0, 24.0, WHITE);
+            let pm = measure_text(prompt, None, 20, 1.0);
+            draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 70.0, 20.0, WHITE);
         }
         GameState::Win => {
-            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.0, 0.78, 0.0, 0.5));
-            let title = "YOU ESCAPED THE SPIRE!";
-            let tm = measure_text(title, None, 48, 1.0);
-            draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0, SCREEN_H / 2.0 - 20.0, 48.0, WHITE);
+            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.08, 0.0, 0.16, 0.9));
+            let title = "FREE AT LAST";
+            let tm = measure_text(title, None, 44, 1.0);
+            // Purple glow
+            for &ox in &[-2.0_f32, 2.0, 0.0] {
+                for &oy in &[-2.0_f32, 2.0, 0.0] {
+                    draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0 + ox, SCREEN_H / 2.0 - 80.0 + oy, 44.0,
+                        Color::new(0.6, 0.3, 1.0, 0.3));
+                }
+            }
+            draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0, SCREEN_H / 2.0 - 80.0, 44.0, WHITE);
+            let epilogue = [
+                "The Spire crumbles. Its corruption fades.",
+                "Vael walks into the dawn — no longer",
+                "the heart of darkness, but something new.",
+                "Something free.",
+            ];
+            for (i, line) in epilogue.iter().enumerate() {
+                let m = measure_text(line, None, 16, 1.0);
+                draw_text(line, SCREEN_W / 2.0 - m.width / 2.0,
+                    SCREEN_H / 2.0 - 20.0 + i as f32 * 28.0, 16.0,
+                    Color::new(0.78, 0.7, 1.0, 0.9));
+            }
             let score_str = format!("FINAL SCORE: {}", world.score);
-            let sm = measure_text(&score_str, None, 24, 1.0);
-            draw_text(&score_str, SCREEN_W / 2.0 - sm.width / 2.0, SCREEN_H / 2.0 + 30.0, 24.0, WHITE);
+            let sm = measure_text(&score_str, None, 22, 1.0);
+            draw_text(&score_str, SCREEN_W / 2.0 - sm.width / 2.0, SCREEN_H / 2.0 + 80.0, 22.0,
+                color_u8!(255, 255, 0, 255));
             let prompt = "Press B/Z to Play Again";
-            let pm = measure_text(prompt, None, 24, 1.0);
-            draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 70.0, 24.0, WHITE);
+            let pm = measure_text(prompt, None, 18, 1.0);
+            draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 120.0, 18.0, WHITE);
         }
         GameState::Playing => {} // already drawn above
     }
