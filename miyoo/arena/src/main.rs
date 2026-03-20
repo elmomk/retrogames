@@ -1461,32 +1461,36 @@ impl Game {
         }
 
         // ── Enemy-player collision ──
-        for enemy in &self.enemies {
-            if !enemy.alive || enemy.teleporting {
+        let mut contact_damage = false;
+        for i in 0..self.enemies.len() {
+            if !self.enemies[i].alive || self.enemies[i].teleporting {
                 continue;
             }
-            let half_e = enemy.size / 2.0;
+            let half_e = self.enemies[i].size / 2.0;
             let half_p = PLAYER_HITBOX / 2.0;
-            if (self.player.x - enemy.x).abs() < half_e + half_p
-                && (self.player.y - enemy.y).abs() < half_e + half_p
+            if (self.player.x - self.enemies[i].x).abs() < half_e + half_p
+                && (self.player.y - self.enemies[i].y).abs() < half_e + half_p
             {
-                self.player_take_damage(10.0);
+                contact_damage = true;
             }
+        }
+        if contact_damage {
+            self.player_take_damage(10.0);
         }
 
         // ── Update enemy bullets ──
-        for eb in self.enemy_bullets.iter_mut() {
-            if !eb.alive {
+        for i in 0..self.enemy_bullets.len() {
+            if !self.enemy_bullets[i].alive {
                 continue;
             }
 
             // Homing adjustment
-            if eb.homing {
-                let edx = player_x - eb.x;
-                let edy = player_y - eb.y;
+            if self.enemy_bullets[i].homing {
+                let edx = player_x - self.enemy_bullets[i].x;
+                let edy = player_y - self.enemy_bullets[i].y;
                 let target_angle = edy.atan2(edx);
-                let current_angle = eb.vy.atan2(eb.vx);
-                let speed = (eb.vx * eb.vx + eb.vy * eb.vy).sqrt();
+                let current_angle = self.enemy_bullets[i].vy.atan2(self.enemy_bullets[i].vx);
+                let speed = (self.enemy_bullets[i].vx * self.enemy_bullets[i].vx + self.enemy_bullets[i].vy * self.enemy_bullets[i].vy).sqrt();
                 let mut diff = target_angle - current_angle;
                 while diff > std::f32::consts::PI {
                     diff -= std::f32::consts::TAU;
@@ -1495,49 +1499,50 @@ impl Game {
                     diff += std::f32::consts::TAU;
                 }
                 let new_angle = current_angle + diff.clamp(-0.03, 0.03);
-                eb.vx = new_angle.cos() * speed;
-                eb.vy = new_angle.sin() * speed;
+                self.enemy_bullets[i].vx = new_angle.cos() * speed;
+                self.enemy_bullets[i].vy = new_angle.sin() * speed;
             }
 
-            eb.x += eb.vx;
-            eb.y += eb.vy;
+            self.enemy_bullets[i].x += self.enemy_bullets[i].vx;
+            self.enemy_bullets[i].y += self.enemy_bullets[i].vy;
 
             // Out of arena
-            if eb.x < ARENA_X || eb.x > ARENA_X + ARENA_W || eb.y < ARENA_Y || eb.y > ARENA_Y + ARENA_H
+            if self.enemy_bullets[i].x < ARENA_X || self.enemy_bullets[i].x > ARENA_X + ARENA_W || self.enemy_bullets[i].y < ARENA_Y || self.enemy_bullets[i].y > ARENA_Y + ARENA_H
             {
-                eb.alive = false;
+                self.enemy_bullets[i].alive = false;
                 continue;
             }
 
             // Hit player
             let half_p = PLAYER_HITBOX / 2.0;
-            if (eb.x - player_x).abs() < half_p + 4.0
-                && (eb.y - player_y).abs() < half_p + 4.0
+            if (self.enemy_bullets[i].x - player_x).abs() < half_p + 4.0
+                && (self.enemy_bullets[i].y - player_y).abs() < half_p + 4.0
             {
-                eb.alive = false;
-                self.player_take_damage(eb.damage);
+                self.enemy_bullets[i].alive = false;
+                let dmg = self.enemy_bullets[i].damage;
+                self.player_take_damage(dmg);
             }
         }
         self.enemy_bullets.retain(|b| b.alive);
 
         // ── Update pickups ──
-        for pickup in self.pickups.iter_mut() {
-            if !pickup.alive {
+        for i in 0..self.pickups.len() {
+            if !self.pickups[i].alive {
                 continue;
             }
-            pickup.timer -= dt;
-            if pickup.timer <= 0.0 {
-                pickup.alive = false;
+            self.pickups[i].timer -= dt;
+            if self.pickups[i].timer <= 0.0 {
+                self.pickups[i].alive = false;
                 continue;
             }
 
             // Check player collision
             let half_p = PLAYER_HITBOX / 2.0;
-            if (pickup.x - self.player.x).abs() < half_p + 8.0
-                && (pickup.y - self.player.y).abs() < half_p + 8.0
+            if (self.pickups[i].x - self.player.x).abs() < half_p + 8.0
+                && (self.pickups[i].y - self.player.y).abs() < half_p + 8.0
             {
-                pickup.alive = false;
-                match pickup.kind {
+                self.pickups[i].alive = false;
+                match self.pickups[i].kind {
                     PickupKind::Shotgun => {
                         self.player.ammo_shotgun += 20;
                         if self.player.current_weapon == WeaponType::Pistol {
@@ -1569,7 +1574,9 @@ impl Game {
                         self.player.freeze_timer = 5.0;
                     }
                 }
-                self.spawn_particles(pickup.x, pickup.y, YELLOW, 6);
+                let px = self.pickups[i].x;
+                let py = self.pickups[i].y;
+                self.spawn_particles(px, py, YELLOW, 6);
             }
         }
         self.pickups.retain(|p| p.alive);
@@ -1635,7 +1642,7 @@ impl Game {
                 // Scatter inward
                 let inward_x = (SCREEN_W / 2.0 - sx).signum();
                 let inward_y = (SCREEN_H / 2.0 - sy).signum();
-                let angle = rand::gen_range(-0.5, 0.5);
+                let angle: f32 = rand::gen_range(-0.5, 0.5);
                 let speed = rand::gen_range(1.5, 4.0);
                 self.particles.push(Particle {
                     x: sx,

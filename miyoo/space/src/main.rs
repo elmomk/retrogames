@@ -886,7 +886,8 @@ impl Game {
         }
 
         // ----- Collisions -----
-        // Player vs power-ups
+        // Player vs power-ups — collect particle spawns to avoid double mutable borrow
+        let mut powerup_particles: Vec<(f32, f32, Color)> = Vec::new();
         for p in self.power_ups.iter_mut() {
             if !p.alive { continue; }
             if Self::aabb(
@@ -900,18 +901,19 @@ impl Game {
                 match p.kind {
                     PowerUpKind::Weapon => {
                         self.player.weapon_level = (self.player.weapon_level + 1).min(4);
-                        self.spawn_particles(px2, py2, 12, c, 2.0);
                     }
                     PowerUpKind::Speed => {
                         self.player.speed_boost_timer = 600;
-                        self.spawn_particles(px2, py2, 12, c, 2.0);
                     }
                     PowerUpKind::Shield => {
                         self.player.shield_active = true;
-                        self.spawn_particles(px2, py2, 12, c, 2.0);
                     }
                 }
+                powerup_particles.push((px2, py2, c));
             }
+        }
+        for (px, py, c) in powerup_particles {
+            self.spawn_particles(px, py, 12, c, 2.0);
         }
 
         // Player bullets vs enemies
@@ -944,15 +946,13 @@ impl Game {
             }
         }
 
+        let mut hit_particles: Vec<(f32, f32, Color)> = Vec::new();
         for hit in &hits {
             self.bullets[hit.bullet_idx].alive = false;
             let e = &mut self.enemies[hit.enemy_idx];
             if !e.alive { continue; }
             e.hp -= 1;
-            let ex = e.x;
-            let ey = e.y;
-            let ec = e.color;
-            self.spawn_particles(ex, ey, 6, ec, 1.5);
+            hit_particles.push((e.x, e.y, e.color));
 
             if e.hp <= 0 {
                 e.alive = false;
@@ -967,6 +967,9 @@ impl Game {
                     h: e.h,
                 });
             }
+        }
+        for (px, py, c) in hit_particles {
+            self.spawn_particles(px, py, 6, c, 1.5);
         }
 
         for ke in &kill_events {

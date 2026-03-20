@@ -1930,6 +1930,7 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
             draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 120.0, 18.0, WHITE);
         }
         GameState::Playing => {} // already drawn above
+        GameState::LevelStory => {} // drawn via Story state above
     }
 
     // ----- CRT SCANLINE OVERLAY -----

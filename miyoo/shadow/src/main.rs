@@ -1570,7 +1570,8 @@ impl Game {
             p.attacking = ATTACK_DURATION;
             p.combo_timer = COMBO_WINDOW + ATTACK_DURATION;
             spawn_slash_particles(&mut self.particles, p.x + p.w * 0.5, p.y + p.h * 0.5, p.facing);
-            self.start_shake(2.0, 4);
+            self.shake_intensity = 2.0;
+            self.shake_timer = 4;
         }
 
         if p.attacking > 0 {
@@ -1705,12 +1706,10 @@ impl Game {
             }
         }
 
-        // Spike damage
+        // Spike damage — drop `p` borrow before calling self methods
         let prect = p.rect();
         let foot_tile = tile_at(&self.map, prect.x + prect.w * 0.5, prect.y + prect.h + 1.0);
-        if foot_tile == TILE_SPIKE && p.invuln <= 0 {
-            self.damage_player(1);
-        }
+        let spike_hit = foot_tile == TILE_SPIKE && p.invuln <= 0;
 
         // Clamp position
         if p.x < 0.0 { p.x = 0.0; }
@@ -1718,8 +1717,18 @@ impl Game {
         if p.x > max_x { p.x = max_x; }
 
         // Fall death
-        if p.y > MAP_ROWS as f32 * TILE {
+        let fell = p.y > MAP_ROWS as f32 * TILE;
+        if fell {
             p.hp = 0;
+        }
+
+        // End the mutable borrow on self.player before calling self methods
+        let _ = p;
+
+        if spike_hit {
+            self.damage_player(1);
+        }
+        if fell {
             self.player_die();
         }
     }
@@ -1926,6 +1935,7 @@ impl Game {
 
     fn update_projectiles(&mut self) {
         let p_rect = self.player.rect();
+        let mut player_damage = 0;
 
         for proj in self.projectiles.iter_mut() {
             if !proj.active {
@@ -1984,16 +1994,21 @@ impl Game {
                     }
                 }
                 ProjOwner::Enemy => {
-                    // Hit player
+                    // Hit player — defer damage to avoid borrow conflict
                     if rects_overlap(&proj.rect(), &p_rect) {
                         proj.active = false;
-                        self.damage_player(proj.damage);
+                        player_damage += proj.damage;
                     }
                 }
             }
         }
 
         self.projectiles.retain(|p| p.active);
+
+        // Apply deferred player damage
+        if player_damage > 0 {
+            self.damage_player(player_damage);
+        }
     }
 
     fn update_particles(&mut self) {

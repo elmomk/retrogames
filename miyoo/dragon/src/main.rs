@@ -696,6 +696,7 @@ impl Game {
                 kind,
                 active: true,
             });
+        }
         // Reset boss intro tracking
         let num_waves = self.stages[idx].waves.len();
         self.boss_intro_shown = vec![false; num_waves];
@@ -2104,26 +2105,29 @@ fn update_boss_dragon_king(game: &mut Game, i: usize, dx: f32, dy: f32, dist: f3
 // Projectiles
 // ---------------------------------------------------------------------------
 fn update_projectiles(game: &mut Game, dt: f32) {
-    for proj in &mut game.projectiles {
-        if !proj.active {
+    for i in 0..game.projectiles.len() {
+        if !game.projectiles[i].active {
             continue;
         }
-        proj.x += proj.vx;
-        proj.y += proj.vy;
-        proj.life -= dt;
-        if proj.life <= 0.0 {
-            proj.active = false;
+        game.projectiles[i].x += game.projectiles[i].vx;
+        game.projectiles[i].y += game.projectiles[i].vy;
+        game.projectiles[i].life -= dt;
+        if game.projectiles[i].life <= 0.0 {
+            game.projectiles[i].active = false;
             continue;
         }
 
         // Hit player
+        let proj_x = game.projectiles[i].x;
+        let proj_y = game.projectiles[i].y;
+        let proj_damage = game.projectiles[i].damage;
         let pr = game.player.body_rect();
-        let proj_rect = HitRect::new(proj.x - 6.0, proj.y - 6.0, 12.0, 12.0);
+        let proj_rect = HitRect::new(proj_x - 6.0, proj_y - 6.0, 12.0, 12.0);
         if rects_overlap(&pr, &proj_rect)
-            && (game.player.y - proj.y - 6.0).abs() < DEPTH_MATCH
+            && (game.player.y - proj_y - 6.0).abs() < DEPTH_MATCH
         {
-            hurt_player(game, proj.damage);
-            proj.active = false;
+            hurt_player(game, proj_damage);
+            game.projectiles[i].active = false;
         }
     }
     game.projectiles.retain(|p| p.active);
