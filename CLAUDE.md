@@ -45,7 +45,7 @@ CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc \
   cargo build --release --target armv7-unknown-linux-gnueabihf
 ```
 
-Target: ARM Cortex-A7 (`armv7-unknown-linux-gnueabihf`), Rust Edition 2021.
+Target: ARM Cortex-A7 (`armv7-unknown-linux-gnueabihf`), Rust Edition 2024.
 
 ## CI/CD
 

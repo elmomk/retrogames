@@ -16,6 +16,17 @@ A collection of retro browser games playable on any device, with native ports fo
 | Chrome Viper | Cyberpunk Shooter | [Play](web/cyber/) | [Port](miyoo/cyber/) |
 | Neon Runner | Cyberpunk Platformer | [Play](web/neon/) | [Port](miyoo/neon/) |
 
+### Screenshots
+
+| | | |
+|:---:|:---:|:---:|
+| ![Nano Wizards](screenshots/micro.png) | ![Neon Defender](screenshots/space.png) | ![Shadow Blade](screenshots/shadow.png) |
+| Nano Wizards | Neon Defender | Shadow Blade |
+| ![Arena Blitz](screenshots/arena.png) | ![Dragon Fury](screenshots/dragon.png) | ![Pixel Knight](screenshots/mariolike.png) |
+| Arena Blitz | Dragon Fury | Pixel Knight |
+| ![Nova Evader](screenshots/nova.png) | ![Chrome Viper](screenshots/cyber.png) | ![Neon Runner](screenshots/neon.png) |
+| Nova Evader | Chrome Viper | Neon Runner |
+
 ## Features
 
 - Single-file HTML5 Canvas games — no dependencies, no build step
@@ -120,7 +131,7 @@ git push origin v2.1.0
 | Layer | Technology |
 |-------|-----------|
 | Browser games | HTML5 Canvas, Web Audio API, vanilla JS |
-| Miyoo ports | Rust 2021, Macroquad 0.4 |
+| Miyoo ports | Rust 2024, Macroquad 0.4.14 |
 | Deploy | Docker (busybox httpd), Tailscale Serve |
 | CI/CD | GitHub Actions |
 | Testing | Playwright (headless Chromium) |
