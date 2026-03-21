@@ -39,16 +39,22 @@
             pointer-events: none; z-index: 11;
         }
         #touchControls {
-            position: fixed; bottom: 0; left: 0; width: 100vw; height: 200px;
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             pointer-events: none; z-index: 20;
         }
+        #joystickZone {
+            position: absolute; top: 0; left: 0; width: 50vw; height: 100vh;
+            pointer-events: auto; touch-action: none;
+        }
         #joystickOuter {
-            position: absolute; bottom: 30px; left: 30px;
-            width: 120px; height: 120px;
+            position: fixed;
+            width: 100px; height: 100px;
             border-radius: 50%;
             border: 2px solid rgba(0,242,255,0.3);
             background: rgba(0,242,255,0.05);
-            pointer-events: auto; touch-action: none;
+            pointer-events: none; touch-action: none;
+            display: none;
+            transform: translate(-50%, -50%);
         }
         #joystickKnob {
             position: absolute;
@@ -56,7 +62,7 @@
             border-radius: 50%;
             background: rgba(0,242,255,0.6);
             box-shadow: 0 0 12px #00f2ff;
-            top: 35px; left: 35px;
+            top: 25px; left: 25px;
             pointer-events: none;
             transition: box-shadow 0.1s;
         }
@@ -96,6 +102,7 @@
 <div class="scanlines"></div>
 <div class="vignette"></div>
 <div id="touchControls">
+    <div id="joystickZone"></div>
     <div id="joystickOuter"><div id="joystickKnob"></div></div>
     <div id="fireBtn">FIRE</div>
     <div id="specialBtn">EMP</div>
@@ -120,7 +127,7 @@ const WHITE = '#ffffff';
 const YELLOW = '#ffee00';
 
 // -- Logical resolution --
-let GW = 640, GH = 480;
+let GW = 800, GH = 600;
 let scaleX = 1, scaleY = 1;
 
 function resize() {
@@ -185,7 +192,7 @@ const playerData = [
     '.....3443.......',
     '......33........'
 ];
-const playerSpriteNormal = createSprite(playerData, playerPalette, 2);
+const playerSpriteNormal = createSprite(playerData, playerPalette, 1.4);
 
 // Thruster frames
 const thruster1 = createSprite([
@@ -194,7 +201,7 @@ const thruster1 = createSprite([
     '67776.',
     '.677..',
     '..6...',
-], {'6':'#ff6600','7':'#ffaa00'}, 2);
+], {'6':'#ff6600','7':'#ffaa00'}, 1.4);
 const thruster2 = createSprite([
     '..76..',
     '.7667.',
@@ -202,7 +209,7 @@ const thruster2 = createSprite([
     '.766..',
     '..7...',
     '..6...',
-], {'6':'#ff3300','7':'#ff8800'}, 2);
+], {'6':'#ff3300','7':'#ff8800'}, 1.4);
 
 // Drone enemy (8x8)
 const dronePalette = { '1': '#880000', '2': '#cc0000', '3': '#ff3333', '4': NEON_PINK };
@@ -216,7 +223,7 @@ const droneData = [
     '.122221.',
     '..1111..'
 ];
-const droneSprite = createSprite(droneData, dronePalette, 2);
+const droneSprite = createSprite(droneData, dronePalette, 1.4);
 
 // Gunship enemy (12x12)
 const gunshipPalette = { '1': '#333366', '2': '#5555aa', '3': '#7777ff', '4': CYAN, '5': PURPLE };
@@ -234,7 +241,7 @@ const gunshipData = [
     '...122221...',
     '....1111....'
 ];
-const gunshipSprite = createSprite(gunshipData, gunshipPalette, 2);
+const gunshipSprite = createSprite(gunshipData, gunshipPalette, 1.4);
 
 // Turret (10x10)
 const turretPalette = { '1': '#444444', '2': '#888888', '3': '#cccccc', '4': '#ff4400', '5': YELLOW };
@@ -250,7 +257,7 @@ const turretData = [
     '..122221..',
     '...1111...'
 ];
-const turretSprite = createSprite(turretData, turretPalette, 2);
+const turretSprite = createSprite(turretData, turretPalette, 1.4);
 
 // Shield generator (12x12)
 const shieldGenPalette = { '1': '#003322', '2': '#006644', '3': GREEN, '4': '#88ffaa', '5': WHITE };
@@ -268,7 +275,7 @@ const shieldGenData = [
     '...122221...',
     '....1111....'
 ];
-const shieldGenSprite = createSprite(shieldGenData, shieldGenPalette, 2);
+const shieldGenSprite = createSprite(shieldGenData, shieldGenPalette, 1.4);
 
 // Boss core (used for all bosses, center piece)
 const bossPalette = { '1': '#220000', '2': '#660022', '3': '#aa0044', '4': NEON_PINK, '5': WHITE, '6': PURPLE };
@@ -290,7 +297,7 @@ const bossCoreSpriteData = [
     '....1122222211....',
     '......111111......'
 ];
-const bossCoreSprite = createSprite(bossCoreSpriteData, bossPalette, 3);
+const bossCoreSprite = createSprite(bossCoreSpriteData, bossPalette, 2);
 
 // Power-up sprites
 const pwrSpreadSprite = createSprite([
@@ -300,7 +307,7 @@ const pwrSpreadSprite = createSprite([
     '122221',
     '.1221.',
     '..11..'
-], {'1': '#aa0044', '2': NEON_PINK}, 2);
+], {'1': '#aa0044', '2': NEON_PINK}, 1.4);
 
 const pwrHomingSprite = createSprite([
     '..11..',
@@ -309,7 +316,7 @@ const pwrHomingSprite = createSprite([
     '122221',
     '.1221.',
     '..11..'
-], {'1': '#006600', '2': GREEN}, 2);
+], {'1': '#006600', '2': GREEN}, 1.4);
 
 const pwrShieldSprite = createSprite([
     '..11..',
@@ -318,7 +325,7 @@ const pwrShieldSprite = createSprite([
     '122221',
     '.1221.',
     '..11..'
-], {'1': '#005577', '2': CYAN}, 2);
+], {'1': '#005577', '2': CYAN}, 1.4);
 
 const pwrEmpSprite = createSprite([
     '..11..',
@@ -327,7 +334,7 @@ const pwrEmpSprite = createSprite([
     '122221',
     '.1221.',
     '..11..'
-], {'1': '#440088', '2': PURPLE}, 2);
+], {'1': '#440088', '2': PURPLE}, 1.4);
 
 // ============================================================
 // AUDIO SYSTEM
@@ -479,18 +486,26 @@ document.addEventListener('keyup', e => { keys[e.code] = false; });
 let joyVX = 0, joyVY = 0, joyActive = false;
 let fireHeld = false, specialPressed = false;
 
-// Joystick
+// Floating Joystick
+const joyZone = document.getElementById('joystickZone');
 const joyOuter = document.getElementById('joystickOuter');
 const joyKnob = document.getElementById('joystickKnob');
-let joyDragging = false;
+let joyTouchId = null;
+let joyBaseX = 0, joyBaseY = 0;
 const DEADZONE = 20;
-const JOY_RADIUS = 35;
+const JOY_RADIUS = 50;
+
+function showJoystick(cx, cy) {
+    joyBaseX = cx;
+    joyBaseY = cy;
+    joyOuter.style.left = cx + 'px';
+    joyOuter.style.top = cy + 'px';
+    joyOuter.style.display = 'block';
+    joyKnob.style.transform = 'translate(0,0)';
+}
 
 function updateJoy(cx, cy) {
-    const rect = joyOuter.getBoundingClientRect();
-    const ox = rect.left + rect.width / 2;
-    const oy = rect.top + rect.height / 2;
-    let dx = cx - ox, dy = cy - oy;
+    let dx = cx - joyBaseX, dy = cy - joyBaseY;
     let dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < DEADZONE) { joyVX = 0; joyVY = 0; joyKnob.style.transform = 'translate(0,0)'; return; }
     if (dist > JOY_RADIUS) { dx = dx / dist * JOY_RADIUS; dy = dy / dist * JOY_RADIUS; dist = JOY_RADIUS; }
@@ -498,12 +513,45 @@ function updateJoy(cx, cy) {
     joyVX = dx / JOY_RADIUS;
     joyVY = dy / JOY_RADIUS;
 }
-function resetJoy() { joyDragging = false; joyVX = 0; joyVY = 0; joyKnob.style.transform = 'translate(0,0)'; }
 
-joyOuter.addEventListener('touchstart', e => { e.preventDefault(); joyDragging = true; joyActive = true; initAudio(); updateJoy(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
-joyOuter.addEventListener('touchmove', e => { e.preventDefault(); if (joyDragging) updateJoy(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
-joyOuter.addEventListener('touchend', resetJoy);
-joyOuter.addEventListener('touchcancel', resetJoy);
+function hideJoystick() {
+    joyTouchId = null;
+    joyVX = 0;
+    joyVY = 0;
+    joyOuter.style.display = 'none';
+    joyKnob.style.transform = 'translate(0,0)';
+}
+
+joyZone.addEventListener('touchstart', e => {
+    e.preventDefault();
+    initAudio();
+    if (joyTouchId !== null) return;
+    const touch = e.changedTouches[0];
+    joyTouchId = touch.identifier;
+    joyActive = true;
+    showJoystick(touch.clientX, touch.clientY);
+}, {passive:false});
+
+joyZone.addEventListener('touchmove', e => {
+    e.preventDefault();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joyTouchId) {
+            updateJoy(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+            break;
+        }
+    }
+}, {passive:false});
+
+joyZone.addEventListener('touchend', e => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joyTouchId) { hideJoystick(); break; }
+    }
+});
+joyZone.addEventListener('touchcancel', e => {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joyTouchId) { hideJoystick(); break; }
+    }
+});
 
 const fireBtn = document.getElementById('fireBtn');
 fireBtn.addEventListener('touchstart', e => { e.preventDefault(); fireHeld = true; fireBtn.classList.add('active'); initAudio(); }, {passive:false});
@@ -527,7 +575,7 @@ let chainMultiplier = 1;
 
 // Player
 let player = {
-    x: 80, y: GH / 2, w: 32, h: 32,
+    x: 80, y: GH / 2, w: 22, h: 22,
     speed: 4, shields: 3, maxShields: 3,
     weapon: 0, // 0=dual, 1=spread, 2=homing
     empCharges: 1, empCooldown: 0,
@@ -714,7 +762,7 @@ function createBoss(type) {
     if (type === 0) {
         // Defense Satellite
         boss = {
-            type: 0, x: GW + 50, y: GH / 2, targetX: GW - 100, w: 54, h: 48,
+            type: 0, x: GW + 50, y: GH / 2, targetX: GW - 100, w: 38, h: 34,
             hp: 50, maxHp: 50, phase: 0,
             angle: 0, fireTimer: 0, alive: true,
             enterPhase: true
@@ -722,7 +770,7 @@ function createBoss(type) {
     } else if (type === 1) {
         // Cyborg Carrier
         boss = {
-            type: 1, x: GW + 60, y: GH / 2, targetX: GW - 110, w: 60, h: 54,
+            type: 1, x: GW + 60, y: GH / 2, targetX: GW - 110, w: 42, h: 38,
             hp: 80, maxHp: 80, phase: 0,
             fireTimer: 0, droneTimer: 0, alive: true,
             enterPhase: true, shielded: false, shieldHits: 0
@@ -730,7 +778,7 @@ function createBoss(type) {
     } else {
         // Leviathan
         boss = {
-            type: 2, x: GW + 80, y: GH / 2, targetX: GW - 130, w: 72, h: 60,
+            type: 2, x: GW + 80, y: GH / 2, targetX: GW - 130, w: 50, h: 42,
             hp: 120, maxHp: 120, phase: 0,
             fireTimer: 0, sweepAngle: 0, alive: true,
             enterPhase: true
@@ -764,17 +812,17 @@ function spawnWave(wave) {
         let hp = 1, speed = 2.5, shootTimer = 0, shootRate = 0;
         let eType = wave.type;
         let sprite = droneSprite;
-        let w = 16, h = 16;
+        let w = 11, h = 11;
         let points = 100;
 
         if (eType === 'gunship') {
-            hp = 3; speed = 1.2; shootRate = 90; w = 24; h = 24;
+            hp = 3; speed = 1.2; shootRate = 90; w = 17; h = 17;
             sprite = gunshipSprite; points = 250;
         } else if (eType === 'turret') {
-            hp = 5; speed = 0.8; shootRate = 60; w = 20; h = 20;
+            hp = 5; speed = 0.8; shootRate = 60; w = 14; h = 14;
             sprite = turretSprite; points = 300;
         } else if (eType === 'shieldgen') {
-            hp = 8; speed = 0.6; shootRate = 120; w = 24; h = 24;
+            hp = 8; speed = 0.6; shootRate = 120; w = 17; h = 17;
             sprite = shieldGenSprite; points = 500;
         } else {
             // drone
@@ -795,7 +843,7 @@ function spawnPowerUp(x, y) {
     const sprites = [pwrSpreadSprite, pwrHomingSprite, pwrShieldSprite, pwrEmpSprite];
     const idx = Math.floor(Math.random() * types.length);
     powerUps.push({
-        x, y, w: 12, h: 12, type: types[idx],
+        x, y, w: 8, h: 8, type: types[idx],
         sprite: sprites[idx], angle: 0, alive: true
     });
 }
@@ -1105,7 +1153,7 @@ function update() {
         // Bullet collision
         for (let j = bullets.length - 1; j >= 0; j--) {
             const b = bullets[j];
-            if (b.x + 4 > e.x && b.x < e.x + e.w && b.y + 4 > e.y && b.y < e.y + e.h) {
+            if (b.x + 3 > e.x && b.x < e.x + e.w && b.y + 3 > e.y && b.y < e.y + e.h) {
                 e.hp--;
                 e.flashTimer = 4;
                 bullets.splice(j, 1);
@@ -1274,8 +1322,8 @@ function update() {
         // Boss bullet collision
         for (let j = bullets.length - 1; j >= 0; j--) {
             const b = bullets[j];
-            if (b.x + 4 > boss.x && b.x < boss.x + boss.w &&
-                b.y + 4 > boss.y && b.y < boss.y + boss.h) {
+            if (b.x + 3 > boss.x && b.x < boss.x + boss.w &&
+                b.y + 3 > boss.y && b.y < boss.y + boss.h) {
                 boss.hp--;
                 bullets.splice(j, 1);
                 spawnParticles(b.x, b.y, CYAN, 3, 1);
@@ -1537,7 +1585,7 @@ function drawPlayer() {
 
     // Thruster
     const thrSpr = frameCount % 8 < 4 ? thruster1 : thruster2;
-    ctx.drawImage(thrSpr, lx(px - 10), ly(py + player.h / 2 - 6), ls(12), ls(12));
+    ctx.drawImage(thrSpr, lx(px - 7), ly(py + player.h / 2 - 4), ls(8), ls(8));
 
     // Ship
     ctx.drawImage(playerSpriteNormal, lx(px), ly(py), ls(player.w), ls(player.h));
@@ -1569,17 +1617,17 @@ function drawBullets() {
             ctx.shadowColor = CYAN;
             ctx.shadowBlur = ls(6);
             ctx.fillStyle = CYAN;
-            ctx.fillRect(lx(b.x), ly(b.y - 1), ls(8), ls(2));
+            ctx.fillRect(lx(b.x), ly(b.y - 0.7), ls(6), ls(1.4));
             ctx.restore();
             // Trail
             ctx.fillStyle = 'rgba(0,242,255,0.2)';
-            ctx.fillRect(lx(b.x - 6), ly(b.y - 0.5), ls(6), ls(1));
+            ctx.fillRect(lx(b.x - 4), ly(b.y - 0.35), ls(4), ls(0.7));
         } else if (b.type === 'spread') {
             ctx.save();
             ctx.shadowColor = NEON_PINK;
             ctx.shadowBlur = ls(5);
             ctx.fillStyle = NEON_PINK;
-            ctx.fillRect(lx(b.x), ly(b.y - 1), ls(6), ls(2));
+            ctx.fillRect(lx(b.x), ly(b.y - 0.7), ls(4), ls(1.4));
             ctx.restore();
         } else if (b.type === 'homing') {
             ctx.save();
@@ -1587,12 +1635,12 @@ function drawBullets() {
             ctx.shadowBlur = ls(6);
             ctx.fillStyle = GREEN;
             ctx.beginPath();
-            ctx.arc(lx(b.x), ly(b.y), ls(3), 0, Math.PI * 2);
+            ctx.arc(lx(b.x), ly(b.y), ls(2), 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
             // Trail
             ctx.fillStyle = 'rgba(57,255,20,0.15)';
-            ctx.fillRect(lx(b.x - 8), ly(b.y - 0.5), ls(8), ls(1));
+            ctx.fillRect(lx(b.x - 6), ly(b.y - 0.35), ls(6), ls(0.7));
         }
     }
 }
@@ -1604,7 +1652,7 @@ function drawEnemyBullets() {
         ctx.shadowBlur = ls(4);
         ctx.fillStyle = '#ff6633';
         ctx.beginPath();
-        ctx.arc(lx(b.x), ly(b.y), ls(2.5), 0, Math.PI * 2);
+        ctx.arc(lx(b.x), ly(b.y), ls(1.8), 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
     }
@@ -1645,11 +1693,11 @@ function drawBoss() {
         ctx.font = `${ls(12)}px 'Press Start 2P', monospace`;
         ctx.textAlign = 'center';
         ctx.globalAlpha = 0.5 + Math.sin(frameCount * 0.15) * 0.5;
-        ctx.fillText('WARNING', lx(GW / 2), ly(GH / 2 - 40));
+        ctx.fillText('WARNING', lx(GW / 2), ly(GH / 2 - 50));
         const bossNames = ['DEFENSE SATELLITE', 'CYBORG CARRIER', 'THE LEVIATHAN'];
         ctx.font = `${ls(8)}px 'Press Start 2P', monospace`;
         ctx.fillStyle = CYAN;
-        ctx.fillText(bossNames[boss.type], lx(GW / 2), ly(GH / 2 - 20));
+        ctx.fillText(bossNames[boss.type], lx(GW / 2), ly(GH / 2 - 25));
         ctx.restore();
     }
 
@@ -1668,11 +1716,11 @@ function drawBoss() {
             const ang = a * Math.PI / 2;
             ctx.beginPath();
             ctx.moveTo(0, 0);
-            ctx.lineTo(Math.cos(ang) * ls(35), Math.sin(ang) * ls(35));
+            ctx.lineTo(Math.cos(ang) * ls(25), Math.sin(ang) * ls(25));
             ctx.stroke();
             // Turret at end
             ctx.fillStyle = '#ff4400';
-            ctx.fillRect(Math.cos(ang) * ls(30) - ls(3), Math.sin(ang) * ls(30) - ls(3), ls(6), ls(6));
+            ctx.fillRect(Math.cos(ang) * ls(21) - ls(2), Math.sin(ang) * ls(21) - ls(2), ls(4), ls(4));
         }
         ctx.restore();
     } else if (boss.type === 2) {
@@ -1680,7 +1728,7 @@ function drawBoss() {
         ctx.save();
         ctx.globalAlpha = 0.4;
         ctx.fillStyle = '#220011';
-        ctx.fillRect(lx(boss.x - 15), ly(boss.y - 10), ls(boss.w + 30), ls(boss.h + 20));
+        ctx.fillRect(lx(boss.x - 10), ly(boss.y - 7), ls(boss.w + 20), ls(boss.h + 14));
         ctx.restore();
         // Glowing eyes
         ctx.save();
@@ -1693,21 +1741,21 @@ function drawBoss() {
     }
 
     // Health bar at top
-    const barW = 200;
+    const barW = 250;
     const barX = (GW - barW) / 2;
     const hpPct = Math.max(0, boss.hp / boss.maxHp);
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(lx(barX - 2), ly(8), ls(barW + 4), ls(10));
+    ctx.fillRect(lx(barX - 2), ly(10), ls(barW + 4), ls(12));
     ctx.fillStyle = NEON_PINK;
-    ctx.fillRect(lx(barX), ly(10), ls(barW * hpPct), ls(6));
+    ctx.fillRect(lx(barX), ly(12), ls(barW * hpPct), ls(8));
     ctx.strokeStyle = 'rgba(255,45,120,0.5)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(lx(barX - 2), ly(8), ls(barW + 4), ls(10));
+    ctx.strokeRect(lx(barX - 2), ly(10), ls(barW + 4), ls(12));
     ctx.fillStyle = WHITE;
     ctx.font = `${ls(6)}px 'Press Start 2P', monospace`;
     ctx.textAlign = 'center';
     const bossNames2 = ['DEFENSE SATELLITE', 'CYBORG CARRIER', 'LEVIATHAN'];
-    ctx.fillText(bossNames2[boss.type], lx(GW / 2), ly(7));
+    ctx.fillText(bossNames2[boss.type], lx(GW / 2), ly(9));
 }
 
 function drawEmpWaves() {
@@ -1769,26 +1817,26 @@ function drawHUD() {
     ctx.shadowBlur = ls(4);
 
     // Score
-    ctx.fillText('SCORE ' + score, lx(10), ly(25));
+    ctx.fillText('SCORE ' + score, lx(12), ly(30));
 
     // Chain multiplier
     if (chainMultiplier > 1) {
         ctx.fillStyle = YELLOW;
-        ctx.fillText('x' + chainMultiplier, lx(10), ly(40));
+        ctx.fillText('x' + chainMultiplier, lx(12), ly(50));
     }
 
     // Level
     ctx.fillStyle = CYAN;
     ctx.textAlign = 'center';
-    ctx.fillText('LV' + (currentLevel + 1) + ' ' + LEVEL_NAMES[currentLevel], lx(GW / 2), ly(GH - 10));
+    ctx.fillText('LV' + (currentLevel + 1) + ' ' + LEVEL_NAMES[currentLevel], lx(GW / 2), ly(GH - 12));
 
     // Shields
     ctx.textAlign = 'right';
     ctx.fillStyle = CYAN;
-    ctx.fillText('SHIELD', lx(GW - 10), ly(25));
+    ctx.fillText('SHIELD', lx(GW - 12), ly(30));
     for (let i = 0; i < player.maxShields; i++) {
         ctx.fillStyle = i < player.shields ? CYAN : 'rgba(0,242,255,0.2)';
-        ctx.fillRect(lx(GW - 60 + i * 16), ly(30), ls(12), ls(6));
+        ctx.fillRect(lx(GW - 75 + i * 20), ly(38), ls(14), ls(7));
     }
 
     // Weapon
@@ -1797,17 +1845,17 @@ function drawHUD() {
     ctx.fillStyle = weaponColors[player.weapon];
     ctx.textAlign = 'right';
     ctx.font = `${ls(6)}px 'Press Start 2P', monospace`;
-    ctx.fillText(weaponNames[player.weapon], lx(GW - 10), ly(48));
+    ctx.fillText(weaponNames[player.weapon], lx(GW - 12), ly(60));
 
     // EMP charges
     ctx.fillStyle = PURPLE;
-    ctx.fillText('EMP:' + player.empCharges, lx(GW - 10), ly(60));
+    ctx.fillText('EMP:' + player.empCharges, lx(GW - 12), ly(75));
 
     // Hi score
     ctx.fillStyle = 'rgba(255,255,255,0.3)';
     ctx.textAlign = 'left';
     ctx.font = `${ls(6)}px 'Press Start 2P', monospace`;
-    ctx.fillText('HI ' + hiScore, lx(10), ly(GH - 10));
+    ctx.fillText('HI ' + hiScore, lx(12), ly(GH - 12));
 
     ctx.restore();
 }
@@ -1837,24 +1885,24 @@ function drawTitleScreen() {
     ctx.shadowBlur = ls(20);
     ctx.fillStyle = CYAN;
     ctx.font = `${ls(28)}px 'Press Start 2P', monospace`;
-    ctx.fillText('CHROME', lx(GW / 2), ly(140));
+    ctx.fillText('CHROME', lx(GW / 2), ly(175));
     ctx.shadowColor = NEON_PINK;
     ctx.fillStyle = NEON_PINK;
-    ctx.fillText('VIPER', lx(GW / 2), ly(185));
+    ctx.fillText('VIPER', lx(GW / 2), ly(230));
     ctx.shadowBlur = 0;
 
     // Subtitle
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.font = `${ls(8)}px 'Press Start 2P', monospace`;
-    ctx.fillText('NEON ABYSS', lx(GW / 2), ly(215));
+    ctx.fillText('NEON ABYSS', lx(GW / 2), ly(268));
 
     // Glitch effect on title
     if (Math.random() < 0.05) {
         ctx.save();
         ctx.globalAlpha = 0.3;
         ctx.fillStyle = NEON_PINK;
-        const gy = 120 + Math.random() * 80;
-        ctx.fillRect(lx(100 + Math.random() * 100), ly(gy), ls(200 + Math.random() * 200), ls(2));
+        const gy = 150 + Math.random() * 100;
+        ctx.fillRect(lx(125 + Math.random() * 125), ly(gy), ls(250 + Math.random() * 250), ls(2));
         ctx.restore();
     }
 
@@ -1869,13 +1917,13 @@ function drawTitleScreen() {
         'Breach their defenses. End their reign.'
     ];
     lines.forEach((line, i) => {
-        ctx.fillText(line, lx(GW / 2), ly(260 + i * 16));
+        ctx.fillText(line, lx(GW / 2), ly(325 + i * 20));
     });
 
     // Controls
     ctx.fillStyle = 'rgba(0,242,255,0.4)';
     ctx.font = `${ls(5)}px 'Press Start 2P', monospace`;
-    ctx.fillText('WASD/ARROWS: MOVE  |  SPACE/X: FIRE  |  E: EMP', lx(GW / 2), ly(380));
+    ctx.fillText('WASD/ARROWS: MOVE  |  SPACE/X: FIRE  |  E: EMP', lx(GW / 2), ly(475));
 
     // Press start blink
     if (Math.floor(frameCount / 30) % 2 === 0) {
@@ -1883,7 +1931,7 @@ function drawTitleScreen() {
         ctx.font = `${ls(10)}px 'Press Start 2P', monospace`;
         ctx.shadowColor = CYAN;
         ctx.shadowBlur = ls(10);
-        ctx.fillText('PRESS START', lx(GW / 2), ly(430));
+        ctx.fillText('PRESS START', lx(GW / 2), ly(538));
     }
 
     // Hi score
@@ -1891,7 +1939,7 @@ function drawTitleScreen() {
         ctx.fillStyle = YELLOW;
         ctx.shadowBlur = 0;
         ctx.font = `${ls(6)}px 'Press Start 2P', monospace`;
-        ctx.fillText('HI SCORE: ' + hiScore, lx(GW / 2), ly(460));
+        ctx.fillText('HI SCORE: ' + hiScore, lx(GW / 2), ly(575));
     }
 
     ctx.restore();
@@ -1900,7 +1948,7 @@ function drawTitleScreen() {
 function drawStoryScreen() {
     ctx.save();
     // Terminal border
-    const termX = 40, termY = 30, termW = GW - 80, termH = GH - 60;
+    const termX = 50, termY = 38, termW = GW - 100, termH = GH - 76;
     ctx.strokeStyle = 'rgba(57,255,20,0.3)';
     ctx.lineWidth = ls(1);
     ctx.strokeRect(lx(termX), ly(termY), ls(termW), ls(termH));
@@ -1911,40 +1959,40 @@ function drawStoryScreen() {
     ctx.fillStyle = GREEN;
     ctx.font = `${ls(6)}px 'Press Start 2P', monospace`;
     ctx.textAlign = 'left';
-    ctx.fillText('CHROME VIPER TERMINAL v2.187', lx(termX + 10), ly(termY + 15));
+    ctx.fillText('CHROME VIPER TERMINAL v2.187', lx(termX + 12), ly(termY + 19));
     ctx.fillStyle = 'rgba(57,255,20,0.3)';
-    ctx.fillRect(lx(termX), ly(termY + 22), ls(termW), ls(1));
+    ctx.fillRect(lx(termX), ly(termY + 28), ls(termW), ls(1));
 
     // Story text with typewriter
     const visibleText = storyText.substring(0, storyCharIndex);
     ctx.fillStyle = GREEN;
     ctx.font = `${ls(7)}px 'Press Start 2P', monospace`;
     const storyLines = visibleText.split('\n');
-    let lineY = termY + 45;
+    let lineY = termY + 56;
     for (const line of storyLines) {
         // Word wrap
         const words = line.split(' ');
         let currentLine = '';
-        const maxWidth = termW - 30;
+        const maxWidth = termW - 38;
         for (const word of words) {
             const testLine = currentLine + (currentLine ? ' ' : '') + word;
             const measured = testLine.length * ls(7) * 0.65;
             if (measured > ls(maxWidth) && currentLine) {
-                ctx.fillText(currentLine, lx(termX + 15), ly(lineY));
+                ctx.fillText(currentLine, lx(termX + 19), ly(lineY));
                 currentLine = word;
-                lineY += 14;
+                lineY += 18;
             } else {
                 currentLine = testLine;
             }
         }
-        ctx.fillText(currentLine, lx(termX + 15), ly(lineY));
-        lineY += 14;
+        ctx.fillText(currentLine, lx(termX + 19), ly(lineY));
+        lineY += 18;
     }
 
     // Blinking cursor
     if (storyCharIndex < storyText.length && Math.floor(frameCount / 15) % 2 === 0) {
         ctx.fillStyle = GREEN;
-        ctx.fillRect(lx(termX + 15 + (storyLines[storyLines.length - 1] || '').length * 5.5), ly(lineY - 14 + 2), ls(6), ls(8));
+        ctx.fillRect(lx(termX + 19 + (storyLines[storyLines.length - 1] || '').length * 5.5), ly(lineY - 18 + 2), ls(6), ls(8));
     }
 
     // Continue prompt
@@ -1953,7 +2001,7 @@ function drawStoryScreen() {
             ctx.fillStyle = CYAN;
             ctx.textAlign = 'center';
             ctx.font = `${ls(7)}px 'Press Start 2P', monospace`;
-            ctx.fillText('[PRESS FIRE TO CONTINUE]', lx(GW / 2), ly(GH - 50));
+            ctx.fillText('[PRESS FIRE TO CONTINUE]', lx(GW / 2), ly(GH - 62));
         }
     }
 
@@ -1977,33 +2025,33 @@ function drawGameOver() {
     ctx.shadowBlur = ls(15);
     ctx.fillStyle = NEON_PINK;
     ctx.font = `${ls(20)}px 'Press Start 2P', monospace`;
-    ctx.fillText('SYSTEM', lx(GW / 2), ly(170));
-    ctx.fillText('FAILURE', lx(GW / 2), ly(210));
+    ctx.fillText('SYSTEM', lx(GW / 2), ly(212));
+    ctx.fillText('FAILURE', lx(GW / 2), ly(262));
 
     ctx.shadowBlur = 0;
     ctx.fillStyle = 'rgba(255,255,255,0.6)';
     ctx.font = `${ls(8)}px 'Press Start 2P', monospace`;
-    ctx.fillText('CHROME VIPER DESTROYED', lx(GW / 2), ly(260));
+    ctx.fillText('CHROME VIPER DESTROYED', lx(GW / 2), ly(325));
 
     ctx.fillStyle = CYAN;
     ctx.font = `${ls(10)}px 'Press Start 2P', monospace`;
-    ctx.fillText('SCORE: ' + score, lx(GW / 2), ly(300));
+    ctx.fillText('SCORE: ' + score, lx(GW / 2), ly(375));
 
     if (hiScore > 0) {
         ctx.fillStyle = YELLOW;
         ctx.font = `${ls(7)}px 'Press Start 2P', monospace`;
-        ctx.fillText('HI SCORE: ' + hiScore, lx(GW / 2), ly(330));
+        ctx.fillText('HI SCORE: ' + hiScore, lx(GW / 2), ly(412));
     }
 
     ctx.fillStyle = 'rgba(200,200,220,0.5)';
     ctx.font = `${ls(6)}px 'Press Start 2P', monospace`;
-    ctx.fillText('AXIOM prevails. The colonies remain', lx(GW / 2), ly(370));
-    ctx.fillText('under corporate control.', lx(GW / 2), ly(390));
+    ctx.fillText('AXIOM prevails. The colonies remain', lx(GW / 2), ly(462));
+    ctx.fillText('under corporate control.', lx(GW / 2), ly(488));
 
     if (Math.floor(frameCount / 30) % 2 === 0) {
         ctx.fillStyle = CYAN;
         ctx.font = `${ls(8)}px 'Press Start 2P', monospace`;
-        ctx.fillText('PRESS START', lx(GW / 2), ly(440));
+        ctx.fillText('PRESS START', lx(GW / 2), ly(550));
     }
 
     ctx.restore();

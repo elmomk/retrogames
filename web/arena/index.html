@@ -532,11 +532,14 @@ let victoryPage = 0;
 const VICTORY_LINES_PER_PAGE = 10;
 let victoryPageDone = false;
 
+// ========== SPRITE SCALE (reduce for mobile) ==========
+const SS = 0.7; // sprite scale factor applied to all entity sizes and hitboxes
+
 // ========== PLAYER ==========
 let player = null;
 function createPlayer() {
     return {
-        x: W / 2, y: (ARENA_T + ARENA_B) / 2, w: 16 * Math.min(scaleX, scaleY), h: 16 * Math.min(scaleX, scaleY), speed: 3 * Math.min(scaleX, scaleY),
+        x: W / 2, y: (ARENA_T + ARENA_B) / 2, w: 16 * SS * Math.min(scaleX, scaleY), h: 16 * SS * Math.min(scaleX, scaleY), speed: 3 * Math.min(scaleX, scaleY),
         hp: 100, maxHp: 100, iFrames: 0,
         weapon: 0, ammo: [Infinity, 0, 0, 0],
         fireTimer: 0,
@@ -548,7 +551,7 @@ function createPlayer() {
 // ========== SPRITE DRAWING ==========
 function drawPlayer(p) {
     if (p.iFrames > 0 && Math.floor(p.iFrames / 4) % 2 === 0) return;
-    const s = Math.min(scaleX, scaleY);
+    const s = Math.min(scaleX, scaleY) * SS;
     ctx.save();
     ctx.translate(Math.round(p.x), Math.round(p.y));
     ctx.rotate(p.angle);
@@ -576,7 +579,7 @@ function drawPlayer(p) {
 }
 
 function drawSwarmer(e) {
-    const s = Math.min(scaleX, scaleY);
+    const s = Math.min(scaleX, scaleY) * SS;
     ctx.save(); ctx.translate(Math.round(e.x), Math.round(e.y));
     ctx.fillStyle = e.flash > 0 ? '#fff' : '#0f0';
     ctx.fillRect(-5*s, -5*s, 10*s, 10*s);
@@ -588,7 +591,7 @@ function drawSwarmer(e) {
 }
 
 function drawTank(e) {
-    const s = Math.min(scaleX, scaleY);
+    const s = Math.min(scaleX, scaleY) * SS;
     ctx.save(); ctx.translate(Math.round(e.x), Math.round(e.y));
     ctx.fillStyle = e.flash > 0 ? '#fff' : '#f40';
     ctx.fillRect(-10*s, -10*s, 20*s, 20*s);
@@ -606,7 +609,7 @@ function drawTank(e) {
 }
 
 function drawTeleporter(e) {
-    const s = Math.min(scaleX, scaleY);
+    const s = Math.min(scaleX, scaleY) * SS;
     ctx.save(); ctx.translate(Math.round(e.x), Math.round(e.y));
     const alpha = e.teleTimer < 20 ? e.teleTimer / 20 : 1;
     ctx.globalAlpha = alpha;
@@ -623,7 +626,7 @@ function drawTeleporter(e) {
 }
 
 function drawSplitter(e) {
-    const s = Math.min(scaleX, scaleY);
+    const s = Math.min(scaleX, scaleY) * SS;
     ctx.save(); ctx.translate(Math.round(e.x), Math.round(e.y));
     const sz = (e.big ? 9 : 5) * s;
     ctx.fillStyle = e.flash > 0 ? '#fff' : '#0ff';
@@ -639,7 +642,7 @@ function drawSplitter(e) {
 }
 
 function drawBoss(e) {
-    const s = Math.min(scaleX, scaleY);
+    const s = Math.min(scaleX, scaleY) * SS;
     ctx.save(); ctx.translate(Math.round(e.x), Math.round(e.y));
     if (e.bossType === 'megaTank') {
         ctx.fillStyle = e.flash > 0 ? '#fff' : '#f60';
@@ -720,12 +723,12 @@ function fireWeapon() {
 
     if (w === 0) {
         const a = p.angle + rnd(-0.03, 0.03);
-        bullets.push({ x: p.x + Math.cos(p.angle) * 10, y: p.y + Math.sin(p.angle) * 10, vx: Math.cos(a) * bulletSpeed, vy: Math.sin(a) * bulletSpeed, dmg: 10 * dmgMult, life: 60, r: 2 * Math.min(scaleX, scaleY), color: '#ff0', type: 'bullet' });
+        bullets.push({ x: p.x + Math.cos(p.angle) * 10, y: p.y + Math.sin(p.angle) * 10, vx: Math.cos(a) * bulletSpeed, vy: Math.sin(a) * bulletSpeed, dmg: 10 * dmgMult, life: 60, r: 2 * Math.min(scaleX, scaleY) * SS, color: '#ff0', type: 'bullet' });
         playSound('pistol');
     } else if (w === 1) {
         for (let i = 0; i < 5; i++) {
             const a = p.angle + rnd(-0.26, 0.26);
-            bullets.push({ x: p.x + Math.cos(p.angle) * 10, y: p.y + Math.sin(p.angle) * 10, vx: Math.cos(a) * bulletSpeed * 0.875, vy: Math.sin(a) * bulletSpeed * 0.875, dmg: 8 * dmgMult, life: 22, r: 2 * Math.min(scaleX, scaleY), color: '#fa0', type: 'bullet' });
+            bullets.push({ x: p.x + Math.cos(p.angle) * 10, y: p.y + Math.sin(p.angle) * 10, vx: Math.cos(a) * bulletSpeed * 0.875, vy: Math.sin(a) * bulletSpeed * 0.875, dmg: 8 * dmgMult, life: 22, r: 2 * Math.min(scaleX, scaleY) * SS, color: '#fa0', type: 'bullet' });
         }
         p.ammo[1]--;
         playSound('shotgun');
@@ -739,7 +742,7 @@ function fireWeapon() {
             const proj = ex * dx + ey * dy;
             if (proj < 0 || proj > maxDist) continue;
             const perpDist = Math.abs(ex * dy - ey * dx);
-            const hitR = (e.w || 10) / 2 + 4;
+            const hitR = (e.w || 10 * SS) / 2 + 4 * SS;
             if (perpDist < hitR) {
                 e.hp -= 3 * dmgMult;
                 e.flash = 3;
@@ -750,7 +753,7 @@ function fireWeapon() {
         if (frameCount % 3 === 0) playSound('laser');
     } else if (w === 3) {
         const a = p.angle;
-        bullets.push({ x: p.x + Math.cos(a) * 10, y: p.y + Math.sin(a) * 10, vx: Math.cos(a) * bulletSpeed * 0.625, vy: Math.sin(a) * bulletSpeed * 0.625, dmg: 30 * dmgMult, splashDmg: 20 * dmgMult, life: 60, r: 4 * Math.min(scaleX, scaleY), color: '#f44', type: 'rocket' });
+        bullets.push({ x: p.x + Math.cos(a) * 10, y: p.y + Math.sin(a) * 10, vx: Math.cos(a) * bulletSpeed * 0.625, vy: Math.sin(a) * bulletSpeed * 0.625, dmg: 30 * dmgMult, splashDmg: 20 * dmgMult, life: 60, r: 4 * Math.min(scaleX, scaleY) * SS, color: '#f44', type: 'rocket' });
         p.ammo[3]--;
         playSound('rocket');
     }
@@ -771,15 +774,15 @@ function spawnEnemy(type, x, y) {
     x = clamp(safeNum(x, (ARENA_L + ARENA_R) / 2), ARENA_L + 10, ARENA_R - 10);
     y = clamp(safeNum(y, (ARENA_T + ARENA_B) / 2), ARENA_T + 10, ARENA_B - 10);
     const base = { x, y, flash: 0, dead: false, type };
-    if (type === 'swarmer') return Object.assign(base, { hp: 15, maxHp: 15, speed: 2.5 * s, w: 10 * s, h: 10 * s, score: 10 });
-    if (type === 'tank') return Object.assign(base, { hp: 80, maxHp: 80, speed: 1 * s, w: 20 * s, h: 20 * s, score: 50, shootTimer: 120 + Math.floor(rnd(0, 60)) });
-    if (type === 'teleporter') return Object.assign(base, { hp: 30, maxHp: 30, speed: 2 * s, w: 14 * s, h: 14 * s, score: 30, teleTimer: 60, teleCooldown: 120 + Math.floor(rnd(0, 120)) });
-    if (type === 'splitter') return Object.assign(base, { hp: 50, maxHp: 50, speed: 1.5 * s, w: 18 * s, h: 18 * s, score: 40, big: true });
-    if (type === 'splitterSmall') return Object.assign(base, { hp: 20, maxHp: 20, speed: 3 * s, w: 10 * s, h: 10 * s, score: 15, big: false });
-    if (type === 'megaTank') return Object.assign(base, { hp: 300, maxHp: 300, speed: 0.7 * s, w: 32 * s, h: 32 * s, score: 200, shootTimer: 80, bossType: 'megaTank', boss: true, spawnTimer: 300 });
-    if (type === 'queen') return Object.assign(base, { hp: 500, maxHp: 500, speed: 1.2 * s, w: 24 * s, h: 24 * s, score: 500, shootTimer: 60, bossType: 'queen', boss: true, teleTimer: 60, teleCooldown: 180, spawnTimer: 240 });
+    if (type === 'swarmer') return Object.assign(base, { hp: 15, maxHp: 15, speed: 2.5 * s, w: 10 * s * SS, h: 10 * s * SS, score: 10 });
+    if (type === 'tank') return Object.assign(base, { hp: 80, maxHp: 80, speed: 1 * s, w: 20 * s * SS, h: 20 * s * SS, score: 50, shootTimer: 120 + Math.floor(rnd(0, 60)) });
+    if (type === 'teleporter') return Object.assign(base, { hp: 30, maxHp: 30, speed: 2 * s, w: 14 * s * SS, h: 14 * s * SS, score: 30, teleTimer: 60, teleCooldown: 120 + Math.floor(rnd(0, 120)) });
+    if (type === 'splitter') return Object.assign(base, { hp: 50, maxHp: 50, speed: 1.5 * s, w: 18 * s * SS, h: 18 * s * SS, score: 40, big: true });
+    if (type === 'splitterSmall') return Object.assign(base, { hp: 20, maxHp: 20, speed: 3 * s, w: 10 * s * SS, h: 10 * s * SS, score: 15, big: false });
+    if (type === 'megaTank') return Object.assign(base, { hp: 300, maxHp: 300, speed: 0.7 * s, w: 32 * s * SS, h: 32 * s * SS, score: 200, shootTimer: 80, bossType: 'megaTank', boss: true, spawnTimer: 300 });
+    if (type === 'queen') return Object.assign(base, { hp: 500, maxHp: 500, speed: 1.2 * s, w: 24 * s * SS, h: 24 * s * SS, score: 500, shootTimer: 60, bossType: 'queen', boss: true, teleTimer: 60, teleCooldown: 180, spawnTimer: 240 });
     // Fallback
-    return Object.assign(base, { hp: 15, maxHp: 15, speed: 2 * s, w: 10 * s, h: 10 * s, score: 10 });
+    return Object.assign(base, { hp: 15, maxHp: 15, speed: 2 * s, w: 10 * s * SS, h: 10 * s * SS, score: 10 });
 }
 
 function pickWeightedType(waveIdx) {
@@ -799,18 +802,18 @@ function spawnPickup(x, y) {
     if (roll < 0.10) {
         const types = ['shotgun', 'laser', 'rocket'];
         const t = types[Math.floor(rnd(0, 3))];
-        pickups.push({ x: safeNum(x), y: safeNum(y), type: 'weapon', weaponType: t, life: 600, r: 8 * Math.min(scaleX, scaleY) });
+        pickups.push({ x: safeNum(x), y: safeNum(y), type: 'weapon', weaponType: t, life: 600, r: 8 * Math.min(scaleX, scaleY) * SS });
     } else if (roll < 0.25) {
         const types = ['speed', 'shield', 'doubleDmg', 'freeze'];
         const t = types[Math.floor(rnd(0, 4))];
-        pickups.push({ x: safeNum(x), y: safeNum(y), type: 'powerup', powerType: t, life: 600, r: 8 * Math.min(scaleX, scaleY) });
+        pickups.push({ x: safeNum(x), y: safeNum(y), type: 'powerup', powerType: t, life: 600, r: 8 * Math.min(scaleX, scaleY) * SS });
     }
 }
 
 const PICKUP_COLORS = { shotgun: '#fa0', laser: '#0ff', rocket: '#f44', speed: '#44f', shield: '#cdf', doubleDmg: '#f22', freeze: '#aef' };
 
 function drawPickup(pk) {
-    const s = Math.min(scaleX, scaleY);
+    const s = Math.min(scaleX, scaleY) * SS;
     const c = pk.type === 'weapon' ? PICKUP_COLORS[pk.weaponType] : PICKUP_COLORS[pk.powerType];
     const pulse = 1 + Math.sin(frameCount * 0.1) * 0.2;
     ctx.save(); ctx.translate(Math.round(pk.x), Math.round(pk.y));
@@ -1010,10 +1013,10 @@ function update() {
                 const bSpd = 3 * Math.min(scaleX, scaleY);
                 if (e.boss) {
                     for (let i = -1; i <= 1; i++) {
-                        enemyBullets.push({ x: e.x, y: e.y, vx: Math.cos(a + i * 0.3) * bSpd, vy: Math.sin(a + i * 0.3) * bSpd, dmg: 15, life: 120, r: 3 * Math.min(scaleX, scaleY), color: '#f80' });
+                        enemyBullets.push({ x: e.x, y: e.y, vx: Math.cos(a + i * 0.3) * bSpd, vy: Math.sin(a + i * 0.3) * bSpd, dmg: 15, life: 120, r: 3 * Math.min(scaleX, scaleY) * SS, color: '#f80' });
                     }
                 } else {
-                    enemyBullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * bSpd, vy: Math.sin(a) * bSpd, dmg: 15, life: 120, r: 3 * Math.min(scaleX, scaleY), color: '#f80' });
+                    enemyBullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * bSpd, vy: Math.sin(a) * bSpd, dmg: 15, life: 120, r: 3 * Math.min(scaleX, scaleY) * SS, color: '#f80' });
                 }
             }
             if (e.boss && e.spawnTimer !== undefined) {
@@ -1047,7 +1050,7 @@ function update() {
                 e.shootTimer = 60;
                 const a = Math.atan2(dy, dx);
                 const bSpd = 2.5 * Math.min(scaleX, scaleY);
-                enemyBullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * bSpd, vy: Math.sin(a) * bSpd, dmg: 12, life: 180, r: 4 * Math.min(scaleX, scaleY), color: '#f0f', homing: true });
+                enemyBullets.push({ x: e.x, y: e.y, vx: Math.cos(a) * bSpd, vy: Math.sin(a) * bSpd, dmg: 12, life: 180, r: 4 * Math.min(scaleX, scaleY) * SS, color: '#f0f', homing: true });
             }
             if (e.teleCooldown !== undefined) {
                 e.teleCooldown--;
@@ -1123,7 +1126,7 @@ function update() {
         b.y = safeNum(b.y + b.vy);
         b.life--;
         if (b.x < ARENA_L || b.x > ARENA_R || b.y < ARENA_T || b.y > ARENA_B) { b.life = 0; continue; }
-        if (p.iFrames <= 0 && dist(b, p) < 10 * Math.min(scaleX, scaleY)) {
+        if (p.iFrames <= 0 && dist(b, p) < 10 * Math.min(scaleX, scaleY) * SS) {
             hurtPlayer(b.dmg);
             b.life = 0;
         }
@@ -1294,7 +1297,7 @@ function explodeAt(x, y, dmg) {
     playSound('explode');
     spawnParticles(x, y, 16, '#f80', 4, 30);
     spawnParticles(x, y, 8, '#ff0', 2, 20);
-    const splashR = 50 * Math.min(scaleX, scaleY);
+    const splashR = 50 * Math.min(scaleX, scaleY) * SS;
     for (let ei = 0; ei < enemies.length; ei++) {
         const e = enemies[ei];
         if (e.dead) continue;

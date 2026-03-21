@@ -8,7 +8,7 @@ use macroquad::prelude::*;
 // ---------------------------------------------------------------------------
 const GAME_W: f32 = 640.0;
 const GAME_H: f32 = 480.0;
-const STAR_COUNT: usize = 120;
+const STAR_COUNT: usize = 150;
 const DROP_CHANCE: f32 = 0.15;
 
 // ---------------------------------------------------------------------------
@@ -96,10 +96,10 @@ impl Player {
     fn new() -> Self {
         Self {
             x: GAME_W / 2.0,
-            y: GAME_H - 70.0,
-            w: 32.0,
-            h: 24.0,
-            speed: 5.0,
+            y: GAME_H - 80.0,
+            w: 20.0,
+            h: 15.0,
+            speed: 7.0,
             weapon_level: 1,
             speed_boost_timer: 0,
             shield_active: false,
@@ -169,7 +169,7 @@ impl Star {
             x: rand::gen_range(0.0, GAME_W),
             y: if random_y { rand::gen_range(0.0, GAME_H) } else { -10.0 },
             size,
-            speed: size * 0.6,
+            speed: size * 0.8,
             brightness: rand::gen_range(0.2, 1.0),
         }
     }
@@ -203,7 +203,7 @@ impl PowerUp {
         } else {
             (PowerUpKind::Shield, GREEN, '+')
         };
-        Self { x, y, vy: 1.2, kind, alive: true, color, letter }
+        Self { x, y, vy: 1.5, kind, alive: true, color, letter }
     }
 }
 
@@ -330,7 +330,7 @@ impl Game {
     fn spawn_particles(&mut self, x: f32, y: f32, count: usize, color: Color, speed_scale: f32) {
         for _ in 0..count {
             let angle = rand::gen_range(0.0, std::f32::consts::TAU);
-            let spd = rand::gen_range(0.0, 4.0) * speed_scale;
+            let spd = rand::gen_range(0.0, 5.0) * speed_scale;
             self.particles.push(Particle {
                 x,
                 y,
@@ -410,10 +410,10 @@ impl Game {
 
     fn start_wave(&mut self) {
         self.state = GameState::Playing;
-        self.frame = 0;
-        self.player.last_shot = 0;
+        // Do NOT reset frame -- it breaks lastShot timing (matches web)
         self.slowmo_timer = 0;
         self.wave_cleared = false;
+        self.player.last_shot = self.frame - 999; // ensure can shoot immediately
     }
 
     fn game_over(&mut self) {
@@ -434,10 +434,7 @@ impl Game {
             self.spawn_particles(px, py, 25, GREEN, 3.0);
         } else {
             self.lives -= 1;
-            self.player.weapon_level = (self.player.weapon_level).max(1) - 1;
-            if self.player.weapon_level < 1 {
-                self.player.weapon_level = 1;
-            }
+            self.player.weapon_level = self.player.weapon_level.saturating_sub(1).max(1);
             self.spawn_particles(px, py, 35, SKYBLUE, 3.0);
             if self.lives <= 0 {
                 self.game_over();
@@ -452,9 +449,9 @@ impl Game {
     // ------------------------------------------------------------------
     fn player_shoot(&mut self) {
         let p = &mut self.player;
-        let base_vy: f32 = -10.0;
+        let base_vy: f32 = -12.0;
 
-        // Dynamic cooldown
+        // Dynamic cooldown (matches web)
         p.shot_cooldown = match p.weapon_level {
             1..=2 => 12,
             3 => 9,
@@ -468,29 +465,29 @@ impl Game {
         match p.weapon_level {
             1 => {
                 // Dual
-                self.bullets.push(mk_bullet(bx - 8.0, by, 0.0, base_vy, c, true));
-                self.bullets.push(mk_bullet(bx + 8.0, by, 0.0, base_vy, c, true));
+                self.bullets.push(mk_bullet(bx - 7.0, by, 0.0, base_vy, c, true));
+                self.bullets.push(mk_bullet(bx + 7.0, by, 0.0, base_vy, c, true));
             }
             2 => {
                 // Tri
                 self.bullets.push(mk_bullet(bx, by, 0.0, base_vy, c, true));
-                self.bullets.push(mk_bullet(bx - 10.0, by, -1.2, base_vy * 0.95, c, true));
-                self.bullets.push(mk_bullet(bx + 10.0, by, 1.2, base_vy * 0.95, c, true));
+                self.bullets.push(mk_bullet(bx - 9.0, by, -1.5, base_vy * 0.95, c, true));
+                self.bullets.push(mk_bullet(bx + 9.0, by, 1.5, base_vy * 0.95, c, true));
             }
             3 => {
                 // Quad
-                self.bullets.push(mk_bullet(bx - 5.0, by, 0.0, base_vy, c, true));
-                self.bullets.push(mk_bullet(bx + 5.0, by, 0.0, base_vy, c, true));
-                self.bullets.push(mk_bullet(bx - 15.0, by, -2.0, base_vy * 0.95, c, true));
-                self.bullets.push(mk_bullet(bx + 15.0, by, 2.0, base_vy * 0.95, c, true));
+                self.bullets.push(mk_bullet(bx - 4.0, by, 0.0, base_vy, c, true));
+                self.bullets.push(mk_bullet(bx + 4.0, by, 0.0, base_vy, c, true));
+                self.bullets.push(mk_bullet(bx - 13.0, by, -2.5, base_vy * 0.95, c, true));
+                self.bullets.push(mk_bullet(bx + 13.0, by, 2.5, base_vy * 0.95, c, true));
             }
             _ => {
                 // Penta
                 self.bullets.push(mk_bullet(bx, by, 0.0, base_vy, c, true));
-                self.bullets.push(mk_bullet(bx - 8.0, by, -1.5, base_vy * 0.9, c, true));
-                self.bullets.push(mk_bullet(bx + 8.0, by, 1.5, base_vy * 0.9, c, true));
-                self.bullets.push(mk_bullet(bx - 16.0, by, -3.5, base_vy * 0.8, c, true));
-                self.bullets.push(mk_bullet(bx + 16.0, by, 3.5, base_vy * 0.8, c, true));
+                self.bullets.push(mk_bullet(bx - 7.0, by, -2.0, base_vy * 0.9, c, true));
+                self.bullets.push(mk_bullet(bx + 7.0, by, 2.0, base_vy * 0.9, c, true));
+                self.bullets.push(mk_bullet(bx - 14.0, by, -4.5, base_vy * 0.8, c, true));
+                self.bullets.push(mk_bullet(bx + 14.0, by, 4.5, base_vy * 0.8, c, true));
             }
         }
 
@@ -500,8 +497,8 @@ impl Game {
 
         let px = self.player.x;
         let py = self.player.y - self.player.h / 2.0;
-        self.spawn_particles(px - 8.0, py, 2, SKYBLUE, 1.5);
-        self.spawn_particles(px + 8.0, py, 2, SKYBLUE, 1.5);
+        self.spawn_particles(px - 7.0, py, 2, SKYBLUE, 2.0);
+        self.spawn_particles(px + 7.0, py, 2, SKYBLUE, 2.0);
     }
 
     // ------------------------------------------------------------------
@@ -518,14 +515,14 @@ impl Game {
         let speed_mult = 1.0 + (self.wave_idx as f32) * 0.1 + (self.frame as f32) / 10000.0;
 
         let (color, vy, vx, hp, score_val, w, h) = match etype {
-            0 => (MAGENTA, 2.0 * speed_mult, 0.0f32, 2, 100u32, 24.0f32, 24.0f32),
+            0 => (MAGENTA, 2.5 * speed_mult, 0.0f32, 2, 100u32, 15.0f32, 15.0f32),
             1 => {
                 let dir = if rand::gen_range(0.0f32, 1.0) > 0.5 { 1.0 } else { -1.0 };
-                (YELLOW, 3.2 * speed_mult, dir * 2.4, 1, 250, 24.0, 24.0)
+                (YELLOW, 4.0 * speed_mult, dir * 3.0, 1, 250, 15.0, 15.0)
             }
             _ => {
                 let dir = if rand::gen_range(0.0f32, 1.0) > 0.5 { 1.0 } else { -1.0 };
-                (RED, 1.2 * speed_mult, dir * 1.2, 4, 500, 32.0, 32.0)
+                (RED, 1.5 * speed_mult, dir * 1.5, 4, 500, 21.0, 21.0)
             }
         };
 
@@ -559,7 +556,7 @@ impl Game {
     fn update(&mut self) {
         // Stars always update
         let playing = self.state == GameState::Playing;
-        let star_mult = if playing { 1.2 } else { 0.4 };
+        let star_mult = if playing { 1.5 } else { 0.5 };
         for s in self.stars.iter_mut() {
             s.y += s.speed * star_mult;
             if s.y > GAME_H {
@@ -611,7 +608,7 @@ impl Game {
                 }
             } else {
                 if self.story_wait == 0 {
-                    self.story_wait = 150;
+                    self.story_wait = 240;
                 }
                 self.story_wait -= 1;
                 if self.story_wait <= 0 || enter || is_key_pressed(KeyCode::X) {
@@ -727,7 +724,7 @@ impl Game {
 
         // Floating texts
         for ft in self.floating_texts.iter_mut() {
-            ft.y -= 0.8;
+            ft.y -= 1.0;
             ft.life -= 1;
         }
         self.floating_texts.retain(|ft| ft.life > 0);
@@ -738,38 +735,29 @@ impl Game {
         }
         self.dying_enemies.retain(|de| de.frames_left > 0);
 
-        // Victory condition for the final wave
-        let is_final_wave = self.wave_idx == WAVES.len() - 1;
-        let target = if is_final_wave {
-            VICTORY_KILL_COUNT
-        } else {
-            self.current_wave().target_kills
-        };
-
-        // Check wave cleared
-        if self.kills >= target {
+        // Victory condition for the final wave (index 3)
+        let is_final_wave = self.wave_idx == 3;
+        if is_final_wave && self.kills >= VICTORY_KILL_COUNT && !self.victory_triggered {
             if !self.wave_cleared {
                 self.wave_cleared = true;
                 self.wave_clear_celebrated = false;
                 self.slowmo_timer = 30;
             }
-            // Wave clear celebration burst
             if !self.wave_clear_celebrated {
                 self.wave_clear_celebrated = true;
                 let cx = GAME_W / 2.0;
                 let cy = GAME_H / 2.0;
                 let celebration_colors = [
-                    Color::new(1.0, 0.84, 0.0, 1.0),  // gold
+                    Color::new(1.0, 0.84, 0.0, 1.0),
                     WHITE,
-                    SKYBLUE,                             // cyan
+                    SKYBLUE,
                 ];
                 for i in 0..30 {
-                    let angle = rand::gen_range(0.0, std::f32::consts::TAU);
+                    let angle: f32 = rand::gen_range(0.0, std::f32::consts::TAU);
                     let spd = rand::gen_range(2.0, 6.0);
                     let c = celebration_colors[i % 3];
                     self.particles.push(Particle {
-                        x: cx,
-                        y: cy,
+                        x: cx, y: cy,
                         vx: angle.cos() * spd,
                         vy: angle.sin() * spd,
                         life: 1.0,
@@ -781,26 +769,62 @@ impl Game {
             }
             if self.slowmo_timer > 0 {
                 self.slowmo_timer -= 1;
-                if self.frame % 2 == 0 {
-                    return;
-                }
+                if self.frame % 2 == 0 { return; }
             }
             if self.slowmo_timer <= 0 {
-                // Check for after-text on the current wave before advancing
-                let after = self.current_wave().after_text;
-                self.wave_idx += 1;
-                self.kills = 0;
-                if self.wave_idx >= WAVES.len() {
-                    // Final wave cleared -- show victory epilogue
-                    self.show_victory();
+                self.show_victory();
+                return;
+            }
+        }
+
+        // Non-final wave transition
+        if !is_final_wave {
+            let target = self.current_wave().target_kills;
+            if self.kills >= target && self.wave_idx < 3 {
+                if !self.wave_cleared {
+                    self.wave_cleared = true;
+                    self.wave_clear_celebrated = false;
+                    self.slowmo_timer = 30;
+                }
+                if !self.wave_clear_celebrated {
+                    self.wave_clear_celebrated = true;
+                    let cx = GAME_W / 2.0;
+                    let cy = GAME_H / 2.0;
+                    let celebration_colors = [
+                        Color::new(1.0, 0.84, 0.0, 1.0),
+                        WHITE,
+                        SKYBLUE,
+                    ];
+                    for i in 0..30 {
+                        let angle: f32 = rand::gen_range(0.0, std::f32::consts::TAU);
+                        let spd = rand::gen_range(2.0, 6.0);
+                        let c = celebration_colors[i % 3];
+                        self.particles.push(Particle {
+                            x: cx, y: cy,
+                            vx: angle.cos() * spd,
+                            vy: angle.sin() * spd,
+                            life: 1.0,
+                            decay: rand::gen_range(0.01, 0.03),
+                            color: c,
+                            alive: true,
+                        });
+                    }
+                }
+                if self.slowmo_timer > 0 {
+                    self.slowmo_timer -= 1;
+                    if self.frame % 2 == 0 { return; }
+                }
+                if self.slowmo_timer <= 0 {
+                    let after = self.current_wave().after_text;
+                    self.wave_idx += 1;
+                    self.kills = 0;
+                    if !after.is_empty() {
+                        self.start_story(Some(after));
+                    } else {
+                        self.start_story(None);
+                    }
                     return;
                 }
-                if !after.is_empty() {
-                    self.start_story(Some(after));
-                } else {
-                    self.start_story(None);
-                }
-                return;
             }
         }
 
@@ -856,7 +880,7 @@ impl Game {
                 let dx = px - e.x;
                 let dy = py - e.y;
                 let mag = (dx * dx + dy * dy).sqrt().max(1.0);
-                let spd = 5.5;
+                let spd = 7.0;
                 new_bullets.push(mk_bullet(
                     e.x,
                     e.y + e.h / 2.0,
@@ -892,7 +916,7 @@ impl Game {
             if !p.alive { continue; }
             if Self::aabb(
                 self.player.x, self.player.y, self.player.w, self.player.h,
-                p.x, p.y, 20.0, 20.0,
+                p.x, p.y, 13.0, 13.0,
             ) {
                 p.alive = false;
                 let px2 = p.x;
@@ -923,6 +947,7 @@ impl Game {
             bullet_idx: usize,
         }
         struct KillEvent {
+            #[allow(dead_code)]
             enemy_idx: usize,
             x: f32,
             y: f32,
@@ -1068,8 +1093,8 @@ impl Game {
         clear_background(Color::new(0.02, 0.02, 0.06, 1.0));
 
         // Grid lines
-        let grid_col = Color::new(0.0, 1.0, 1.0, 0.04);
-        let step = 40.0;
+        let grid_col = Color::new(0.0, 1.0, 1.0, 0.05);
+        let step = 50.0;
         let mut gx = 0.0;
         while gx < GAME_W {
             draw_line(gx + self.shake_x, 0.0, gx + self.shake_x, GAME_H, 1.0, grid_col);
@@ -1096,7 +1121,7 @@ impl Game {
         // Power-ups
         for p in &self.power_ups {
             let pulse = 1.0 + (self.frame as f32 * 0.1).sin() * 0.1;
-            let r = 10.0 * pulse;
+            let r = 6.5 * pulse;
             draw_circle_lines(p.x + sx, p.y + sy, r, 2.0, p.color);
             // Letter
             let txt = &p.letter.to_string();
@@ -1237,8 +1262,9 @@ impl Game {
 
         // Shield
         if p.shield_active {
-            draw_circle_lines(cx, cy, p.w, 2.0, Color::new(0.0, 1.0, 0.0, 0.5));
-            draw_circle(cx, cy, p.w, Color::new(0.0, 1.0, 0.0, 0.1));
+            let shield_r = p.w * 0.9;
+            draw_circle_lines(cx, cy, shield_r, 3.0, Color::new(0.0, 1.0, 0.0, 0.6));
+            draw_circle(cx, cy, shield_r, Color::new(0.0, 1.0, 0.0, 0.15));
         }
 
         // Ship shape (triangle-ish)
@@ -1266,9 +1292,9 @@ impl Game {
 
         // Muzzle flash
         if self.muzzle_flash > 0 {
-            let r = 6.0 + self.muzzle_flash as f32 * 1.5;
+            let r = 4.0 + self.muzzle_flash as f32 * 1.0;
             let a = self.muzzle_flash as f32 / 3.0;
-            draw_circle(cx, cy - hh, r, Color::new(1.0, 1.0, 1.0, a * 0.6));
+            draw_circle(cx, cy - hh, r, Color::new(1.0, 1.0, 1.0, a));
         }
     }
 
@@ -1502,8 +1528,8 @@ fn mk_bullet(x: f32, y: f32, vx: f32, vy: f32, color: Color, is_player: bool) ->
         y,
         vx,
         vy,
-        w: 3.0,
-        h: 12.0,
+        w: 2.0,
+        h: 7.0,
         is_player,
         alive: true,
         color,

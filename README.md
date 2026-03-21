@@ -1,96 +1,131 @@
-# retrogames
+# Retro Arcade
 
-A collection of retro-style games with two targets: a browser-based **Arcade Launcher** for quick play, and native **Miyoo Mini Plus** binaries built from Rust.
-
----
-
-## Project Structure
-
-```
-retrogames/
-├── web/                        # Browser frontend
-│   ├── index.html              # Arcade Launcher (game selection page)
-│   ├── nginx                   # Nginx config for local serving
-│   └── micro/                  # Micro Mages JS prototype
-│       ├── index.html          # Playable HTML5 Canvas demo
-│       └── spec.md             # Tech spec for the Rust/Miyoo port
-└── miyoo/                      # Rust source trees (one sub-dir per game)
-    └── <game>/                 # Independent Cargo project, one binary target
-```
-
----
+A collection of retro browser games playable on any device, with native ports for the Miyoo Mini Plus handheld. Installable as a PWA for offline play.
 
 ## Games
 
-| Game | Browser | Miyoo Binary |
-|------|---------|--------------|
-| Micro Mages | `web/micro/index.html` | `miyoo/micro_mages` (planned) |
+| Game | Genre | Web | Miyoo |
+|------|-------|:---:|:-----:|
+| Nano Wizards | Platformer | [Play](web/micro/) | [Port](miyoo/micro/) |
+| Neon Defender | Shoot 'em Up | [Play](web/space/) | [Port](miyoo/space/) |
+| Shadow Blade | Action Platformer | [Play](web/shadow/) | [Port](miyoo/shadow/) |
+| Arena Blitz | Twin-Stick Shooter | [Play](web/arena/) | [Port](miyoo/arena/) |
+| Dragon Fury | Beat 'em Up | [Play](web/dragon/) | [Port](miyoo/dragon/) |
+| Pixel Knight | Mario-like Platformer | [Play](web/mariolike/) | [Port](miyoo/mariolike/) |
+| Nova Evader | Bullet Hell | [Play](web/nova/) | — |
+| Chrome Viper | Cyberpunk Shooter | [Play](web/cyber/) | [Port](miyoo/cyber/) |
+| Neon Runner | Cyberpunk Platformer | [Play](web/neon/) | [Port](miyoo/neon/) |
 
----
+## Features
 
-## Running Locally (Browser)
+- Single-file HTML5 Canvas games — no dependencies, no build step
+- Fullscreen mobile with floating touch joystick (Brawl Stars-style)
+- Installable as a PWA with offline caching
+- Procedural pixel-art sprites and Web Audio API sound effects
+- CRT scanline overlay and retro aesthetic
+- Miyoo Mini Plus native ports in Rust/Macroquad
 
-Serve the `web/` folder with any static file server. An Nginx config is included:
+## Quick Start
 
-1. Edit `web/nginx` — replace the `root` path with the absolute path to your `web/` folder.
-2. Copy the config to your Nginx sites:
-   ```bash
-   sudo cp web/nginx /etc/nginx/sites-available/retrogames
-   sudo ln -s /etc/nginx/sites-available/retrogames /etc/nginx/sites-enabled/
-   sudo nginx -s reload
-   ```
-3. Open `http://localhost:8080` in your browser.
-
-Or use Python's built-in server:
+### Play in browser
 ```bash
-cd web && python3 -m http.server 8080
+cd web && python3 -m http.server 8000
+# Open http://localhost:8000
 ```
 
----
+### Deploy with Docker + Tailscale
+```bash
+cp .env.example .env  # Add your TS_AUTHKEY
+./scripts/deploy.sh
+```
+
+### Build Miyoo ports
+```bash
+./scripts/build-miyoo.sh all --native    # Desktop testing
+./scripts/build-miyoo.sh all --arm       # Cross-compile for Miyoo
+```
+
+## Scripts
+
+| Script | Description |
+|--------|-------------|
+| `scripts/deploy.sh` | Build & deploy Docker containers |
+| `scripts/status.sh` | Check deployment health |
+| `scripts/logs.sh` | View container logs |
+| `scripts/test.sh` | Run Playwright smoke tests |
+| `scripts/check-rust.sh` | Cargo check all Miyoo ports |
+| `scripts/build-miyoo.sh` | Build Miyoo binaries |
+
+## Architecture
+
+```
+retrogames/
+├── web/              # Browser games (HTML5 Canvas)
+│   ├── index.html    # Arcade launcher
+│   ├── micro/        # Nano Wizards
+│   ├── space/        # Neon Defender
+│   ├── shadow/       # Shadow Blade
+│   ├── arena/        # Arena Blitz
+│   ├── dragon/       # Dragon Fury
+│   ├── mariolike/    # Pixel Knight
+│   ├── nova/         # Nova Evader
+│   ├── cyber/        # Chrome Viper
+│   ├── neon/         # Neon Runner
+│   ├── sw.js         # Service worker (PWA)
+│   └── manifest.json # PWA manifest
+├── miyoo/            # Miyoo Mini Plus ports (Rust/Macroquad)
+├── scripts/          # Automation scripts
+├── docs/             # Comprehensive documentation
+├── .claude/          # Claude Code skills & agents
+├── Dockerfile        # busybox httpd static server
+└── docker-compose.yml # Tailscale + app stack
+```
+
+## Documentation
+
+Detailed guides in [`docs/`](docs/):
+
+- [Architecture](docs/architecture.md) — system design and data flow
+- [Game Engine Patterns](docs/game-engine-patterns.md) — game loop, sprites, physics
+- [Deployment Guide](docs/deployment-guide.md) — Docker + Tailscale setup
+- [Adding Games](docs/adding-games.md) — step-by-step tutorial
+- [Mobile Optimization](docs/mobile-optimization.md) — touch controls, viewport
+- [Miyoo Porting Guide](docs/miyoo-porting-guide.md) — Rust/Macroquad patterns
+- [Skills & Agents](docs/skills-and-agents.md) — Claude Code automation
 
 ## Building for Miyoo Mini Plus
 
-Each game under `miyoo/<game>/` is an independent Rust/[Macroquad](https://macroquad.rs/) project. Cross-compilation targets `armv7-unknown-linux-gnueabihf`.
+Each game under `miyoo/<game>/` is an independent Rust/Macroquad project targeting `armv7-unknown-linux-gnueabihf`.
 
-**Prerequisites**
 ```bash
 rustup target add armv7-unknown-linux-gnueabihf
 sudo apt-get install gcc-arm-linux-gnueabihf
-```
 
-**Build a game manually**
-```bash
 cd miyoo/<game>
 CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc \
   cargo build --release --target armv7-unknown-linux-gnueabihf
 ```
 
-The binary will be at `target/armv7-unknown-linux-gnueabihf/release/<binary>`.
+## CI/CD
 
----
+GitHub Actions (`.github/workflows/build-and-publish-release.yml`) auto-discovers `miyoo/*/` subdirectories, cross-compiles each in parallel, and publishes to GitHub Releases on `v*` tags.
 
-## CI / Releases
-
-A GitHub Actions workflow (`.github/workflows/build-and-publish-release.yml`) runs automatically when:
-- A tag matching `v*` is pushed **and** files under `miyoo/**` have changed, or
-- The workflow is triggered manually (`workflow_dispatch`).
-
-It discovers every sub-directory under `miyoo/`, cross-compiles each one in parallel, stages the binary as `<game>_miyoo`, and publishes all assets to the same GitHub Release.
-
-To cut a release:
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v2.1.0
+git push origin v2.1.0
 ```
-
----
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Browser prototypes | HTML5 Canvas + vanilla JavaScript |
-| Miyoo native ports | Rust 2021 + Macroquad 0.4 |
-| Cross-compilation | `armv7-unknown-linux-gnueabihf` via `gcc-arm-linux-gnueabihf` |
+| Browser games | HTML5 Canvas, Web Audio API, vanilla JS |
+| Miyoo ports | Rust 2021, Macroquad 0.4 |
+| Deploy | Docker (busybox httpd), Tailscale Serve |
 | CI/CD | GitHub Actions |
-| Local web serving | Nginx / Python `http.server` |
+| Testing | Playwright (headless Chromium) |
+| PWA | Service worker, Web App Manifest |
+
+## License
+
+MIT

@@ -39,12 +39,13 @@
         }
         /* Touch controls */
         .touch-controls { position: fixed; bottom: 0; left: 0; width: 100%; height: 100%; z-index: 50; pointer-events: none; }
-        .joystick-zone { position: absolute; bottom: 20px; left: 20px; width: 120px; height: 120px; pointer-events: auto; }
+        .joystick-zone { position: absolute; top: 0; left: 0; width: 50%; height: 100%; pointer-events: auto; }
         .joystick-base {
             width: 120px; height: 120px; border-radius: 50%;
             background: rgba(255,0,128,0.12); border: 2px solid rgba(255,0,128,0.35);
-            position: relative;
+            position: absolute; display: none;
         }
+        .joystick-base.visible { display: block; }
         .joystick-knob {
             width: 50px; height: 50px; border-radius: 50%;
             background: rgba(255,0,128,0.5); border: 2px solid rgba(255,0,128,0.7);
@@ -82,7 +83,7 @@
             .touch-controls { display: none !important; }
         }
         @supports(padding: max(0px)) {
-            .joystick-zone { bottom: max(20px, env(safe-area-inset-bottom)); left: max(20px, env(safe-area-inset-left)); }
+            .joystick-zone { /* floating - no fixed position needed */ }
             .btn-group { bottom: max(20px, env(safe-area-inset-bottom)); right: max(20px, env(safe-area-inset-right)); }
         }
     </style>
@@ -123,8 +124,8 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 // --- CONSTANTS ---
-const GW = 640, GH = 480;
-const TILE = 20;
+const GW = 800, GH = 600;
+const TILE = 14;
 const GRAVITY = 0.45;
 const MAX_FALL = 8.0;
 const MOVE_SPD = 3.5;
@@ -138,11 +139,11 @@ const DASH_CD = 30;
 const COYOTE = 6;
 const JUMP_BUF = 6;
 const IFRAMES = 60;
-const SLASH_RANGE = 24;
+const SLASH_RANGE = 17;
 const SLASH_CD = 12;
-const EMP_RADIUS = 60;
+const EMP_RADIUS = 42;
 const EMP_STUN = 120;
-const HACK_RANGE = 30;
+const HACK_RANGE = 21;
 const HACK_DUR = 300;
 
 // Colors
@@ -494,22 +495,30 @@ let touchBtns = { jump: false, attack: false, dash: false, emp: false };
 document.addEventListener('keydown', e => { keys[e.code] = true; e.preventDefault(); });
 document.addEventListener('keyup', e => { keys[e.code] = false; e.preventDefault(); });
 
-// Joystick
+// Floating Joystick
 const joyZone = document.getElementById('joystickZone');
 const joyBase = document.getElementById('joystickBase');
 const joyKnob = document.getElementById('joystickKnob');
 let joyTouchId = null;
 let joyCenterX = 0, joyCenterY = 0;
+const JOY_MAX_R = 50;
+const JOY_DEAD = 20;
 
 joyZone.addEventListener('touchstart', e => {
     e.preventDefault();
+    if (joyTouchId !== null) return; // already tracking a touch
     const touch = e.changedTouches[0];
     joyTouchId = touch.identifier;
-    const rect = joyBase.getBoundingClientRect();
-    joyCenterX = rect.left + rect.width / 2;
-    joyCenterY = rect.top + rect.height / 2;
+    joyCenterX = touch.clientX;
+    joyCenterY = touch.clientY;
+    // Position joystick base at touch point
+    joyBase.style.left = (joyCenterX - 60) + 'px';
+    joyBase.style.top = (joyCenterY - 60) + 'px';
+    joyBase.classList.add('visible');
+    joyKnob.style.transform = 'translate(-50%, -50%)';
     touchJoy.active = true;
-    updateJoy(touch);
+    touchJoy.dx = 0;
+    touchJoy.dy = 0;
 });
 joyZone.addEventListener('touchmove', e => {
     e.preventDefault();
@@ -519,27 +528,33 @@ joyZone.addEventListener('touchmove', e => {
 });
 joyZone.addEventListener('touchend', e => {
     for (let i = 0; i < e.changedTouches.length; i++) {
-        if (e.changedTouches[i].identifier === joyTouchId) {
-            joyTouchId = null; touchJoy.active = false; touchJoy.dx = 0; touchJoy.dy = 0;
-            joyKnob.style.transform = 'translate(-50%, -50%)';
-        }
+        if (e.changedTouches[i].identifier === joyTouchId) hideJoy();
     }
 });
 joyZone.addEventListener('touchcancel', e => {
-    joyTouchId = null; touchJoy.active = false; touchJoy.dx = 0; touchJoy.dy = 0;
-    joyKnob.style.transform = 'translate(-50%, -50%)';
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joyTouchId) hideJoy();
+    }
 });
+
+function hideJoy() {
+    joyTouchId = null;
+    touchJoy.active = false;
+    touchJoy.dx = 0;
+    touchJoy.dy = 0;
+    joyBase.classList.remove('visible');
+    joyKnob.style.transform = 'translate(-50%, -50%)';
+}
 
 function updateJoy(touch) {
     let dx = touch.clientX - joyCenterX;
     let dy = touch.clientY - joyCenterY;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const maxR = 35;
-    if (dist > maxR) { dx = dx / dist * maxR; dy = dy / dist * maxR; }
-    joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-    const dead = 12;
-    touchJoy.dx = Math.abs(dx) > dead ? dx / maxR : 0;
-    touchJoy.dy = Math.abs(dy) > dead ? dy / maxR : 0;
+    let clampDx = dx, clampDy = dy;
+    if (dist > JOY_MAX_R) { clampDx = dx / dist * JOY_MAX_R; clampDy = dy / dist * JOY_MAX_R; }
+    joyKnob.style.transform = `translate(calc(-50% + ${clampDx}px), calc(-50% + ${clampDy}px))`;
+    touchJoy.dx = Math.abs(dx) > JOY_DEAD ? clampDx / JOY_MAX_R : 0;
+    touchJoy.dy = Math.abs(dy) > JOY_DEAD ? clampDy / JOY_MAX_R : 0;
 }
 
 // Buttons
@@ -576,7 +591,7 @@ document.addEventListener('touchmove', e => e.preventDefault(), { passive: false
 
 // --- RESIZE ---
 function resizeCanvas() {
-    // Canvas always renders at 640x480, CSS scales it
+    // Canvas always renders at 800x600, CSS scales it
     canvas.width = GW;
     canvas.height = GH;
     ctx.imageSmoothingEnabled = false;
@@ -890,7 +905,7 @@ function loadLevel(idx) {
             } else if (ch === 'T') {
                 enemies.push({ type: 'turret', x: c * TILE, y: r * TILE, hp: 3, timer: 0, angle: 0, stun: 0, alive: true, hacked: false, hackTimer: 0 });
             } else if (ch === 'C') {
-                chips.push({ x: c * TILE + 6, y: r * TILE + 6, alive: true });
+                chips.push({ x: c * TILE + 4, y: r * TILE + 4, alive: true });
             } else if (ch === 'H') {
                 pickups.push({ type: 'health', x: c * TILE, y: r * TILE, alive: true });
             } else if (ch === 'M') {
@@ -1024,7 +1039,7 @@ function updateGame() {
     if (damageFlash > 0) damageFlash--;
 
     // --- PLAYER PHYSICS ---
-    const pw = 14, ph = 16;
+    const pw = 10, ph = 11;
 
     // Horizontal input
     let moveInput = 0;
@@ -1194,9 +1209,9 @@ function updateGame() {
             for (let i = 0; i < enemies.length; i++) {
                 const e = enemies[i];
                 if (!e.alive) continue;
-                const ew = e.type === 'drone' ? 12 : 12;
-                const eh = e.type === 'guard' ? 16 : 12;
-                if (rectOverlap(sx, sy, SLASH_RANGE, ph + 8, e.x, e.y, ew, eh)) {
+                const ew = e.type === 'drone' ? 8 : 8;
+                const eh = e.type === 'guard' ? 11 : 8;
+                if (rectOverlap(sx, sy, SLASH_RANGE, ph + 6, e.x, e.y, ew, eh)) {
                     e.hp--;
                     if (e.hp <= 0) {
                         e.alive = false;
@@ -1211,18 +1226,18 @@ function updateGame() {
             }
             // Hit boss
             if (boss && boss.alive) {
-                if (rectOverlap(sx, sy, SLASH_RANGE, ph + 8, boss.x, boss.y, 20, 14)) {
+                if (rectOverlap(sx, sy, SLASH_RANGE, ph + 6, boss.x, boss.y, 14, 10)) {
                     boss.hp--;
                     boss.flashTimer = 6;
                     if (boss.hp <= boss.maxHp / 2 && !boss.enraged) { boss.enraged = true; }
                     if (boss.hp <= 0) {
                         boss.alive = false;
                         score += 1000;
-                        spawnParticles(boss.x + 10, boss.y + 7, MAGENTA, 30, 5, 40);
+                        spawnParticles(boss.x + 7, boss.y + 5, MAGENTA, 30, 5, 40);
                         playSound('explode');
                         triggerShake(10);
                     } else {
-                        spawnParticles(boss.x + 10, boss.y + 7, '#fff', 8, 3, 15);
+                        spawnParticles(boss.x + 7, boss.y + 5, '#fff', 8, 3, 15);
                         playSound('hit');
                         triggerShake(3);
                     }
@@ -1248,7 +1263,7 @@ function updateGame() {
             const dy = e.y - empY;
             if (Math.sqrt(dx * dx + dy * dy) < EMP_RADIUS) {
                 e.stun = EMP_STUN;
-                spawnParticles(e.x + 6, e.y + 6, BLUE, 5, 2, 15);
+                spawnParticles(e.x + 4, e.y + 4, BLUE, 5, 2, 15);
             }
         }
         if (boss && boss.alive) {
@@ -1277,7 +1292,7 @@ function updateGame() {
             e.x += e.vx;
             e.y = e.startY + Math.sin(globalFrame * 0.04 + i) * 15;
             // Reverse at edges or walls
-            if (solidAt(e.x + 14, e.y + 6) || solidAt(e.x - 2, e.y + 6)) e.vx = -e.vx;
+            if (solidAt(e.x + 10, e.y + 4) || solidAt(e.x - 2, e.y + 4)) e.vx = -e.vx;
             if (e.x < e.startX - 80 || e.x > e.startX + 80) e.vx = -e.vx;
             // Shoot
             e.timer++;
@@ -1287,15 +1302,15 @@ function updateGame() {
                 const dy = player.y - e.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist < 300 && dist > 0) {
-                    bullets.push({ x: e.x + 6, y: e.y + 6, vx: (dx / dist) * 3, vy: (dy / dist) * 3, life: 120 });
+                    bullets.push({ x: e.x + 4, y: e.y + 4, vx: (dx / dist) * 3, vy: (dy / dist) * 3, life: 120 });
                     playSound('laser');
                 }
             }
         } else if (e.type === 'guard') {
             e.x += e.dir * 1;
             // Check ground ahead and walls
-            const aheadX = e.x + (e.dir > 0 ? 14 : -2);
-            const feetY = e.y + 18;
+            const aheadX = e.x + (e.dir > 0 ? 10 : -2);
+            const feetY = e.y + 13;
             if (solidAt(aheadX, e.y + 8) || !solidAt(aheadX, feetY)) {
                 e.dir = -e.dir;
             }
@@ -1307,7 +1322,7 @@ function updateGame() {
                 const dy = player.y - e.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist < 250 && dist > 0) {
-                    bullets.push({ x: e.x + 6, y: e.y + 6, vx: (dx / dist) * 2.5, vy: (dy / dist) * 2.5, life: 120 });
+                    bullets.push({ x: e.x + 4, y: e.y + 4, vx: (dx / dist) * 2.5, vy: (dy / dist) * 2.5, life: 120 });
                     playSound('laser');
                 }
             }
@@ -1340,9 +1355,9 @@ function updateGame() {
             if (boss.state === 'patrol') {
                 boss.x += boss.dir * spd;
                 // Check walls
-                if (solidAt(boss.x + 22, boss.y + 8) || solidAt(boss.x - 2, boss.y + 8)) boss.dir = -boss.dir;
+                if (solidAt(boss.x + 15, boss.y + 6) || solidAt(boss.x - 2, boss.y + 6)) boss.dir = -boss.dir;
                 // Gravity
-                if (!solidAt(boss.x + 10, boss.y + 16)) boss.y += 3;
+                if (!solidAt(boss.x + 7, boss.y + 11)) boss.y += 3;
                 // Charge toward player periodically
                 if (boss.timer > (boss.enraged ? 60 : 120)) {
                     boss.timer = 0;
@@ -1358,8 +1373,8 @@ function updateGame() {
                 }
             } else if (boss.state === 'charge') {
                 boss.x += boss.dir * spd * 2;
-                if (!solidAt(boss.x + 10, boss.y + 16)) boss.y += 3;
-                if (solidAt(boss.x + 22, boss.y + 8) || solidAt(boss.x - 2, boss.y + 8) || boss.timer > 40) {
+                if (!solidAt(boss.x + 7, boss.y + 11)) boss.y += 3;
+                if (solidAt(boss.x + 15, boss.y + 6) || solidAt(boss.x - 2, boss.y + 6) || boss.timer > 40) {
                     boss.state = 'patrol';
                     boss.timer = 0;
                 }
@@ -1367,13 +1382,13 @@ function updateGame() {
                 boss.x += boss.vx;
                 boss.y += boss.vy;
                 boss.vy += 0.5;
-                if (boss.vy > 0 && solidAt(boss.x + 10, boss.y + 16)) {
-                    boss.y = Math.floor((boss.y + 16) / TILE) * TILE - 16;
+                if (boss.vy > 0 && solidAt(boss.x + 7, boss.y + 11)) {
+                    boss.y = Math.floor((boss.y + 11) / TILE) * TILE - 11;
                     boss.vy = 0;
                     boss.state = 'patrol';
                     boss.timer = 0;
                     triggerShake(4);
-                    spawnParticles(boss.x + 10, boss.y + 14, '#555', 8, 3, 15);
+                    spawnParticles(boss.x + 7, boss.y + 10, '#555', 8, 3, 15);
                 }
             }
         }
@@ -1381,7 +1396,7 @@ function updateGame() {
 
         // Boss collision with player
         if (player.iframes <= 0 && player.dashing <= 0) {
-            if (rectOverlap(player.x, player.y, pw, ph, boss.x, boss.y, 20, 14)) {
+            if (rectOverlap(player.x, player.y, pw, ph, boss.x, boss.y, 14, 10)) {
                 hurtPlayer();
             }
         }
@@ -1399,7 +1414,7 @@ function updateGame() {
         }
         // Hit player
         if (player.iframes <= 0 && player.dashing <= 0) {
-            if (rectOverlap(player.x, player.y, pw, ph, b.x - 3, b.y - 3, 6, 6)) {
+            if (rectOverlap(player.x, player.y, pw, ph, b.x - 2, b.y - 2, 4, 4)) {
                 hurtPlayer();
                 bullets.splice(i, 1);
             }
@@ -1411,7 +1426,7 @@ function updateGame() {
         l.timer++;
         if (l.timer >= 90) { l.timer = 0; l.active = !l.active; }
         if (l.active && player.iframes <= 0 && player.dashing <= 0) {
-            if (rectOverlap(player.x, player.y, pw, ph, l.x + 7, l.y, 6, TILE)) {
+            if (rectOverlap(player.x, player.y, pw, ph, l.x + 5, l.y, 4, TILE)) {
                 hurtPlayer();
             }
         }
@@ -1455,7 +1470,7 @@ function updateGame() {
     // --- PICKUPS ---
     for (let i = chips.length - 1; i >= 0; i--) {
         if (chips[i].alive) {
-            if (rectOverlap(player.x, player.y, pw, ph, chips[i].x - 4, chips[i].y - 4, 8, 8)) {
+            if (rectOverlap(player.x, player.y, pw, ph, chips[i].x - 3, chips[i].y - 3, 6, 6)) {
                 chips[i].alive = false;
                 score += 50;
                 playSound('pickup');
@@ -1467,8 +1482,8 @@ function updateGame() {
         const p = pickups[i];
         if (p.alive && rectOverlap(player.x, player.y, pw, ph, p.x, p.y, TILE, TILE)) {
             p.alive = false;
-            if (p.type === 'health' && player.hp < 3) { player.hp++; playSound('pickup'); spawnParticles(p.x + 10, p.y + 10, '#ff4477', 8, 2, 15); }
-            else if (p.type === 'emp') { player.emps++; playSound('pickup'); spawnParticles(p.x + 10, p.y + 10, BLUE, 8, 2, 15); }
+            if (p.type === 'health' && player.hp < 3) { player.hp++; playSound('pickup'); spawnParticles(p.x + 7, p.y + 7, '#ff4477', 8, 2, 15); }
+            else if (p.type === 'emp') { player.emps++; playSound('pickup'); spawnParticles(p.x + 7, p.y + 7, BLUE, 8, 2, 15); }
             else playSound('pickup');
         }
     }
@@ -1663,14 +1678,14 @@ function drawGame() {
             ctx.fillStyle = `rgba(255,0,64,${0.5 + Math.sin(globalFrame * 0.2) * 0.3})`;
             ctx.shadowBlur = 8;
             ctx.shadowColor = '#ff0040';
-            ctx.fillRect(l.x + 8, l.y, 4, TILE);
+            ctx.fillRect(l.x + 5, l.y, 3, TILE);
             ctx.shadowBlur = 0;
             // Glow
             ctx.fillStyle = 'rgba(255,0,64,0.15)';
-            ctx.fillRect(l.x + 4, l.y, 12, TILE);
+            ctx.fillRect(l.x + 3, l.y, 8, TILE);
         } else {
             ctx.fillStyle = 'rgba(255,0,64,0.08)';
-            ctx.fillRect(l.x + 9, l.y, 2, TILE);
+            ctx.fillRect(l.x + 6, l.y, 2, TILE);
         }
     }
 
@@ -1691,11 +1706,11 @@ function drawGame() {
     for (const ch of chips) {
         if (!ch.alive) continue;
         const bob = Math.sin(globalFrame * 0.08 + ch.x * 0.1) * 3;
-        ctx.drawImage(chipTex, 0, 0, 8, 8, ch.x - 4, ch.y - 4 + bob, 8, 8);
+        ctx.drawImage(chipTex, 0, 0, 8, 8, ch.x - 3, ch.y - 3 + bob, 6, 6);
         ctx.shadowBlur = 4;
         ctx.shadowColor = AMBER;
         ctx.fillStyle = 'rgba(255,184,0,0.2)';
-        ctx.fillRect(ch.x - 4, ch.y - 4 + bob, 8, 8);
+        ctx.fillRect(ch.x - 3, ch.y - 3 + bob, 6, 6);
         ctx.shadowBlur = 0;
     }
 
@@ -1704,12 +1719,12 @@ function drawGame() {
         if (!p.alive) continue;
         const bob = Math.sin(globalFrame * 0.06 + p.x * 0.05) * 2;
         const tex = p.type === 'health' ? healthTex : empTex;
-        ctx.drawImage(tex, 0, 0, 8, 8, p.x + 2, p.y + 2 + bob, TILE - 4, TILE - 4);
+        ctx.drawImage(tex, 0, 0, 8, 8, p.x + 1, p.y + 1 + bob, TILE - 2, TILE - 2);
     }
 
     // Exit
     const exitBob = Math.sin(globalFrame * 0.05) * 3;
-    ctx.drawImage(exitTex, 0, 0, 8, 8, exitX + 2, exitY + 2 + exitBob, TILE - 4, TILE - 4);
+    ctx.drawImage(exitTex, 0, 0, 8, 8, exitX + 1, exitY + 1 + exitBob, TILE - 2, TILE - 2);
     ctx.shadowBlur = 10;
     ctx.shadowColor = GREEN;
     ctx.fillStyle = 'rgba(0,255,65,0.15)';
@@ -1721,9 +1736,9 @@ function drawGame() {
         if (!e.alive) continue;
         if (e.stun > 0 && Math.floor(globalFrame / 3) % 2) continue; // flash when stunned
         let tex, tw, th;
-        if (e.type === 'drone') { tex = droneTex; tw = 12; th = 12; }
-        else if (e.type === 'guard') { tex = guardTex; tw = 12; th = 16; }
-        else { tex = turretTex; tw = 12; th = 12; }
+        if (e.type === 'drone') { tex = droneTex; tw = 8; th = 8; }
+        else if (e.type === 'guard') { tex = guardTex; tw = 8; th = 11; }
+        else { tex = turretTex; tw = 8; th = 8; }
         ctx.drawImage(tex, 0, 0, tex.width, tex.height, e.x, e.y, tw, th);
         if (e.hacked) {
             ctx.strokeStyle = GREEN;
@@ -1738,15 +1753,15 @@ function drawGame() {
         else {
             ctx.save();
             if (boss.flashTimer > 0) { ctx.globalAlpha = 0.5 + Math.sin(globalFrame) * 0.5; }
-            ctx.drawImage(houndTex, 0, 0, houndTex.width, houndTex.height, boss.x, boss.y, 24, 16);
+            ctx.drawImage(houndTex, 0, 0, houndTex.width, houndTex.height, boss.x, boss.y, 17, 11);
             ctx.restore();
         }
         // HP bar
-        const bw = 40;
+        const bw = 28;
         ctx.fillStyle = '#330000';
-        ctx.fillRect(boss.x - 8, boss.y - 8, bw, 4);
+        ctx.fillRect(boss.x - 6, boss.y - 6, bw, 3);
         ctx.fillStyle = boss.enraged ? '#ff0000' : MAGENTA;
-        ctx.fillRect(boss.x - 8, boss.y - 8, bw * (boss.hp / boss.maxHp), 4);
+        ctx.fillRect(boss.x - 6, boss.y - 6, bw * (boss.hp / boss.maxHp), 3);
     }
 
     // Bullets
@@ -1754,7 +1769,7 @@ function drawGame() {
         ctx.fillStyle = MAGENTA;
         ctx.shadowBlur = 4;
         ctx.shadowColor = MAGENTA;
-        ctx.fillRect(b.x - 2, b.y - 2, 4, 4);
+        ctx.fillRect(b.x - 1, b.y - 1, 3, 3);
         ctx.shadowBlur = 0;
     }
 
@@ -1764,11 +1779,11 @@ function drawGame() {
         const tex = ai.facing > 0 ? playerStand : playerStand;
         ctx.save();
         if (ai.facing < 0) {
-            ctx.translate(ai.x + 14, ai.y);
+            ctx.translate(ai.x + 10, ai.y);
             ctx.scale(-1, 1);
-            ctx.drawImage(tex, 0, 0, tex.width, tex.height, 0, 0, 14, 16);
+            ctx.drawImage(tex, 0, 0, tex.width, tex.height, 0, 0, 10, 11);
         } else {
-            ctx.drawImage(tex, 0, 0, tex.width, tex.height, ai.x, ai.y, 14, 16);
+            ctx.drawImage(tex, 0, 0, tex.width, tex.height, ai.x, ai.y, 10, 11);
         }
         ctx.restore();
         ctx.globalAlpha = 1;
@@ -1779,11 +1794,11 @@ function drawGame() {
         const tex = (Math.abs(player.vx) > 0.5 && player.animFrame) ? playerRun : playerStand;
         ctx.save();
         if (player.facing < 0) {
-            ctx.translate(player.x + 14, player.y);
+            ctx.translate(player.x + 10, player.y);
             ctx.scale(-1, 1);
-            ctx.drawImage(tex, 0, 0, tex.width, tex.height, 0, 0, 14, 16);
+            ctx.drawImage(tex, 0, 0, tex.width, tex.height, 0, 0, 10, 11);
         } else {
-            ctx.drawImage(tex, 0, 0, tex.width, tex.height, player.x, player.y, 14, 16);
+            ctx.drawImage(tex, 0, 0, tex.width, tex.height, player.x, player.y, 10, 11);
         }
         ctx.restore();
 
@@ -1791,13 +1806,13 @@ function drawGame() {
         if (player.slashing > 0) {
             ctx.save();
             ctx.globalAlpha = player.slashing / 8;
-            const sx = player.facing > 0 ? player.x + 12 : player.x - 14;
+            const sx = player.facing > 0 ? player.x + 8 : player.x - 10;
             if (player.facing < 0) {
-                ctx.translate(sx + 14, player.y - 4);
+                ctx.translate(sx + 10, player.y - 3);
                 ctx.scale(-1, 1);
-                ctx.drawImage(slashTex, 0, 0, slashTex.width, slashTex.height, 0, 0, 14, 14);
+                ctx.drawImage(slashTex, 0, 0, slashTex.width, slashTex.height, 0, 0, 10, 10);
             } else {
-                ctx.drawImage(slashTex, 0, 0, slashTex.width, slashTex.height, sx, player.y - 4, 14, 14);
+                ctx.drawImage(slashTex, 0, 0, slashTex.width, slashTex.height, sx, player.y - 3, 10, 10);
             }
             ctx.restore();
         }

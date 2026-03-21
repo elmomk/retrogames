@@ -1,8 +1,8 @@
-🛠️ Technical Specification: Micro Mages Rust Port
+🛠️ Technical Specification: Nano Wizards Rust Port
 
 1. Overview
 
-This document specifies the technical architecture for porting the "Micro Mages" HTML5/JS prototype to Rust. The target engine is Macroquad, chosen for its minimal overhead, immediate-mode rendering, and seamless cross-compilation to both WebAssembly (for browser testing) and armv7-unknown-linux-gnueabihf (for the Miyoo Mini Plus).
+This document specifies the technical architecture for porting the "Nano Wizards" HTML5/JS prototype to Rust. The target engine is Macroquad, chosen for its minimal overhead, immediate-mode rendering, and seamless cross-compilation to both WebAssembly (for browser testing) and armv7-unknown-linux-gnueabihf (for the Miyoo Mini Plus).
 
 2. Tech Stack & Dependencies
 
@@ -17,7 +17,7 @@ Secondary: Web browser (wasm32-unknown-unknown).
 Cargo.toml
 
 [package]
-name = "micro_mages"
+name = "nano_wizards"
 version = "0.1.0"
 edition = "2021"
 
@@ -88,7 +88,7 @@ To guarantee deterministic physics between a 144Hz desktop monitor and the Miyoo
 
 const TIME_STEP: f64 = 1.0 / 60.0;
 
-#[macroquad::main("Micro Mages")]
+#[macroquad::main("Nano Wizards")]
 async fn main() {
     let mut accumulator: f64 = 0.0;
     let mut last_time = get_time();

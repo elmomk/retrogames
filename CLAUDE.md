@@ -14,7 +14,7 @@ Retro games collection with two deployment targets:
 
 | Game | Web Dir | Miyoo Dir | Genre | Story |
 |------|---------|-----------|-------|-------|
-| Micro Mages | `web/micro/` | `miyoo/micro/` | Platformer | "The Obsidian Spire" |
+| Nano Wizards | `web/micro/` | `miyoo/micro/` | Platformer | "The Obsidian Spire" |
 | Neon Defender | `web/space/` | `miyoo/space/` | Shoot 'em Up | "The Last Signal" |
 | Shadow Blade | `web/shadow/` | `miyoo/shadow/` | Action Platformer | "The Crimson Oath" |
 | Arena Blitz | `web/arena/` | `miyoo/arena/` | Twin-Stick Shooter | "Protocol Omega" |

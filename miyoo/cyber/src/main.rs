@@ -1,33 +1,32 @@
 // Chrome Viper - Cyberpunk Spaceship Action Game
 // Rust/Macroquad port for Miyoo Mini Plus
 // Story: "Neon Abyss"
+// Synced with web version (800x600, shield generators, EMP waves, boss phases)
 
 use macroquad::prelude::*;
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const SCREEN_W: f32 = 640.0;
-const SCREEN_H: f32 = 480.0;
+const SCREEN_W: f32 = 800.0;
+const SCREEN_H: f32 = 600.0;
 const TIME_STEP: f64 = 1.0 / 60.0;
 
 const PLAYER_SPEED: f32 = 4.0;
-const BULLET_SPEED: f32 = 8.0;
-const ENEMY_SPEED: f32 = 2.0;
+const BULLET_SPEED: f32 = 7.0;
 const SCROLL_SPEED: f32 = 1.0;
 const PLAYER_MOVE_BOUND: f32 = SCREEN_W * 0.4; // left 40% of screen
 
-const STAR_COUNT: usize = 80;
 const DROP_CHANCE: f32 = 0.12;
 
 // Cyberpunk colors
 const NEON_PINK: Color = Color::new(1.0, 0.08, 0.58, 1.0);
-const NEON_CYAN: Color = Color::new(0.0, 1.0, 1.0, 1.0);
-const NEON_GREEN: Color = Color::new(0.2, 1.0, 0.3, 1.0);
-const NEON_PURPLE: Color = Color::new(0.7, 0.2, 1.0, 1.0);
+const NEON_CYAN: Color = Color::new(0.0, 0.95, 1.0, 1.0);
+const NEON_GREEN: Color = Color::new(0.22, 1.0, 0.08, 1.0);
+const NEON_PURPLE: Color = Color::new(0.545, 0.0, 1.0, 1.0);
 const NEON_ORANGE: Color = Color::new(1.0, 0.5, 0.0, 1.0);
-const DARK_BG: Color = Color::new(0.02, 0.01, 0.05, 1.0);
-const TERMINAL_GREEN: Color = Color::new(0.0, 0.9, 0.3, 1.0);
+const DARK_BG: Color = Color::new(0.04, 0.04, 0.1, 1.0);
+const TERMINAL_GREEN: Color = Color::new(0.22, 1.0, 0.08, 1.0);
 
 // ---------------------------------------------------------------------------
 // Game States
@@ -35,7 +34,6 @@ const TERMINAL_GREEN: Color = Color::new(0.0, 0.9, 0.3, 1.0);
 #[derive(Clone, Copy, PartialEq)]
 enum GameState {
     Start,
-    Story,
     LevelStory,
     Playing,
     GameOver,
@@ -50,7 +48,7 @@ enum EnemyType {
     Drone,
     Gunship,
     Turret,
-    Boss,
+    ShieldGen,
 }
 
 // ---------------------------------------------------------------------------
@@ -75,138 +73,145 @@ enum WeaponType {
 }
 
 // ---------------------------------------------------------------------------
-// Wave System
+// Wave spawn pattern
 // ---------------------------------------------------------------------------
-struct LevelInfo {
-    name: &'static str,
-    intro_text: &'static str,
-    clear_text: &'static str,
-    boss_name: &'static str,
-    waves: &'static [(f32, EnemyType, f32, f32, u32)],
-    boss_hp: i32,
+#[derive(Clone, Copy, PartialEq)]
+enum SpawnPattern {
+    Line,
+    Sine,
+    Vee,
+    Random,
 }
 
-const LEVELS: &[LevelInfo] = &[
-    LevelInfo {
-        name: "SECTOR 1: ORBITAL PERIMETER",
-        intro_text: "CHROME VIPER FLIGHT LOG -- 2187.09.14\n\n\
-            AXIOM megacorp has seized control of every\n\
-            orbital colony in the Sol system. Their\n\
-            defense grid spans millions of kilometers.\n\n\
-            You are callsign VIPER -- the last pilot\n\
-            crazy enough to fly into AXIOM space.\n\n\
-            Your target: the flagship LEVIATHAN.\n\
-            First, punch through the orbital perimeter.\n\n\
-            D-PAD: Move  X: Fire  SPACE: Special  ENTER: Start",
-        clear_text: "The Defense Satellite collapses in a\n\
-            cascade of blue fire. Debris tumbles into\n\
-            the atmosphere below.\n\n\
-            AXIOM COMMS [INTERCEPTED]:\n\
-            \"Perimeter breach in Sector 7. Deploy the\n\
-            Cyborg Carrier. All units converge.\"\n\n\
-            They know you're coming. Good.",
-        boss_name: "DEFENSE SATELLITE",
-        waves: &[
-            (2.0, EnemyType::Drone, 600.0, 80.0, 3),
-            (5.0, EnemyType::Drone, 600.0, 200.0, 4),
-            (8.0, EnemyType::Drone, 600.0, 350.0, 3),
-            (12.0, EnemyType::Gunship, 650.0, 150.0, 1),
-            (15.0, EnemyType::Drone, 600.0, 100.0, 5),
-            (18.0, EnemyType::Gunship, 650.0, 300.0, 1),
-            (20.0, EnemyType::Drone, 600.0, 250.0, 4),
-            (24.0, EnemyType::Turret, 550.0, 50.0, 1),
-            (26.0, EnemyType::Drone, 600.0, 400.0, 5),
-            (30.0, EnemyType::Gunship, 650.0, 200.0, 2),
-        ],
-        boss_hp: 60,
-    },
-    LevelInfo {
-        name: "SECTOR 2: THE SCRAPYARD",
-        intro_text: "AXIOM NET -- PRIORITY ALERT\n\n\
-            \"All units: the insurgent pilot designated\n\
-            VIPER has breached the orbital perimeter.\n\
-            Director Kaine has authorized lethal force.\"\n\n\
-            The Scrapyard -- AXIOM's dumping ground for\n\
-            decommissioned warships. But the drones here\n\
-            aren't decommissioned. They're feral.\n\n\
-            Somewhere in this maze of dead metal,\n\
-            the Cyborg Carrier waits.",
-        clear_text: "The Carrier's hull splits open, spewing\n\
-            corrupted drones into the void. Its AI\n\
-            screams on every frequency before going\n\
-            silent.\n\n\
-            AXIOM COMMS [INTERCEPTED]:\n\
-            \"Director Kaine, the Carrier is down.\n\
-            VIPER is approaching the Leviathan.\"\n\
-            \"Then wake it up. ALL of it.\"\n\n\
-            The Leviathan. The end of the line.",
-        boss_name: "CYBORG CARRIER",
-        waves: &[
-            (2.0, EnemyType::Drone, 600.0, 60.0, 5),
-            (4.0, EnemyType::Drone, 600.0, 300.0, 4),
-            (7.0, EnemyType::Gunship, 650.0, 120.0, 2),
-            (10.0, EnemyType::Turret, 520.0, 80.0, 1),
-            (12.0, EnemyType::Drone, 600.0, 200.0, 6),
-            (14.0, EnemyType::Gunship, 650.0, 350.0, 2),
-            (17.0, EnemyType::Turret, 540.0, 400.0, 1),
-            (19.0, EnemyType::Drone, 600.0, 150.0, 5),
-            (22.0, EnemyType::Gunship, 650.0, 250.0, 3),
-            (25.0, EnemyType::Drone, 600.0, 380.0, 6),
-            (28.0, EnemyType::Turret, 500.0, 200.0, 1),
-            (30.0, EnemyType::Gunship, 650.0, 100.0, 2),
-        ],
-        boss_hp: 100,
-    },
-    LevelInfo {
-        name: "SECTOR 3: THE LEVIATHAN",
-        intro_text: "CHROME VIPER -- FINAL APPROACH\n\n\
-            The Leviathan fills your entire viewport.\n\
-            Three kilometers of armored death, bristling\n\
-            with weapons that could crack a moon.\n\n\
-            AXIOM BROADCAST [ALL CHANNELS]:\n\
-            \"This is Director Kaine. VIPER, you've\n\
-            fought well. But the Leviathan has never\n\
-            been defeated. Surrender now and I'll make\n\
-            your death quick.\"\n\n\
-            Your response: full throttle.",
-        clear_text: "",
-        boss_name: "THE LEVIATHAN",
-        waves: &[
-            (2.0, EnemyType::Drone, 600.0, 100.0, 6),
-            (3.0, EnemyType::Drone, 600.0, 350.0, 6),
-            (5.0, EnemyType::Gunship, 650.0, 200.0, 3),
-            (7.0, EnemyType::Turret, 500.0, 60.0, 1),
-            (8.0, EnemyType::Turret, 500.0, 420.0, 1),
-            (10.0, EnemyType::Drone, 600.0, 240.0, 8),
-            (13.0, EnemyType::Gunship, 650.0, 150.0, 3),
-            (15.0, EnemyType::Gunship, 650.0, 350.0, 3),
-            (18.0, EnemyType::Turret, 480.0, 150.0, 1),
-            (20.0, EnemyType::Drone, 600.0, 200.0, 8),
-            (22.0, EnemyType::Gunship, 650.0, 280.0, 4),
-            (25.0, EnemyType::Turret, 520.0, 380.0, 1),
-            (28.0, EnemyType::Drone, 600.0, 100.0, 10),
-            (30.0, EnemyType::Gunship, 650.0, 200.0, 4),
-        ],
-        boss_hp: 150,
-    },
+// ---------------------------------------------------------------------------
+// Wave event (frame-based like web version)
+// ---------------------------------------------------------------------------
+struct WaveEvent {
+    time: i64,
+    etype: Option<EnemyType>, // None means boss
+    count: u32,
+    pattern: SpawnPattern,
+    y: f32,
+    spacing: f32,
+    boss_type: i32, // only used when etype is None
+}
+
+// ---------------------------------------------------------------------------
+// Story texts (matching web version)
+// ---------------------------------------------------------------------------
+const STORY_TEXTS: &[&str] = &[
+    // Before Level 1
+    "AXIOM CORP CLASSIFIED -- 2187.03.15\n\n\
+     > INTERCEPTED TRANSMISSION:\n\n\
+     The orbital colonies are ours. Every\n\
+     transit hub, every station, every\n\
+     breathing human above the atmosphere\n\
+     now answers to AXIOM.\n\n\
+     But one asset has gone missing.\n\
+     Prototype CV-7 'Chrome Viper' --\n\
+     stolen from Hangar 9 by an unknown\n\
+     pilot.\n\n\
+     > MISSION: Breach the Orbital Ring.\n\
+     > STATUS: LAUNCH READY",
+    // After Level 1
+    "CHROME VIPER FLIGHT LOG -- 2187.03.15\n\n\
+     Outer defense ring breached. The\n\
+     Defense Satellite is scrap metal.\n\n\
+     But the data cores I recovered...\n\
+     AXIOM isn't just controlling the\n\
+     colonies. They're building something\n\
+     in the Neon Corridor -- a weapon\n\
+     that could glass every city on Earth.\n\n\
+     Project LEVIATHAN.\n\n\
+     > Proceeding to Sector 7-G.\n\
+     > The Neon Corridor awaits.",
+    // After Level 2
+    "CHROME VIPER FLIGHT LOG -- 2187.03.15\n\n\
+     The Carrier is down, but now I see it.\n\
+     Through the debris field, past the\n\
+     neon haze of the dying corridor...\n\n\
+     The Leviathan.\n\n\
+     It's massive. A dreadnought the size\n\
+     of a colony. And it's powering up\n\
+     its main cannon -- aimed at Earth.\n\n\
+     This is it. No backup. No retreat.\n\
+     Just me and the Chrome Viper.\n\n\
+     > FINAL APPROACH: The Abyss.",
+    // Victory
+    "AXIOM EMERGENCY BROADCAST -- ALL FREQ\n\n\
+     [SIGNAL LOST]\n\
+     [SIGNAL LOST]\n\
+     [SIGNAL LOST]\n\n\
+     The Leviathan is destroyed.\n\
+     AXIOM's orbital network is collapsing.\n\n\
+     The colonies are free.\n\n\
+     But as the Chrome Viper drifts through\n\
+     the wreckage, its pilot knows the\n\
+     truth: corporations don't die.\n\
+     They rebrand.\n\n\
+     Somewhere in the neon dark,\n\
+     a new signal flickers to life.\n\n\
+     > CHROME VIPER -- MISSION COMPLETE\n\
+     > PILOT STATUS: ALIVE\n\
+     > COST: EVERYTHING",
 ];
 
-const VICTORY_TEXT: &str = "The Leviathan erupts in a chain reaction\n\
-    of neon fire. Director Kaine's last\n\
-    transmission cuts to static mid-sentence.\n\n\
-    Across the colonies, AXIOM's control\n\
-    network goes dark. Defense grids shut down.\n\
-    Prison doors unlock. Propaganda feeds\n\
-    dissolve into white noise.\n\n\
-    The colonies are free.\n\n\
-    You bank the Chrome Viper toward the\n\
-    nearest station, fuel nearly spent,\n\
-    hull scarred with a hundred impacts.\n\n\
-    They'll call you a hero. You know better.\n\
-    You're just a pilot who was angry enough\n\
-    to fly into hell.\n\n\
-    But tonight, the neon burns a little\n\
-    brighter.";
+const LEVEL_NAMES: &[&str] = &["ORBITAL RING", "NEON CORRIDOR", "THE ABYSS"];
+const BOSS_NAMES: &[&str] = &["DEFENSE SATELLITE", "CYBORG CARRIER", "LEVIATHAN"];
+
+// ---------------------------------------------------------------------------
+// Generate waves for a level (matching web version)
+// ---------------------------------------------------------------------------
+fn generate_waves(level: usize) -> Vec<WaveEvent> {
+    let mut waves = Vec::new();
+    match level {
+        0 => {
+            waves.push(WaveEvent { time: 60, etype: Some(EnemyType::Drone), count: 5, pattern: SpawnPattern::Line, y: 100.0, spacing: 30.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 180, etype: Some(EnemyType::Drone), count: 5, pattern: SpawnPattern::Line, y: 350.0, spacing: 30.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 300, etype: Some(EnemyType::Drone), count: 8, pattern: SpawnPattern::Sine, y: 240.0, spacing: 25.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 450, etype: Some(EnemyType::Gunship), count: 2, pattern: SpawnPattern::Line, y: 150.0, spacing: 80.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 550, etype: Some(EnemyType::Drone), count: 6, pattern: SpawnPattern::Vee, y: 200.0, spacing: 25.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 700, etype: Some(EnemyType::Gunship), count: 3, pattern: SpawnPattern::Line, y: 300.0, spacing: 60.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 850, etype: Some(EnemyType::Drone), count: 10, pattern: SpawnPattern::Sine, y: 240.0, spacing: 20.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 1000, etype: Some(EnemyType::Gunship), count: 2, pattern: SpawnPattern::Random, y: 0.0, spacing: 0.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 1100, etype: Some(EnemyType::Drone), count: 8, pattern: SpawnPattern::Line, y: 120.0, spacing: 25.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 1200, etype: Some(EnemyType::Drone), count: 8, pattern: SpawnPattern::Line, y: 360.0, spacing: 25.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 1400, etype: None, count: 0, pattern: SpawnPattern::Line, y: 0.0, spacing: 0.0, boss_type: 0 });
+        }
+        1 => {
+            waves.push(WaveEvent { time: 60, etype: Some(EnemyType::Drone), count: 8, pattern: SpawnPattern::Sine, y: 150.0, spacing: 20.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 150, etype: Some(EnemyType::Turret), count: 3, pattern: SpawnPattern::Line, y: 80.0, spacing: 100.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 250, etype: Some(EnemyType::Gunship), count: 3, pattern: SpawnPattern::Line, y: 300.0, spacing: 50.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 350, etype: Some(EnemyType::Drone), count: 10, pattern: SpawnPattern::Vee, y: 240.0, spacing: 20.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 450, etype: Some(EnemyType::Turret), count: 4, pattern: SpawnPattern::Line, y: 400.0, spacing: 80.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 550, etype: Some(EnemyType::Gunship), count: 4, pattern: SpawnPattern::Random, y: 0.0, spacing: 0.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 650, etype: Some(EnemyType::Drone), count: 12, pattern: SpawnPattern::Sine, y: 200.0, spacing: 18.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 750, etype: Some(EnemyType::Turret), count: 2, pattern: SpawnPattern::Line, y: 120.0, spacing: 150.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 750, etype: Some(EnemyType::Turret), count: 2, pattern: SpawnPattern::Line, y: 360.0, spacing: 150.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 900, etype: Some(EnemyType::Gunship), count: 5, pattern: SpawnPattern::Line, y: 240.0, spacing: 40.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 1050, etype: Some(EnemyType::Drone), count: 15, pattern: SpawnPattern::Sine, y: 240.0, spacing: 15.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 1200, etype: Some(EnemyType::ShieldGen), count: 2, pattern: SpawnPattern::Line, y: 150.0, spacing: 200.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 1350, etype: None, count: 0, pattern: SpawnPattern::Line, y: 0.0, spacing: 0.0, boss_type: 1 });
+        }
+        _ => {
+            waves.push(WaveEvent { time: 60, etype: Some(EnemyType::Drone), count: 10, pattern: SpawnPattern::Sine, y: 120.0, spacing: 18.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 60, etype: Some(EnemyType::Drone), count: 10, pattern: SpawnPattern::Sine, y: 360.0, spacing: 18.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 200, etype: Some(EnemyType::Gunship), count: 4, pattern: SpawnPattern::Random, y: 0.0, spacing: 0.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 300, etype: Some(EnemyType::Turret), count: 5, pattern: SpawnPattern::Line, y: 80.0, spacing: 70.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 400, etype: Some(EnemyType::Drone), count: 15, pattern: SpawnPattern::Vee, y: 240.0, spacing: 15.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 500, etype: Some(EnemyType::Gunship), count: 5, pattern: SpawnPattern::Line, y: 200.0, spacing: 40.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 500, etype: Some(EnemyType::Turret), count: 3, pattern: SpawnPattern::Line, y: 400.0, spacing: 100.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 650, etype: Some(EnemyType::Drone), count: 20, pattern: SpawnPattern::Sine, y: 240.0, spacing: 12.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 800, etype: Some(EnemyType::ShieldGen), count: 3, pattern: SpawnPattern::Line, y: 120.0, spacing: 120.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 900, etype: Some(EnemyType::Gunship), count: 6, pattern: SpawnPattern::Random, y: 0.0, spacing: 0.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 1000, etype: Some(EnemyType::Drone), count: 12, pattern: SpawnPattern::Line, y: 100.0, spacing: 20.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 1000, etype: Some(EnemyType::Drone), count: 12, pattern: SpawnPattern::Line, y: 380.0, spacing: 20.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 1150, etype: Some(EnemyType::Turret), count: 6, pattern: SpawnPattern::Line, y: 240.0, spacing: 50.0, boss_type: 0 });
+            waves.push(WaveEvent { time: 1300, etype: None, count: 0, pattern: SpawnPattern::Line, y: 0.0, spacing: 0.0, boss_type: 2 });
+        }
+    }
+    waves
+}
 
 // ---------------------------------------------------------------------------
 // Structs
@@ -221,10 +226,11 @@ struct Player {
     max_shields: i32,
     weapon: WeaponType,
     weapon_timer: i32,
-    last_shot: i64,
-    shot_cooldown: i32,
+    fire_timer: i32,
     invulnerable: i32,
     emp_charges: i32,
+    emp_cooldown: i32,
+    alive: bool,
 }
 
 impl Player {
@@ -233,15 +239,16 @@ impl Player {
             x: 80.0,
             y: SCREEN_H / 2.0,
             w: 32.0,
-            h: 24.0,
+            h: 32.0,
             shields: 3,
             max_shields: 3,
             weapon: WeaponType::DualLaser,
             weapon_timer: 0,
-            last_shot: -100,
-            shot_cooldown: 10,
+            fire_timer: 0,
             invulnerable: 0,
             emp_charges: 1,
+            emp_cooldown: 0,
+            alive: true,
         }
     }
 }
@@ -252,33 +259,36 @@ struct Bullet {
     y: f32,
     vx: f32,
     vy: f32,
-    w: f32,
-    h: f32,
+    life: i32,
     is_player: bool,
     alive: bool,
-    color: Color,
-    homing: bool,
+    btype: BulletType,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum BulletType {
+    Laser,
+    Spread,
+    Homing,
+    Enemy,
 }
 
 #[derive(Clone)]
 struct Enemy {
     x: f32,
     y: f32,
-    vx: f32,
-    _vy: f32,
     w: f32,
     h: f32,
     etype: EnemyType,
     hp: i32,
     max_hp: i32,
-    score: u32,
+    speed: f32,
+    points: u32,
     alive: bool,
-    last_shot: i64,
-    shoot_cooldown: i32,
-    color: Color,
-    spawn_flash: i32,
-    angle: f32,       // for turret rotation
-    move_timer: f32,   // for sine-wave movement
+    shoot_timer: f32,
+    shoot_rate: f32,
+    sine_offset: f32,
+    flash_timer: i32,
 }
 
 #[derive(Clone, Copy)]
@@ -288,7 +298,7 @@ struct Particle {
     vx: f32,
     vy: f32,
     life: f32,
-    decay: f32,
+    max_life: f32,
     color: Color,
     alive: bool,
     size: f32,
@@ -301,28 +311,26 @@ struct Star {
     size: f32,
     speed: f32,
     brightness: f32,
-    layer: u8, // 0=far, 1=mid, 2=near (parallax)
+    layer: u8,
 }
 
 impl Star {
-    fn new(random_x: bool) -> Self {
-        let layer: u8 = rand::gen_range(0u8, 3);
-        let base_speed = match layer {
-            0 => 0.3,
-            1 => 0.8,
-            _ => 1.5,
-        };
-        let size = match layer {
-            0 => rand::gen_range(0.5, 1.0),
-            1 => rand::gen_range(1.0, 2.0),
-            _ => rand::gen_range(1.5, 3.0),
+    fn new_random_x(layer: u8) -> Self {
+        Self::new_at(rand::gen_range(0.0, SCREEN_W), layer)
+    }
+
+    fn new_at(x: f32, layer: u8) -> Self {
+        let (speed, size, bright_base) = match layer {
+            0 => (0.3 + rand::gen_range(0.0f32, 0.5), 1.0f32, 0.3 + rand::gen_range(0.0f32, 0.3)),
+            1 => (0.8 + rand::gen_range(0.0f32, 0.7), 1.5f32, 0.4 + rand::gen_range(0.0f32, 0.3)),
+            _ => (1.5 + rand::gen_range(0.0f32, 1.0), 2.0f32, 0.6 + rand::gen_range(0.0f32, 0.4)),
         };
         Self {
-            x: if random_x { rand::gen_range(0.0, SCREEN_W) } else { SCREEN_W + 10.0 },
+            x,
             y: rand::gen_range(0.0, SCREEN_H),
             size,
-            speed: base_speed * SCROLL_SPEED,
-            brightness: rand::gen_range(0.2, 1.0),
+            speed: speed * SCROLL_SPEED,
+            brightness: bright_base,
             layer,
         }
     }
@@ -332,26 +340,26 @@ impl Star {
 struct PowerUp {
     x: f32,
     y: f32,
-    vx: f32,
+    w: f32,
+    h: f32,
     kind: PowerUpKind,
     alive: bool,
-    color: Color,
-    letter: char,
+    angle: f32,
 }
 
 impl PowerUp {
     fn new(x: f32, y: f32) -> Self {
         let r = rand::gen_range(0.0f32, 1.0);
-        let (kind, color, letter) = if r < 0.3 {
-            (PowerUpKind::Spread, NEON_ORANGE, 'S')
-        } else if r < 0.55 {
-            (PowerUpKind::Homing, NEON_PURPLE, 'H')
+        let kind = if r < 0.25 {
+            PowerUpKind::Spread
+        } else if r < 0.5 {
+            PowerUpKind::Homing
         } else if r < 0.75 {
-            (PowerUpKind::Emp, NEON_CYAN, 'E')
+            PowerUpKind::Shield
         } else {
-            (PowerUpKind::Shield, NEON_GREEN, '+')
+            PowerUpKind::Emp
         };
-        Self { x, y, vx: -1.5, kind, alive: true, color, letter }
+        Self { x, y, w: 12.0, h: 12.0, kind, alive: true, angle: 0.0 }
     }
 }
 
@@ -365,14 +373,57 @@ struct FloatingText {
 }
 
 #[derive(Clone)]
-struct DyingEnemy {
+struct EmpWave {
     x: f32,
     y: f32,
+    radius: f32,
+    max_radius: f32,
+    speed: f32,
+    alive: bool,
+}
+
+// ---------------------------------------------------------------------------
+// Boss (separate entity like web version)
+// ---------------------------------------------------------------------------
+#[derive(Clone)]
+struct Boss {
+    boss_type: i32,
+    x: f32,
+    y: f32,
+    target_x: f32,
     w: f32,
     h: f32,
-    _etype: EnemyType,
+    hp: i32,
+    max_hp: i32,
+    fire_timer: i64,
+    drone_timer: i64,
+    sweep_angle: f32,
+    angle: f32,
+    alive: bool,
+    enter_phase: bool,
+}
+
+// ---------------------------------------------------------------------------
+// City building for background
+// ---------------------------------------------------------------------------
+#[derive(Clone)]
+struct CityBuilding {
+    x: f32,
+    w: f32,
+    h: f32,
     color: Color,
-    frames_left: i32,
+    has_windows: bool,
+}
+
+// ---------------------------------------------------------------------------
+// Digital rain column
+// ---------------------------------------------------------------------------
+#[derive(Clone)]
+struct RainColumn {
+    x: f32,
+    y: f32,
+    speed: f32,
+    len: usize,
 }
 
 // ---------------------------------------------------------------------------
@@ -382,20 +433,27 @@ struct Game {
     state: GameState,
     frame: i64,
     score: u32,
-    level_idx: usize,
-    level_time: f32, // seconds into current level
-    wave_event_idx: usize, // next wave event to process
-    boss_spawned: bool,
-    boss_alive: bool,
+    current_level: usize,
+
+    // Wave system (frame-based like web)
+    level_waves: Vec<WaveEvent>,
+    level_timer: i64,
+    wave_index: usize,
 
     player: Player,
     bullets: Vec<Bullet>,
+    enemy_bullets: Vec<Bullet>,
     enemies: Vec<Enemy>,
     particles: Vec<Particle>,
     stars: Vec<Star>,
     power_ups: Vec<PowerUp>,
     floating_texts: Vec<FloatingText>,
-    dying_enemies: Vec<DyingEnemy>,
+    emp_waves: Vec<EmpWave>,
+
+    // Boss (separate like web version)
+    boss: Option<Boss>,
+    boss_active: bool,
+    boss_warning_shown: bool,
 
     // screen shake
     shake_mag: f32,
@@ -403,98 +461,147 @@ struct Game {
     shake_y: f32,
 
     // chain/combo
-    chain_count: u32,
     chain_timer: i32,
+    chain_multiplier: u32,
 
-    // hitstop
-    hitstop_frames: i32,
-
-    // muzzle flash
-    muzzle_flash: i32,
+    // aberration timer
+    aberration_timer: i32,
 
     // story typewriter
     story_text: String,
     story_char_idx: usize,
-    story_displayed: String,
-    story_wait: i32,
-    showing_clear_text: bool,
-    victory_triggered: bool,
+    story_timer: i32,
+    story_phase: usize,
 
-    // shoot held
-    shoot_held: bool,
+    // city background
+    city_buildings: Vec<CityBuilding>,
+    city_scroll_x: f32,
 
-    // EMP flash
-    emp_flash: i32,
+    // digital rain
+    rain_columns: Vec<RainColumn>,
+
+    // boss defeat delay
+    boss_defeat_timer: i32,
 }
 
 impl Game {
     fn new() -> Self {
-        let mut stars = Vec::with_capacity(STAR_COUNT);
-        for _ in 0..STAR_COUNT {
-            stars.push(Star::new(true));
+        let mut stars = Vec::new();
+        for _ in 0..80 {
+            stars.push(Star::new_random_x(0));
         }
+        for _ in 0..50 {
+            stars.push(Star::new_random_x(1));
+        }
+        for _ in 0..30 {
+            stars.push(Star::new_random_x(2));
+        }
+
+        let city_buildings = Self::init_city();
+        let rain_columns = Self::init_rain();
+
         Self {
             state: GameState::Start,
             frame: 0,
             score: 0,
-            level_idx: 0,
-            level_time: 0.0,
-            wave_event_idx: 0,
-            boss_spawned: false,
-            boss_alive: false,
+            current_level: 0,
+
+            level_waves: Vec::new(),
+            level_timer: 0,
+            wave_index: 0,
 
             player: Player::new(),
             bullets: Vec::new(),
+            enemy_bullets: Vec::new(),
             enemies: Vec::new(),
             particles: Vec::new(),
             stars,
             power_ups: Vec::new(),
             floating_texts: Vec::new(),
-            dying_enemies: Vec::new(),
+            emp_waves: Vec::new(),
+
+            boss: None,
+            boss_active: false,
+            boss_warning_shown: false,
 
             shake_mag: 0.0,
             shake_x: 0.0,
             shake_y: 0.0,
 
-            chain_count: 0,
             chain_timer: 0,
+            chain_multiplier: 1,
 
-            hitstop_frames: 0,
-
-            muzzle_flash: 0,
+            aberration_timer: 0,
 
             story_text: String::new(),
             story_char_idx: 0,
-            story_displayed: String::new(),
-            story_wait: 0,
-            showing_clear_text: false,
-            victory_triggered: false,
+            story_timer: 0,
+            story_phase: 0,
 
-            shoot_held: false,
-            emp_flash: 0,
+            city_buildings,
+            city_scroll_x: 0.0,
+
+            rain_columns,
+
+            boss_defeat_timer: 0,
         }
     }
 
-    fn reset_for_new_game(&mut self) {
-        self.score = 0;
-        self.level_idx = 0;
+    fn init_city() -> Vec<CityBuilding> {
+        let mut buildings = Vec::new();
+        for i in 0..30 {
+            buildings.push(CityBuilding {
+                x: i as f32 * 60.0 + rand::gen_range(0.0f32, 20.0),
+                w: 15.0 + rand::gen_range(0.0f32, 30.0),
+                h: 30.0 + rand::gen_range(0.0f32, 80.0),
+                color: if rand::gen_range(0.0f32, 1.0) < 0.5 {
+                    Color::new(0.0, 0.95, 1.0, 0.03)
+                } else {
+                    Color::new(1.0, 0.18, 0.47, 0.02)
+                },
+                has_windows: rand::gen_range(0.0f32, 1.0) < 0.6,
+            });
+        }
+        buildings
+    }
+
+    fn init_rain() -> Vec<RainColumn> {
+        let mut cols = Vec::new();
+        for _ in 0..40 {
+            cols.push(RainColumn {
+                x: rand::gen_range(0.0, SCREEN_W),
+                y: rand::gen_range(0.0, SCREEN_H),
+                speed: 1.0 + rand::gen_range(0.0f32, 3.0),
+                len: 5 + rand::gen_range(0u32, 15) as usize,
+            });
+        }
+        cols
+    }
+
+    fn reset_game(&mut self) {
         self.player = Player::new();
         self.bullets.clear();
+        self.enemy_bullets.clear();
         self.enemies.clear();
         self.power_ups.clear();
         self.floating_texts.clear();
-        self.dying_enemies.clear();
-        self.chain_count = 0;
+        self.emp_waves.clear();
+        self.particles.clear();
+        self.score = 0;
         self.chain_timer = 0;
+        self.chain_multiplier = 1;
+        self.current_level = 0;
+        self.story_phase = 0;
+        self.level_timer = 0;
+        self.wave_index = 0;
+        self.boss_active = false;
+        self.boss = None;
+        self.boss_warning_shown = false;
         self.shake_mag = 0.0;
         self.shake_x = 0.0;
         self.shake_y = 0.0;
-        self.muzzle_flash = 0;
-        self.victory_triggered = false;
-        self.boss_spawned = false;
-        self.boss_alive = false;
-        self.hitstop_frames = 0;
-        self.emp_flash = 0;
+        self.aberration_timer = 0;
+        self.boss_defeat_timer = 0;
     }
 
     // ------------------------------------------------------------------
@@ -509,283 +616,219 @@ impl Game {
     fn spawn_particles(&mut self, x: f32, y: f32, count: usize, color: Color, speed_scale: f32) {
         for _ in 0..count {
             let angle: f32 = rand::gen_range(0.0, std::f32::consts::TAU);
-            let spd: f32 = rand::gen_range(0.5, 4.0) * speed_scale;
+            let spd: f32 = (0.5 + rand::gen_range(0.0f32, 1.0)) * speed_scale;
             self.particles.push(Particle {
                 x,
                 y,
                 vx: angle.cos() * spd,
                 vy: angle.sin() * spd,
-                life: 1.0,
-                decay: rand::gen_range(0.02, 0.06),
+                life: 30.0 + rand::gen_range(0.0f32, 30.0),
+                max_life: 60.0,
                 color,
                 alive: true,
-                size: rand::gen_range(1.5, 3.5),
+                size: 1.0 + rand::gen_range(0.0f32, 2.0),
             });
         }
     }
 
-    fn overlaps(ax: f32, ay: f32, aw: f32, ah: f32, bx: f32, by: f32, bw: f32, bh: f32) -> bool {
-        ax - aw / 2.0 < bx + bw / 2.0
-            && ax + aw / 2.0 > bx - bw / 2.0
-            && ay - ah / 2.0 < by + bh / 2.0
-            && ay + ah / 2.0 > by - bh / 2.0
-    }
-
-    fn current_level(&self) -> &'static LevelInfo {
-        &LEVELS[self.level_idx.min(LEVELS.len() - 1)]
+    fn aabb_overlap(ax: f32, ay: f32, aw: f32, ah: f32, bx: f32, by: f32, bw: f32, bh: f32) -> bool {
+        ax + aw > bx && ax < bx + bw && ay + ah > by && ay < by + bh
     }
 
     // ------------------------------------------------------------------
     // State transitions
     // ------------------------------------------------------------------
-    fn start_intro_story(&mut self) {
-        self.reset_for_new_game();
-        self.state = GameState::Story;
-        self.showing_clear_text = false;
-        let level = self.current_level();
-        self.story_text = level.intro_text.to_string();
-        self.story_char_idx = 0;
-        self.story_displayed.clear();
-        self.story_wait = 0;
-    }
-
-    fn start_level_story(&mut self, text: &str) {
+    fn start_level_story(&mut self, phase: usize) {
         self.state = GameState::LevelStory;
-        self.showing_clear_text = true;
-        self.story_text = text.to_string();
+        self.story_phase = phase;
+        self.story_text = STORY_TEXTS[phase.min(STORY_TEXTS.len() - 1)].to_string();
         self.story_char_idx = 0;
-        self.story_displayed.clear();
-        self.story_wait = 0;
-        self.bullets.clear();
-        self.enemies.clear();
-        self.power_ups.clear();
-        self.dying_enemies.clear();
-        self.floating_texts.clear();
+        self.story_timer = 0;
     }
 
-    fn start_level(&mut self) {
+    fn start_level(&mut self, lvl: usize) {
+        self.current_level = lvl;
+        self.level_waves = generate_waves(lvl);
+        self.level_timer = 0;
+        self.wave_index = 0;
+        self.boss_active = false;
+        self.boss = None;
+        self.boss_warning_shown = false;
+        self.enemies.clear();
+        self.enemy_bullets.clear();
+        self.power_ups.clear();
+        self.emp_waves.clear();
+        self.player.x = 80.0;
+        self.player.y = SCREEN_H / 2.0;
+        self.player.fire_timer = 0;
+        self.boss_defeat_timer = 0;
         self.state = GameState::Playing;
-        self.frame = 0;
-        self.level_time = 0.0;
-        self.wave_event_idx = 0;
-        self.boss_spawned = false;
-        self.boss_alive = false;
-        self.bullets.clear();
-        self.enemies.clear();
-        self.power_ups.clear();
-        self.dying_enemies.clear();
-        self.floating_texts.clear();
-        self.chain_count = 0;
-        self.chain_timer = 0;
-        self.player.last_shot = -100;
-    }
-
-    fn show_victory(&mut self) {
-        self.state = GameState::Story;
-        self.victory_triggered = true;
-        self.bullets.clear();
-        self.enemies.clear();
-        self.power_ups.clear();
-        self.dying_enemies.clear();
-        self.story_text = VICTORY_TEXT.to_string();
-        self.story_char_idx = 0;
-        self.story_displayed.clear();
-        self.story_wait = 0;
-    }
-
-    fn game_over(&mut self) {
-        let px = self.player.x;
-        let py = self.player.y;
-        self.spawn_particles(px, py, 80, NEON_CYAN, 4.0);
-        self.spawn_particles(px, py, 40, NEON_PINK, 3.0);
-        self.trigger_shake(10.0);
-        self.state = GameState::GameOver;
     }
 
     fn hit_player(&mut self) {
-        if self.player.invulnerable > 0 {
+        if self.player.invulnerable > 0 || !self.player.alive {
             return;
         }
-        self.trigger_shake(5.0);
-        let px = self.player.x;
-        let py = self.player.y;
-
         self.player.shields -= 1;
-        self.spawn_particles(px, py, 20, NEON_CYAN, 2.5);
+        self.player.invulnerable = 90;
+        self.aberration_timer = 15;
+        self.trigger_shake(5.0);
+        let px = self.player.x + self.player.w / 2.0;
+        let py = self.player.y + self.player.h / 2.0;
+        self.spawn_particles(px, py, 10, NEON_CYAN, 2.0);
 
         if self.player.shields <= 0 {
-            self.game_over();
-        } else {
-            self.player.invulnerable = 90;
+            self.player.alive = false;
+            self.spawn_particles(px, py, 30, NEON_PINK, 3.0);
+            // Delay game over
+            self.boss_defeat_timer = 90; // reuse for death delay
         }
     }
 
     // ------------------------------------------------------------------
-    // Player shooting
+    // Create boss (matching web version)
+    // ------------------------------------------------------------------
+    fn create_boss(&mut self, boss_type: i32) {
+        self.boss_active = true;
+        self.boss_warning_shown = false;
+        let (target_x, w, h, hp) = match boss_type {
+            0 => (SCREEN_W - 100.0, 54.0f32, 48.0f32, 50),
+            1 => (SCREEN_W - 110.0, 60.0f32, 54.0f32, 80),
+            _ => (SCREEN_W - 130.0, 72.0f32, 60.0f32, 120),
+        };
+        self.boss = Some(Boss {
+            boss_type,
+            x: SCREEN_W + 50.0 + boss_type as f32 * 10.0,
+            y: SCREEN_H / 2.0,
+            target_x,
+            w,
+            h,
+            hp,
+            max_hp: hp,
+            fire_timer: 0,
+            drone_timer: 0,
+            sweep_angle: 0.0,
+            angle: 0.0,
+            alive: true,
+            enter_phase: true,
+        });
+    }
+
+    // ------------------------------------------------------------------
+    // Spawn wave enemies (with patterns like web)
+    // ------------------------------------------------------------------
+    fn spawn_wave_enemies(&mut self, etype: EnemyType, count: u32, pattern: SpawnPattern, base_y: f32, spacing: f32) {
+        for i in 0..count {
+            let mut ex = SCREEN_W + 20.0 + i as f32 * spacing.max(30.0);
+            let mut ey = base_y;
+            match pattern {
+                SpawnPattern::Random => {
+                    ey = 40.0 + rand::gen_range(0.0f32, SCREEN_H - 80.0);
+                    ex = SCREEN_W + 20.0 + i as f32 * 60.0;
+                }
+                SpawnPattern::Vee => {
+                    let mid = count / 2;
+                    ey = base_y + (i as i32 - mid as i32).unsigned_abs() as f32 * 25.0;
+                }
+                SpawnPattern::Sine => {
+                    ey = base_y + (i as f32 * 0.8).sin() * 60.0;
+                }
+                SpawnPattern::Line => {}
+            }
+            ey = ey.clamp(20.0, SCREEN_H - 20.0);
+
+            let (hp, speed, shoot_rate, w, h, points) = match etype {
+                EnemyType::Drone => (1, 2.0 + rand::gen_range(0.0f32, 1.5), 9999.0f32, 16.0f32, 16.0f32, 100u32),
+                EnemyType::Gunship => (3, 1.2f32, 90.0f32, 24.0f32, 24.0f32, 250u32),
+                EnemyType::Turret => (5, 0.8f32, 60.0f32, 20.0f32, 20.0f32, 300u32),
+                EnemyType::ShieldGen => (8, 0.6f32, 120.0f32, 24.0f32, 24.0f32, 500u32),
+            };
+
+            self.enemies.push(Enemy {
+                x: ex,
+                y: ey,
+                w,
+                h,
+                etype,
+                hp,
+                max_hp: hp,
+                speed,
+                points,
+                alive: true,
+                shoot_timer: rand::gen_range(0.0f32, shoot_rate.min(999.0)),
+                shoot_rate,
+                sine_offset: rand::gen_range(0.0f32, std::f32::consts::TAU),
+                flash_timer: 0,
+            });
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Player shooting (matching web fire rates)
     // ------------------------------------------------------------------
     fn player_shoot(&mut self) {
-        let bx = self.player.x + self.player.w / 2.0;
-        let by = self.player.y;
+        let px = self.player.x + self.player.w;
+        let py_mid = self.player.y + self.player.h / 2.0;
 
         match self.player.weapon {
             WeaponType::DualLaser => {
-                self.player.shot_cooldown = 10;
-                self.bullets.push(mk_bullet(bx, by - 6.0, BULLET_SPEED, 0.0, NEON_CYAN, true, false));
-                self.bullets.push(mk_bullet(bx, by + 6.0, BULLET_SPEED, 0.0, NEON_CYAN, true, false));
+                self.player.fire_timer = 8;
+                self.bullets.push(Bullet {
+                    x: px, y: self.player.y + 6.0,
+                    vx: BULLET_SPEED, vy: 0.0, life: 120,
+                    is_player: true, alive: true, btype: BulletType::Laser,
+                });
+                self.bullets.push(Bullet {
+                    x: px, y: self.player.y + self.player.h - 6.0,
+                    vx: BULLET_SPEED, vy: 0.0, life: 120,
+                    is_player: true, alive: true, btype: BulletType::Laser,
+                });
             }
             WeaponType::SpreadShot => {
-                self.player.shot_cooldown = 14;
-                let angles: [f32; 5] = [-0.3, -0.15, 0.0, 0.15, 0.3];
-                for a in &angles {
-                    let vx = BULLET_SPEED * a.cos();
-                    let vy = BULLET_SPEED * a.sin();
-                    self.bullets.push(mk_bullet(bx, by, vx, vy, NEON_ORANGE, true, false));
+                self.player.fire_timer = 12;
+                for vy in &[-1.5f32, 0.0, 1.5] {
+                    self.bullets.push(Bullet {
+                        x: px, y: py_mid,
+                        vx: BULLET_SPEED, vy: *vy, life: 100,
+                        is_player: true, alive: true, btype: BulletType::Spread,
+                    });
                 }
             }
             WeaponType::HomingMissile => {
-                self.player.shot_cooldown = 18;
-                self.bullets.push(mk_bullet(bx, by - 4.0, BULLET_SPEED * 0.7, -1.0, NEON_PURPLE, true, true));
-                self.bullets.push(mk_bullet(bx, by + 4.0, BULLET_SPEED * 0.7, 1.0, NEON_PURPLE, true, true));
+                self.player.fire_timer = 18;
+                self.bullets.push(Bullet {
+                    x: px, y: py_mid,
+                    vx: 5.0, vy: 0.0, life: 180,
+                    is_player: true, alive: true, btype: BulletType::Homing,
+                });
             }
         }
-
-        let frame = self.frame;
-        self.player.last_shot = frame;
-        self.muzzle_flash = 4;
+        let bx = px;
+        let by = py_mid;
         self.spawn_particles(bx, by, 3, NEON_CYAN, 1.0);
-    }
-
-    fn fire_emp(&mut self) {
-        if self.player.emp_charges <= 0 {
-            return;
-        }
-        self.player.emp_charges -= 1;
-        self.emp_flash = 15;
-        self.trigger_shake(6.0);
-
-        // Damage all enemies on screen
-        for i in 0..self.enemies.len() {
-            self.enemies[i].hp -= 3;
-            let ex = self.enemies[i].x;
-            let ey = self.enemies[i].y;
-            self.spawn_particles(ex, ey, 8, NEON_CYAN, 2.0);
-        }
-        // Clear enemy bullets
-        for b in self.bullets.iter_mut() {
-            if !b.is_player {
-                b.alive = false;
-            }
-        }
-    }
-
-    // ------------------------------------------------------------------
-    // Spawn wave enemies
-    // ------------------------------------------------------------------
-    fn process_wave_events(&mut self) {
-        let level = self.current_level();
-        let waves = level.waves;
-
-        while self.wave_event_idx < waves.len() {
-            let (time, etype, x, y, count) = waves[self.wave_event_idx];
-            if self.level_time < time {
-                break;
-            }
-            for i in 0..count {
-                let offset_y = i as f32 * 40.0;
-                self.spawn_enemy(etype, x, y + offset_y);
-            }
-            self.wave_event_idx += 1;
-        }
-
-        // Spawn boss after all waves done
-        if self.wave_event_idx >= waves.len() && !self.boss_spawned && self.enemies.is_empty() {
-            self.spawn_boss();
-            self.boss_spawned = true;
-            self.boss_alive = true;
-        }
-    }
-
-    fn spawn_enemy(&mut self, etype: EnemyType, x: f32, y: f32) {
-        let level_mult = 1.0 + self.level_idx as f32 * 0.15;
-        let (color, vx, _vy_unused, hp, score_val, w, h, shoot_cd) = match etype {
-            EnemyType::Drone => (
-                NEON_PINK, -ENEMY_SPEED * level_mult, 0.0f32,
-                1, 100u32, 16.0f32, 16.0f32, 9999i32,
-            ),
-            EnemyType::Gunship => (
-                NEON_ORANGE, -ENEMY_SPEED * 0.7 * level_mult, 0.0f32,
-                3, 250u32, 24.0f32, 20.0f32, 90i32,
-            ),
-            EnemyType::Turret => (
-                NEON_PURPLE, -ENEMY_SPEED * 0.3 * level_mult, 0.0f32,
-                5, 400u32, 20.0f32, 20.0f32, 60i32,
-            ),
-            EnemyType::Boss => {
-                // handled by spawn_boss
-                (WHITE, 0.0, 0.0, 1, 0, 0.0, 0.0, 0)
-            }
-        };
-
-        self.enemies.push(Enemy {
-            x,
-            y: y.clamp(20.0, SCREEN_H - 20.0),
-            vx,
-            _vy: 0.0,
-            w,
-            h,
-            etype,
-            hp,
-            max_hp: hp,
-            score: score_val,
-            alive: true,
-            last_shot: self.frame + rand::gen_range(0, 30) as i64,
-            shoot_cooldown: shoot_cd,
-            color,
-            spawn_flash: 6,
-            angle: 0.0,
-            move_timer: rand::gen_range(0.0f32, std::f32::consts::TAU),
-        });
-    }
-
-    fn spawn_boss(&mut self) {
-        let level = self.current_level();
-        let boss_hp = level.boss_hp;
-        self.enemies.push(Enemy {
-            x: SCREEN_W + 40.0,
-            y: SCREEN_H / 2.0,
-            vx: -1.0,
-            _vy: 0.0,
-            w: 64.0,
-            h: 48.0,
-            etype: EnemyType::Boss,
-            hp: boss_hp,
-            max_hp: boss_hp,
-            score: 2000,
-            alive: true,
-            last_shot: self.frame,
-            shoot_cooldown: 30,
-            color: match self.level_idx {
-                0 => NEON_CYAN,
-                1 => NEON_ORANGE,
-                _ => NEON_PINK,
-            },
-            spawn_flash: 10,
-            angle: 0.0,
-            move_timer: 0.0,
-        });
     }
 
     // ------------------------------------------------------------------
     // Update
     // ------------------------------------------------------------------
     fn update(&mut self) {
-        // Stars always update (horizontal scrolling)
-        let playing = self.state == GameState::Playing;
-        let star_mult = if playing { 2.0 } else { 0.5 };
+        self.frame += 1;
+
+        // Stars always update
         for s in self.stars.iter_mut() {
-            s.x -= s.speed * star_mult;
-            if s.x < -5.0 {
-                *s = Star::new(false);
+            s.x -= s.speed;
+            if s.x < -2.0 {
+                s.x = SCREEN_W + 2.0;
+                s.y = rand::gen_range(0.0, SCREEN_H);
+            }
+        }
+
+        // Rain always update
+        for col in self.rain_columns.iter_mut() {
+            col.y += col.speed;
+            if col.y > SCREEN_H + col.len as f32 * 14.0 {
+                col.y = -(col.len as f32 * 14.0);
+                col.x = rand::gen_range(0.0, SCREEN_W);
             }
         }
 
@@ -793,7 +836,9 @@ impl Game {
         for p in self.particles.iter_mut() {
             p.x += p.vx;
             p.y += p.vy;
-            p.life -= p.decay;
+            p.vx *= 0.97;
+            p.vy *= 0.97;
+            p.life -= 1.0;
             if p.life <= 0.0 {
                 p.alive = false;
             }
@@ -801,99 +846,166 @@ impl Game {
         self.particles.retain(|p| p.alive);
 
         // Input
-        let left = is_key_down(KeyCode::Left);
-        let right = is_key_down(KeyCode::Right);
-        let up = is_key_down(KeyCode::Up);
-        let down = is_key_down(KeyCode::Down);
-        self.shoot_held = is_key_down(KeyCode::X);
-        let special_pressed = is_key_pressed(KeyCode::Space);
         let enter = is_key_pressed(KeyCode::Enter) || is_key_pressed(KeyCode::KpEnter);
+        let fire_pressed = is_key_pressed(KeyCode::X) || is_key_pressed(KeyCode::Space);
 
         // ----- Start screen -----
         if self.state == GameState::Start {
-            if enter || is_key_pressed(KeyCode::X) || is_key_pressed(KeyCode::Space) {
-                self.start_intro_story();
+            if enter || fire_pressed {
+                self.reset_game();
+                self.start_level_story(0);
             }
-            self.frame += 1;
             return;
         }
 
-        // ----- Story / LevelStory -----
-        if self.state == GameState::Story || self.state == GameState::LevelStory {
-            let txt_len = self.story_text.len();
-            if self.story_char_idx < txt_len {
-                if self.frame % 2 == 0 {
-                    let ch = self.story_text.as_bytes()[self.story_char_idx] as char;
-                    self.story_displayed.push(ch);
-                    self.story_char_idx += 1;
-                }
-                if enter || is_key_pressed(KeyCode::X) {
-                    self.story_displayed = self.story_text.clone();
-                    self.story_char_idx = txt_len;
-                }
-            } else {
-                if self.story_wait == 0 {
-                    self.story_wait = 120;
-                }
-                self.story_wait -= 1;
-                if self.story_wait <= 0 || enter || is_key_pressed(KeyCode::X) {
-                    if self.victory_triggered {
-                        self.state = GameState::Win;
-                    } else if self.state == GameState::LevelStory && self.showing_clear_text {
-                        // After level-clear text, advance to next level intro
-                        self.level_idx += 1;
-                        if self.level_idx >= LEVELS.len() {
-                            self.show_victory();
-                        } else {
-                            self.state = GameState::Story;
-                            self.showing_clear_text = false;
-                            let level = self.current_level();
-                            self.story_text = level.intro_text.to_string();
-                            self.story_char_idx = 0;
-                            self.story_displayed.clear();
-                            self.story_wait = 0;
-                        }
-                    } else {
-                        // Story intro done, start level
-                        self.start_level();
-                    }
+        // ----- Level Story -----
+        if self.state == GameState::LevelStory {
+            self.story_timer += 1;
+            if self.story_timer % 2 == 0 && self.story_char_idx < self.story_text.len() {
+                self.story_char_idx += 1;
+            }
+            if (fire_pressed || enter) && self.story_timer > 30 {
+                if self.story_char_idx < self.story_text.len() {
+                    self.story_char_idx = self.story_text.len();
+                } else if self.story_phase <= 2 {
+                    self.start_level(self.story_phase);
                 }
             }
-            self.frame += 1;
             return;
         }
 
-        // ----- Game Over / Win -----
-        if self.state == GameState::GameOver || self.state == GameState::Win {
-            if enter || is_key_pressed(KeyCode::X) || is_key_pressed(KeyCode::Space) {
-                self.start_intro_story();
+        // ----- Game Over -----
+        if self.state == GameState::GameOver {
+            if (enter || fire_pressed) && self.frame > 60 {
+                self.state = GameState::Start;
             }
-            self.frame += 1;
+            return;
+        }
+
+        // ----- Win -----
+        if self.state == GameState::Win {
+            self.story_timer += 1;
+            if self.story_timer % 2 == 0 && self.story_char_idx < self.story_text.len() {
+                self.story_char_idx += 1;
+            }
+            if (fire_pressed || enter) && self.story_timer > 30 {
+                if self.story_char_idx < self.story_text.len() {
+                    self.story_char_idx = self.story_text.len();
+                } else {
+                    self.state = GameState::Start;
+                }
+            }
             return;
         }
 
         // ----- Playing -----
-        // Hitstop
-        if self.hitstop_frames > 0 {
-            self.hitstop_frames -= 1;
-            self.frame += 1;
-            return;
+        // Check for death delay / boss defeat delay
+        if self.boss_defeat_timer > 0 {
+            self.boss_defeat_timer -= 1;
+            if self.boss_defeat_timer <= 0 {
+                if !self.player.alive {
+                    self.state = GameState::GameOver;
+                    self.frame = 0;
+                    return;
+                }
+                // Boss defeat: advance level
+                self.boss_active = false;
+                if self.current_level < 2 {
+                    let next_phase = self.current_level + 1;
+                    self.start_level_story(next_phase);
+                } else {
+                    // Victory!
+                    self.story_text = STORY_TEXTS[3].to_string();
+                    self.story_char_idx = 0;
+                    self.story_timer = 0;
+                    self.state = GameState::Win;
+                }
+                return;
+            }
         }
 
-        self.frame += 1;
-        self.level_time += 1.0 / 60.0;
+        // City scroll
+        self.city_scroll_x += 0.3;
 
-        // Player movement (8-directional, constrained to left portion)
-        let spd = PLAYER_SPEED;
-        if left  { self.player.x -= spd; }
-        if right { self.player.x += spd; }
-        if up    { self.player.y -= spd; }
-        if down  { self.player.y += spd; }
+        // Level timer & wave spawning
+        self.level_timer += 1;
+        while self.wave_index < self.level_waves.len() && self.level_waves[self.wave_index].time <= self.level_timer {
+            let wave = &self.level_waves[self.wave_index];
+            if let Some(etype) = wave.etype {
+                let count = wave.count;
+                let pattern = wave.pattern;
+                let y = wave.y;
+                let spacing = wave.spacing;
+                self.wave_index += 1;
+                self.spawn_wave_enemies(etype, count, pattern, y, spacing);
+            } else {
+                let bt = wave.boss_type;
+                self.wave_index += 1;
+                self.create_boss(bt);
+            }
+        }
 
-        let pw2 = self.player.w / 2.0;
-        let ph2 = self.player.h / 2.0;
-        self.player.x = self.player.x.clamp(pw2, PLAYER_MOVE_BOUND);
-        self.player.y = self.player.y.clamp(ph2, SCREEN_H - ph2);
+        // Player input
+        let left = is_key_down(KeyCode::Left);
+        let right = is_key_down(KeyCode::Right);
+        let up = is_key_down(KeyCode::Up);
+        let down = is_key_down(KeyCode::Down);
+        let shoot_held = is_key_down(KeyCode::X) || is_key_down(KeyCode::Space);
+        let special_pressed = is_key_pressed(KeyCode::Space);
+
+        if self.player.alive {
+            let mut dx: f32 = 0.0;
+            let mut dy: f32 = 0.0;
+            if left { dx -= 1.0; }
+            if right { dx += 1.0; }
+            if up { dy -= 1.0; }
+            if down { dy += 1.0; }
+
+            self.player.x += dx * self.player.w.min(PLAYER_SPEED);
+            self.player.y += dy * PLAYER_SPEED;
+
+            self.player.x = self.player.x.clamp(10.0, PLAYER_MOVE_BOUND);
+            self.player.y = self.player.y.clamp(10.0, SCREEN_H - 10.0 - self.player.h);
+        }
+
+        if self.player.invulnerable > 0 {
+            self.player.invulnerable -= 1;
+        }
+        if self.player.emp_cooldown > 0 {
+            self.player.emp_cooldown -= 1;
+        }
+        if self.aberration_timer > 0 {
+            self.aberration_timer -= 1;
+        }
+
+        // Firing
+        if shoot_held && self.player.alive {
+            self.player.fire_timer -= 1;
+            if self.player.fire_timer <= 0 {
+                self.player_shoot();
+            }
+        } else {
+            if self.player.fire_timer > 0 {
+                self.player.fire_timer = 0;
+            }
+        }
+
+        // EMP (special key = space, but only if not also used for fire... use separate logic)
+        // In Miyoo: Space = B button for EMP
+        if special_pressed && self.player.emp_charges > 0 && self.player.emp_cooldown <= 0 && self.player.alive {
+            let px = self.player.x + self.player.w / 2.0;
+            let py = self.player.y + self.player.h / 2.0;
+            self.emp_waves.push(EmpWave {
+                x: px, y: py,
+                radius: 0.0,
+                max_radius: 400.0,
+                speed: 8.0,
+                alive: true,
+            });
+            self.player.emp_charges -= 1;
+            self.player.emp_cooldown = 600;
+            self.trigger_shake(6.0);
+        }
 
         // Weapon timer
         if self.player.weapon_timer > 0 {
@@ -903,73 +1015,528 @@ impl Game {
             }
         }
 
-        // Shoot
-        if self.shoot_held && (self.frame - self.player.last_shot) as i32 > self.player.shot_cooldown {
-            self.player_shoot();
-        }
+        // Update bullets
+        for i in 0..self.bullets.len() {
+            if !self.bullets[i].alive { continue; }
 
-        // Special weapon (EMP)
-        if special_pressed {
-            self.fire_emp();
-        }
+            // Homing logic
+            if self.bullets[i].btype == BulletType::Homing && self.bullets[i].life > 150 {
+                let bx = self.bullets[i].x;
+                let by = self.bullets[i].y;
+                let mut nearest_x = bx;
+                let mut nearest_y = by;
+                let mut min_dist = 9999.0f32;
 
-        if self.player.invulnerable > 0 {
-            self.player.invulnerable -= 1;
-        }
+                for e in &self.enemies {
+                    if !e.alive { continue; }
+                    let d = ((e.x - bx).powi(2) + (e.y - by).powi(2)).sqrt();
+                    if d < min_dist { min_dist = d; nearest_x = e.x; nearest_y = e.y + e.h / 2.0; }
+                }
+                if let Some(ref boss) = self.boss {
+                    if boss.alive {
+                        let d = ((boss.x - bx).powi(2) + (boss.y - by).powi(2)).sqrt();
+                        if d < min_dist { nearest_x = boss.x; nearest_y = boss.y; }
+                    }
+                }
 
-        // Chain timer
-        if self.chain_timer > 0 {
-            self.chain_timer -= 1;
-            if self.chain_timer <= 0 {
-                self.chain_count = 0;
+                if min_dist < 9999.0 {
+                    let angle: f32 = (nearest_y - by).atan2(nearest_x - bx);
+                    self.bullets[i].vx += angle.cos() * 0.5;
+                    self.bullets[i].vy += angle.sin() * 0.5;
+                    let spd = (self.bullets[i].vx.powi(2) + self.bullets[i].vy.powi(2)).sqrt();
+                    if spd > 6.0 {
+                        self.bullets[i].vx = self.bullets[i].vx / spd * 6.0;
+                        self.bullets[i].vy = self.bullets[i].vy / spd * 6.0;
+                    }
+                }
+            }
+
+            self.bullets[i].x += self.bullets[i].vx;
+            self.bullets[i].y += self.bullets[i].vy;
+            self.bullets[i].life -= 1;
+            if self.bullets[i].x > SCREEN_W + 10.0 || self.bullets[i].x < -10.0
+                || self.bullets[i].y < -10.0 || self.bullets[i].y > SCREEN_H + 10.0
+                || self.bullets[i].life <= 0
+            {
+                self.bullets[i].alive = false;
             }
         }
+        self.bullets.retain(|b| b.alive);
 
-        // Muzzle flash
-        if self.muzzle_flash > 0 {
-            self.muzzle_flash -= 1;
+        // Update enemy bullets
+        for i in 0..self.enemy_bullets.len() {
+            self.enemy_bullets[i].x += self.enemy_bullets[i].vx;
+            self.enemy_bullets[i].y += self.enemy_bullets[i].vy;
+            self.enemy_bullets[i].life -= 1;
+            if self.enemy_bullets[i].x < -10.0 || self.enemy_bullets[i].x > SCREEN_W + 10.0
+                || self.enemy_bullets[i].y < -10.0 || self.enemy_bullets[i].y > SCREEN_H + 10.0
+                || self.enemy_bullets[i].life <= 0
+            {
+                self.enemy_bullets[i].alive = false;
+                continue;
+            }
+            // Hit player
+            if self.player.alive && self.player.invulnerable <= 0 {
+                let bx = self.enemy_bullets[i].x;
+                let by = self.enemy_bullets[i].y;
+                if bx > self.player.x && bx < self.player.x + self.player.w
+                    && by > self.player.y && by < self.player.y + self.player.h
+                {
+                    self.enemy_bullets[i].alive = false;
+                    self.hit_player();
+                }
+            }
         }
+        self.enemy_bullets.retain(|b| b.alive);
 
-        // EMP flash
-        if self.emp_flash > 0 {
-            self.emp_flash -= 1;
+        // Update enemies
+        let frame = self.frame;
+        let px = self.player.x;
+        let py = self.player.y;
+        let ph = self.player.h;
+        let mut new_enemy_bullets: Vec<Bullet> = Vec::new();
+
+        for i in 0..self.enemies.len() {
+            if !self.enemies[i].alive { continue; }
+            if self.enemies[i].flash_timer > 0 {
+                self.enemies[i].flash_timer -= 1;
+            }
+
+            // Movement
+            match self.enemies[i].etype {
+                EnemyType::Drone => {
+                    self.enemies[i].x -= self.enemies[i].speed;
+                    self.enemies[i].y += (frame as f32 * 0.05 + self.enemies[i].sine_offset).sin() * 1.2;
+                }
+                EnemyType::Gunship => {
+                    self.enemies[i].x -= self.enemies[i].speed;
+                    self.enemies[i].y += (frame as f32 * 0.03 + self.enemies[i].sine_offset).sin() * 0.8;
+                }
+                EnemyType::Turret | EnemyType::ShieldGen => {
+                    self.enemies[i].x -= self.enemies[i].speed;
+                }
+            }
+
+            // Shooting
+            if self.enemies[i].shoot_rate < 9000.0 && self.enemies[i].x < SCREEN_W - 20.0 {
+                self.enemies[i].shoot_timer += 1.0;
+                if self.enemies[i].shoot_timer >= self.enemies[i].shoot_rate {
+                    self.enemies[i].shoot_timer = 0.0;
+                    let ex = self.enemies[i].x;
+                    let ey = self.enemies[i].y;
+                    let ew = self.enemies[i].w;
+                    let eh = self.enemies[i].h;
+
+                    match self.enemies[i].etype {
+                        EnemyType::Turret => {
+                            let angle: f32 = (py + ph / 2.0 - ey - eh / 2.0).atan2(px - ex);
+                            new_enemy_bullets.push(Bullet {
+                                x: ex, y: ey + eh / 2.0,
+                                vx: angle.cos() * 3.0, vy: angle.sin() * 3.0,
+                                life: 200, is_player: false, alive: true, btype: BulletType::Enemy,
+                            });
+                        }
+                        EnemyType::Gunship => {
+                            new_enemy_bullets.push(Bullet {
+                                x: ex - 4.0, y: ey + eh / 2.0,
+                                vx: -3.5, vy: 0.0,
+                                life: 150, is_player: false, alive: true, btype: BulletType::Enemy,
+                            });
+                        }
+                        EnemyType::ShieldGen => {
+                            for a in 0..4 {
+                                let ang: f32 = a as f32 * std::f32::consts::FRAC_PI_2 + frame as f32 * 0.02;
+                                new_enemy_bullets.push(Bullet {
+                                    x: ex + ew / 2.0, y: ey + eh / 2.0,
+                                    vx: ang.cos() * 2.0, vy: ang.sin() * 2.0,
+                                    life: 120, is_player: false, alive: true, btype: BulletType::Enemy,
+                                });
+                            }
+                        }
+                        EnemyType::Drone => {}
+                    }
+                }
+            }
+
+            // Off screen
+            if self.enemies[i].x < -50.0 {
+                self.enemies[i].alive = false;
+                continue;
+            }
+
+            // Bullet collision with enemies
+            for j in 0..self.bullets.len() {
+                if !self.bullets[j].alive || !self.bullets[j].is_player { continue; }
+                let bx = self.bullets[j].x;
+                let by = self.bullets[j].y;
+                let ex = self.enemies[i].x;
+                let ey = self.enemies[i].y;
+                let ew = self.enemies[i].w;
+                let eh = self.enemies[i].h;
+
+                if bx + 4.0 > ex && bx < ex + ew && by + 4.0 > ey && by < ey + eh {
+                    self.enemies[i].hp -= 1;
+                    self.enemies[i].flash_timer = 4;
+                    self.bullets[j].alive = false;
+                    if self.enemies[i].hp <= 0 {
+                        self.enemies[i].alive = false;
+                        let cx = ex + ew / 2.0;
+                        let cy = ey + eh / 2.0;
+                        self.spawn_particles(cx, cy, 15, NEON_PINK, 2.5);
+                        self.trigger_shake(3.0);
+                        let pts = self.enemies[i].points * self.chain_multiplier;
+                        self.score += pts;
+                        self.floating_texts.push(FloatingText {
+                            x: ex, y: ey,
+                            text: format!("+{}", pts),
+                            life: 60,
+                            color: YELLOW,
+                        });
+                        self.chain_timer = 120;
+                        self.chain_multiplier = (self.chain_multiplier + 1).min(8);
+                        if rand::gen_range(0.0f32, 1.0) < DROP_CHANCE {
+                            self.power_ups.push(PowerUp::new(ex, ey));
+                        }
+                    }
+                    break;
+                }
+            }
+
+            // Enemy body collision with player
+            if self.player.alive && self.player.invulnerable <= 0 && self.enemies[i].alive {
+                let pw = self.player.w;
+                if Self::aabb_overlap(
+                    self.player.x, self.player.y, pw, self.player.h,
+                    self.enemies[i].x, self.enemies[i].y, self.enemies[i].w, self.enemies[i].h,
+                ) {
+                    self.enemies[i].hp -= 2;
+                    if self.enemies[i].hp <= 0 {
+                        self.enemies[i].alive = false;
+                        let cx = self.enemies[i].x + self.enemies[i].w / 2.0;
+                        let cy = self.enemies[i].y + self.enemies[i].h / 2.0;
+                        self.spawn_particles(cx, cy, 10, NEON_PINK, 2.0);
+                    }
+                    self.hit_player();
+                }
+            }
         }
+        self.enemy_bullets.extend(new_enemy_bullets);
+        self.bullets.retain(|b| b.alive);
+        self.enemies.retain(|e| e.alive);
 
-        // Engine trail particles
-        {
-            let ex = self.player.x - self.player.w / 2.0;
-            let ey = self.player.y;
-            for _ in 0..2 {
-                let oy: f32 = rand::gen_range(-3.0, 3.0);
-                let c = if rand::gen_range(0.0f32, 1.0) > 0.5 {
-                    Color::new(0.0, 0.8, 1.0, 0.7)
+        // EMP waves
+        for i in 0..self.emp_waves.len() {
+            self.emp_waves[i].radius += self.emp_waves[i].speed;
+            if self.emp_waves[i].radius >= self.emp_waves[i].max_radius {
+                self.emp_waves[i].alive = false;
+                continue;
+            }
+            let emp_x = self.emp_waves[i].x;
+            let emp_y = self.emp_waves[i].y;
+            let emp_r = self.emp_waves[i].radius;
+
+            // Damage enemies in ring
+            for j in 0..self.enemies.len() {
+                if !self.enemies[j].alive { continue; }
+                let d = ((self.enemies[j].x + self.enemies[j].w / 2.0 - emp_x).powi(2)
+                    + (self.enemies[j].y + self.enemies[j].h / 2.0 - emp_y).powi(2)).sqrt();
+                if d < emp_r + 10.0 && d > emp_r - 20.0 {
+                    self.enemies[j].hp -= 3;
+                    if self.enemies[j].hp <= 0 {
+                        self.enemies[j].alive = false;
+                        let cx = self.enemies[j].x + self.enemies[j].w / 2.0;
+                        let cy = self.enemies[j].y + self.enemies[j].h / 2.0;
+                        self.spawn_particles(cx, cy, 12, NEON_PURPLE, 3.0);
+                        self.score += self.enemies[j].points;
+                    }
+                }
+            }
+            // Clear enemy bullets in radius
+            for b in self.enemy_bullets.iter_mut() {
+                if !b.alive { continue; }
+                let d = ((b.x - emp_x).powi(2) + (b.y - emp_y).powi(2)).sqrt();
+                if d < emp_r + 5.0 {
+                    b.alive = false;
+                }
+            }
+            // EMP vs boss
+            if let Some(ref mut boss) = self.boss {
+                if boss.alive {
+                    let d = ((boss.x + boss.w / 2.0 - emp_x).powi(2)
+                        + (boss.y + boss.h / 2.0 - emp_y).powi(2)).sqrt();
+                    if d < emp_r + 20.0 && d > emp_r - 25.0 {
+                        boss.hp -= 5;
+                        let bx = boss.x + boss.w / 2.0;
+                        let by = boss.y + boss.h / 2.0;
+                        self.spawn_particles(bx, by, 10, NEON_PURPLE, 3.0);
+                    }
+                }
+            }
+        }
+        self.emp_waves.retain(|e| e.alive);
+        self.enemy_bullets.retain(|b| b.alive);
+        self.enemies.retain(|e| e.alive);
+
+        // Boss update - extract to avoid borrow checker issues
+        let mut boss_died = false;
+        let mut boss_new_bullets: Vec<Bullet> = Vec::new();
+        let mut boss_spawn_drones: Vec<Enemy> = Vec::new();
+        let mut boss_hit_particles: Vec<(f32, f32, usize, Color, f32)> = Vec::new();
+        let mut boss_hit_bullets: Vec<usize> = Vec::new(); // indices to mark dead
+        let mut boss_score_add: u32 = 0;
+        let mut boss_score_text: Option<(f32, f32, u32)> = None;
+        let mut boss_shake: f32 = 0.0;
+        let mut boss_hit_player = false;
+
+        if let Some(ref mut boss) = self.boss {
+            if boss.alive {
+                // Enter animation
+                if boss.enter_phase {
+                    boss.x += (boss.target_x - boss.x) * 0.02;
+                    if (boss.x - boss.target_x).abs() < 2.0 {
+                        boss.enter_phase = false;
+                        boss.x = boss.target_x;
+                    }
                 } else {
-                    Color::new(0.0, 0.4, 1.0, 0.7)
-                };
-                self.particles.push(Particle {
-                    x: ex,
-                    y: ey + oy,
-                    vx: rand::gen_range(-3.0, -1.0),
-                    vy: rand::gen_range(-0.3, 0.3),
-                    life: 0.6,
-                    decay: rand::gen_range(0.06, 0.12),
-                    color: c,
-                    alive: true,
-                    size: rand::gen_range(1.5, 3.0),
-                });
+                    boss.y = SCREEN_H / 2.0 + (frame as f32 * 0.015).sin() * 60.0 - boss.h / 2.0;
+                }
+
+                boss.fire_timer += 1;
+
+                // Boss attacks
+                if !boss.enter_phase {
+                    match boss.boss_type {
+                        0 => {
+                            boss.angle += 0.02;
+                            if boss.fire_timer % 30 == 0 {
+                                for a in 0..4 {
+                                    let ang: f32 = boss.angle + a as f32 * std::f32::consts::FRAC_PI_2;
+                                    boss_new_bullets.push(Bullet {
+                                        x: boss.x + boss.w / 2.0, y: boss.y + boss.h / 2.0,
+                                        vx: ang.cos() * 2.5, vy: ang.sin() * 2.5,
+                                        life: 200, is_player: false, alive: true, btype: BulletType::Enemy,
+                                    });
+                                }
+                            }
+                        }
+                        1 => {
+                            boss.drone_timer += 1;
+                            if boss.drone_timer % 180 == 0 && self.enemies.len() < 15 {
+                                let by_drone = boss.y + boss.h / 2.0;
+                                for k in 0..3u32 {
+                                    boss_spawn_drones.push(Enemy {
+                                        x: SCREEN_W + 20.0 + k as f32 * 20.0,
+                                        y: by_drone, w: 16.0, h: 16.0,
+                                        etype: EnemyType::Drone, hp: 1, max_hp: 1,
+                                        speed: 2.0 + rand::gen_range(0.0f32, 1.5),
+                                        points: 100, alive: true,
+                                        shoot_timer: 0.0, shoot_rate: 9999.0,
+                                        sine_offset: rand::gen_range(0.0f32, std::f32::consts::TAU),
+                                        flash_timer: 0,
+                                    });
+                                }
+                            }
+                            if boss.fire_timer % 45 == 0 {
+                                let angle: f32 = (py + ph / 2.0 - boss.y - boss.h / 2.0)
+                                    .atan2(px - boss.x);
+                                boss_new_bullets.push(Bullet {
+                                    x: boss.x, y: boss.y + boss.h / 2.0,
+                                    vx: angle.cos() * 3.0, vy: angle.sin() * 3.0,
+                                    life: 180, is_player: false, alive: true, btype: BulletType::Enemy,
+                                });
+                            }
+                        }
+                        _ => {
+                            let hp_pct = boss.hp as f32 / boss.max_hp as f32;
+                            if hp_pct > 0.66 {
+                                if boss.fire_timer % 20 == 0 {
+                                    for k in -2i32..=2 {
+                                        boss_new_bullets.push(Bullet {
+                                            x: boss.x, y: boss.y + boss.h / 2.0 + k as f32 * 12.0,
+                                            vx: -3.0, vy: k as f32 * 0.3,
+                                            life: 200, is_player: false, alive: true, btype: BulletType::Enemy,
+                                        });
+                                    }
+                                }
+                            } else if hp_pct > 0.33 {
+                                boss.sweep_angle += 0.03;
+                                if boss.fire_timer % 10 == 0 {
+                                    let ang: f32 = boss.sweep_angle.sin() * 1.2;
+                                    let base: f32 = std::f32::consts::PI + ang;
+                                    boss_new_bullets.push(Bullet {
+                                        x: boss.x, y: boss.y + boss.h / 2.0,
+                                        vx: base.cos() * 4.0, vy: base.sin() * 4.0,
+                                        life: 150, is_player: false, alive: true, btype: BulletType::Enemy,
+                                    });
+                                }
+                                if boss.fire_timer % 60 == 0 && self.enemies.len() < 10 {
+                                    for k in 0..4u32 {
+                                        let ey_rand = 40.0 + rand::gen_range(0.0f32, SCREEN_H - 80.0);
+                                        boss_spawn_drones.push(Enemy {
+                                            x: SCREEN_W + 20.0 + k as f32 * 60.0,
+                                            y: ey_rand, w: 16.0, h: 16.0,
+                                            etype: EnemyType::Drone, hp: 1, max_hp: 1,
+                                            speed: 2.0 + rand::gen_range(0.0f32, 1.5),
+                                            points: 100, alive: true,
+                                            shoot_timer: 0.0, shoot_rate: 9999.0,
+                                            sine_offset: rand::gen_range(0.0f32, std::f32::consts::TAU),
+                                            flash_timer: 0,
+                                        });
+                                    }
+                                }
+                            } else {
+                                if boss.fire_timer % 6 == 0 {
+                                    let ang: f32 = (py + ph / 2.0 - boss.y - boss.h / 2.0)
+                                        .atan2(px - boss.x) + (rand::gen_range(0.0f32, 1.0) - 0.5) * 0.5;
+                                    boss_new_bullets.push(Bullet {
+                                        x: boss.x, y: boss.y + boss.h / 2.0,
+                                        vx: ang.cos() * 3.5, vy: ang.sin() * 3.5,
+                                        life: 180, is_player: false, alive: true, btype: BulletType::Enemy,
+                                    });
+                                }
+                                if boss.fire_timer % 90 == 0 {
+                                    for a in 0..8 {
+                                        let ang: f32 = a as f32 * std::f32::consts::FRAC_PI_4;
+                                        boss_new_bullets.push(Bullet {
+                                            x: boss.x + boss.w / 2.0, y: boss.y + boss.h / 2.0,
+                                            vx: ang.cos() * 2.0, vy: ang.sin() * 2.0,
+                                            life: 200, is_player: false, alive: true, btype: BulletType::Enemy,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Boss bullet collision - collect results
+                for j in 0..self.bullets.len() {
+                    if !self.bullets[j].alive || !self.bullets[j].is_player { continue; }
+                    let bx = self.bullets[j].x;
+                    let by = self.bullets[j].y;
+                    if bx + 4.0 > boss.x && bx < boss.x + boss.w
+                        && by + 4.0 > boss.y && by < boss.y + boss.h
+                    {
+                        boss.hp -= 1;
+                        boss_hit_bullets.push(j);
+                        boss_hit_particles.push((bx, by, 3, NEON_CYAN, 1.0));
+                        if boss.hp <= 0 {
+                            boss.alive = false;
+                            boss_died = true;
+                            let bx2 = boss.x + boss.w / 2.0;
+                            let by2 = boss.y + boss.h / 2.0;
+                            boss_hit_particles.push((bx2, by2, 40, NEON_PINK, 4.0));
+                            boss_hit_particles.push((bx2, by2, 25, NEON_CYAN, 3.0));
+                            boss_hit_particles.push((bx2, by2, 20, NEON_PURPLE, 3.5));
+                            boss_shake = 10.0;
+                            let pts = 5000 * self.chain_multiplier;
+                            boss_score_add = pts;
+                            boss_score_text = Some((boss.x, boss.y, pts));
+                        }
+                    }
+                }
+
+                // Boss body collision with player
+                if self.player.alive && self.player.invulnerable <= 0 && !boss.enter_phase {
+                    if Self::aabb_overlap(
+                        self.player.x, self.player.y, self.player.w, self.player.h,
+                        boss.x, boss.y, boss.w, boss.h,
+                    ) {
+                        boss_hit_player = true;
+                    }
+                }
             }
         }
 
-        // Screen shake decay
-        if self.shake_mag > 0.1 {
-            self.shake_x = rand::gen_range(-1.0f32, 1.0) * self.shake_mag;
-            self.shake_y = rand::gen_range(-1.0f32, 1.0) * self.shake_mag;
-            self.shake_mag *= 0.85;
-        } else {
-            self.shake_x = 0.0;
-            self.shake_y = 0.0;
-            self.shake_mag = 0.0;
+        // Apply deferred boss results
+        self.enemy_bullets.extend(boss_new_bullets);
+        self.enemies.extend(boss_spawn_drones);
+        for &idx in boss_hit_bullets.iter().rev() {
+            if idx < self.bullets.len() {
+                self.bullets[idx].alive = false;
+            }
         }
+        self.bullets.retain(|b| b.alive);
+        for (px2, py2, count, color, spd) in boss_hit_particles {
+            self.spawn_particles(px2, py2, count, color, spd);
+        }
+        if boss_shake > 0.0 {
+            self.trigger_shake(boss_shake);
+        }
+        self.score += boss_score_add;
+        if let Some((fx, fy, pts)) = boss_score_text {
+            self.floating_texts.push(FloatingText {
+                x: fx, y: fy,
+                text: format!("+{}", pts),
+                life: 60,
+                color: YELLOW,
+            });
+        }
+        if boss_hit_player {
+            self.hit_player();
+        }
+
+        if boss_died {
+            self.boss_defeat_timer = 120;
+        }
+
+        // Update power-ups
+        for i in 0..self.power_ups.len() {
+            self.power_ups[i].x -= 1.0;
+            self.power_ups[i].angle += 0.05;
+            if self.power_ups[i].x < -20.0 {
+                self.power_ups[i].alive = false;
+                continue;
+            }
+            // Collect
+            if self.player.alive {
+                let pu = &self.power_ups[i];
+                if Self::aabb_overlap(
+                    self.player.x, self.player.y, self.player.w, self.player.h,
+                    pu.x, pu.y, pu.w, pu.h,
+                ) {
+                    let kind = self.power_ups[i].kind;
+                    let pux = self.power_ups[i].x;
+                    let puy = self.power_ups[i].y;
+                    self.power_ups[i].alive = false;
+
+                    match kind {
+                        PowerUpKind::Spread => {
+                            self.player.weapon = WeaponType::SpreadShot;
+                            self.player.weapon_timer = 600;
+                            self.floating_texts.push(FloatingText {
+                                x: pux, y: puy, text: "SPREAD".to_string(),
+                                life: 60, color: NEON_PINK,
+                            });
+                        }
+                        PowerUpKind::Homing => {
+                            self.player.weapon = WeaponType::HomingMissile;
+                            self.player.weapon_timer = 600;
+                            self.floating_texts.push(FloatingText {
+                                x: pux, y: puy, text: "HOMING".to_string(),
+                                life: 60, color: NEON_GREEN,
+                            });
+                        }
+                        PowerUpKind::Shield => {
+                            self.player.shields = self.player.shields.min(self.player.max_shields - 1) + 1;
+                            self.floating_texts.push(FloatingText {
+                                x: pux, y: puy, text: "SHIELD+".to_string(),
+                                life: 60, color: NEON_CYAN,
+                            });
+                        }
+                        PowerUpKind::Emp => {
+                            self.player.emp_charges = (self.player.emp_charges + 1).min(3);
+                            self.floating_texts.push(FloatingText {
+                                x: pux, y: puy, text: "EMP+".to_string(),
+                                life: 60, color: NEON_PURPLE,
+                            });
+                        }
+                    }
+                    self.spawn_particles(pux, puy, 10, NEON_CYAN, 2.0);
+                }
+            }
+        }
+        self.power_ups.retain(|p| p.alive);
 
         // Floating texts
         for ft in self.floating_texts.iter_mut() {
@@ -978,392 +1545,23 @@ impl Game {
         }
         self.floating_texts.retain(|ft| ft.life > 0);
 
-        // Dying enemies
-        for de in self.dying_enemies.iter_mut() {
-            de.frames_left -= 1;
-        }
-        self.dying_enemies.retain(|de| de.frames_left > 0);
-
-        // Process wave events
-        self.process_wave_events();
-
-        // Update bullets
-        for b in self.bullets.iter_mut() {
-            if b.homing && b.is_player {
-                // Simple homing: steer toward nearest enemy (not implemented as full search for perf,
-                // just adjust vy toward center area)
-                b.vy *= 0.95;
-                b.vx = b.vx.abs().max(BULLET_SPEED * 0.5); // always move right
-            }
-            b.x += b.vx;
-            b.y += b.vy;
-            if b.x < -50.0 || b.x > SCREEN_W + 50.0 || b.y < -50.0 || b.y > SCREEN_H + 50.0 {
-                b.alive = false;
+        // Chain decay
+        if self.chain_timer > 0 {
+            self.chain_timer -= 1;
+            if self.chain_timer <= 0 {
+                self.chain_multiplier = 1;
             }
         }
 
-        // Homing: find nearest enemy and steer
-        {
-            let enemies_snapshot: Vec<(f32, f32, bool)> = self.enemies.iter()
-                .filter(|e| e.alive)
-                .map(|e| (e.x, e.y, true))
-                .collect();
-
-            for b in self.bullets.iter_mut() {
-                if !b.homing || !b.is_player || !b.alive {
-                    continue;
-                }
-                let mut best_dist = f32::MAX;
-                let mut best_y = b.y;
-                for &(ex, ey, _) in &enemies_snapshot {
-                    let dx = ex - b.x;
-                    let dy = ey - b.y;
-                    let dist = dx * dx + dy * dy;
-                    if dist < best_dist {
-                        best_dist = dist;
-                        best_y = ey;
-                    }
-                }
-                if best_dist < f32::MAX {
-                    let dy = best_y - b.y;
-                    b.vy += dy.signum() * 0.5;
-                    b.vy = b.vy.clamp(-4.0, 4.0);
-                }
-            }
-        }
-
-        // Bullet trail particles (player bullets)
-        {
-            let mut trails = Vec::new();
-            for b in &self.bullets {
-                if !b.alive || !b.is_player { continue; }
-                if rand::gen_range(0u32, 3) == 0 {
-                    trails.push(Particle {
-                        x: b.x + rand::gen_range(-1.5, 1.5),
-                        y: b.y + rand::gen_range(-1.0, 1.0),
-                        vx: rand::gen_range(-0.5, 0.0),
-                        vy: rand::gen_range(-0.2, 0.2),
-                        life: rand::gen_range(0.2, 0.4),
-                        decay: rand::gen_range(0.05, 0.1),
-                        color: Color::new(b.color.r, b.color.g, b.color.b, 0.4),
-                        alive: true,
-                        size: 1.5,
-                    });
-                }
-            }
-            self.particles.extend(trails);
-        }
-
-        // Update enemies
-        let mut new_bullets: Vec<Bullet> = Vec::new();
-        let px = self.player.x;
-        let py = self.player.y;
-        let frame = self.frame;
-        for e in self.enemies.iter_mut() {
-            // Spawn flash
-            if e.spawn_flash > 0 {
-                e.spawn_flash -= 1;
-            }
-
-            match e.etype {
-                EnemyType::Drone => {
-                    e.x += e.vx;
-                    e.move_timer += 0.05;
-                    e.y += (e.move_timer).sin() * 1.5;
-                }
-                EnemyType::Gunship => {
-                    e.x += e.vx;
-                    e.move_timer += 0.03;
-                    e.y += (e.move_timer).sin() * 2.0;
-                    // Shoot at player
-                    if (frame - e.last_shot) as i32 > e.shoot_cooldown {
-                        let dx = px - e.x;
-                        let dy = py - e.y;
-                        let dist = (dx * dx + dy * dy).sqrt().max(1.0);
-                        let bvx = dx / dist * 4.0;
-                        let bvy = dy / dist * 4.0;
-                        new_bullets.push(mk_bullet(e.x, e.y, bvx, bvy, NEON_PINK, false, false));
-                        e.last_shot = frame;
-                    }
-                }
-                EnemyType::Turret => {
-                    e.x += e.vx;
-                    // Rotate and fire
-                    e.angle += 0.02;
-                    if (frame - e.last_shot) as i32 > e.shoot_cooldown {
-                        let a = e.angle;
-                        let bvx = a.cos() * 3.5;
-                        let bvy = a.sin() * 3.5;
-                        new_bullets.push(mk_bullet(e.x, e.y, bvx, bvy, NEON_PURPLE, false, false));
-                        // Also fire opposite
-                        new_bullets.push(mk_bullet(e.x, e.y, -bvx, -bvy, NEON_PURPLE, false, false));
-                        e.last_shot = frame;
-                    }
-                }
-                EnemyType::Boss => {
-                    // Move into position, then bob
-                    if e.x > SCREEN_W * 0.7 {
-                        e.x -= 1.0;
-                    }
-                    e.move_timer += 0.02;
-                    e.y = SCREEN_H / 2.0 + (e.move_timer).sin() * 100.0;
-
-                    // Boss attack patterns
-                    if (frame - e.last_shot) as i32 > e.shoot_cooldown {
-                        let pattern = (frame / 120) % 3;
-                        match pattern {
-                            0 => {
-                                // Spread shot toward player
-                                for i in 0..5 {
-                                    let a: f32 = -0.4 + i as f32 * 0.2;
-                                    let bvx = -5.0 * (1.0 + a * 0.3);
-                                    let bvy = a * 3.0;
-                                    new_bullets.push(mk_bullet(
-                                        e.x - e.w / 2.0, e.y, bvx, bvy, e.color, false, false,
-                                    ));
-                                }
-                            }
-                            1 => {
-                                // Aimed shot
-                                let dx = px - e.x;
-                                let dy = py - e.y;
-                                let dist = (dx * dx + dy * dy).sqrt().max(1.0);
-                                for i in 0..3 {
-                                    let spd = 4.0 + i as f32 * 0.5;
-                                    new_bullets.push(mk_bullet(
-                                        e.x - e.w / 2.0, e.y,
-                                        dx / dist * spd, dy / dist * spd,
-                                        e.color, false, false,
-                                    ));
-                                }
-                            }
-                            _ => {
-                                // Circle burst
-                                for i in 0..8 {
-                                    let a: f32 = i as f32 * std::f32::consts::TAU / 8.0;
-                                    new_bullets.push(mk_bullet(
-                                        e.x, e.y,
-                                        a.cos() * 3.0, a.sin() * 3.0,
-                                        e.color, false, false,
-                                    ));
-                                }
-                            }
-                        }
-                        e.last_shot = frame;
-                    }
-                }
-            }
-
-            // Off-screen removal (non-boss)
-            if e.etype != EnemyType::Boss && e.x < -60.0 {
-                e.alive = false;
-            }
-        }
-        self.bullets.extend(new_bullets);
-
-        // Update power-ups (scroll left)
-        for p in self.power_ups.iter_mut() {
-            p.x += p.vx;
-            if p.x < -20.0 {
-                p.alive = false;
-            }
-        }
-
-        // ----- Collisions -----
-        // Player bullets vs enemies
-        for i in 0..self.bullets.len() {
-            if !self.bullets[i].alive || !self.bullets[i].is_player {
-                continue;
-            }
-            let bx = self.bullets[i].x;
-            let by = self.bullets[i].y;
-            let bw = self.bullets[i].w;
-            let bh = self.bullets[i].h;
-
-            for j in 0..self.enemies.len() {
-                if !self.enemies[j].alive {
-                    continue;
-                }
-                let ex = self.enemies[j].x;
-                let ey = self.enemies[j].y;
-                let ew = self.enemies[j].w;
-                let eh = self.enemies[j].h;
-
-                if Self::overlaps(bx, by, bw, bh, ex, ey, ew, eh) {
-                    self.bullets[i].alive = false;
-                    self.enemies[j].hp -= 1;
-
-                    // Hit particles
-                    self.spawn_particles(bx, by, 4, self.enemies[j].color, 1.5);
-
-                    if self.enemies[j].hp <= 0 {
-                        self.enemies[j].alive = false;
-
-                        // Chain multiplier
-                        self.chain_count += 1;
-                        self.chain_timer = 120; // 2 seconds
-                        let multiplier = 1.0 + self.chain_count as f32 * 0.5;
-                        let points = (self.enemies[j].score as f32 * multiplier) as u32;
-                        self.score += points;
-
-                        // Explosion
-                        let ecolor = self.enemies[j].color;
-                        self.spawn_particles(ex, ey, 25, ecolor, 3.0);
-                        self.spawn_particles(ex, ey, 10, WHITE, 2.0);
-                        self.trigger_shake(3.0);
-
-                        // Hitstop on boss damage
-                        if self.enemies[j].etype == EnemyType::Boss {
-                            self.hitstop_frames = 6;
-                            self.trigger_shake(8.0);
-                            self.boss_alive = false;
-                        }
-
-                        // Dying animation
-                        self.dying_enemies.push(DyingEnemy {
-                            x: ex,
-                            y: ey,
-                            w: ew,
-                            h: eh,
-                            _etype: self.enemies[j].etype,
-                            color: ecolor,
-                            frames_left: 15,
-                        });
-
-                        // Floating score
-                        self.floating_texts.push(FloatingText {
-                            x: ex,
-                            y: ey,
-                            text: format!("+{}", points),
-                            life: 45,
-                            color: if self.chain_count >= 3 { YELLOW } else { WHITE },
-                        });
-
-                        // Drop power-up
-                        if rand::gen_range(0.0f32, 1.0) < DROP_CHANCE {
-                            self.power_ups.push(PowerUp::new(ex, ey));
-                        }
-                    } else if self.enemies[j].etype == EnemyType::Boss {
-                        // Boss hit flash
-                        self.hitstop_frames = 2;
-                    }
-                    break;
-                }
-            }
-        }
-
-        // Enemy bullets vs player
-        if self.player.invulnerable <= 0 && self.state == GameState::Playing {
-            let ppx = self.player.x;
-            let ppy = self.player.y;
-            let ppw = self.player.w * 0.6; // smaller hitbox
-            let pph = self.player.h * 0.6;
-
-            let mut was_hit = false;
-            for b in self.bullets.iter_mut() {
-                if !b.alive || b.is_player { continue; }
-                if Self::overlaps(ppx, ppy, ppw, pph, b.x, b.y, b.w, b.h) {
-                    b.alive = false;
-                    was_hit = true;
-                    break;
-                }
-            }
-
-            // Enemy body collision
-            if !was_hit {
-                for e in self.enemies.iter() {
-                    if !e.alive { continue; }
-                    if Self::overlaps(ppx, ppy, ppw, pph, e.x, e.y, e.w, e.h) {
-                        was_hit = true;
-                        break;
-                    }
-                }
-            }
-
-            if was_hit {
-                self.hit_player();
-            }
-        }
-
-        // Player vs power-ups
-        {
-            let ppx = self.player.x;
-            let ppy = self.player.y;
-            let ppw = self.player.w;
-            let pph = self.player.h;
-
-            for i in 0..self.power_ups.len() {
-                if !self.power_ups[i].alive { continue; }
-                let pu = &self.power_ups[i];
-                if Self::overlaps(ppx, ppy, ppw, pph, pu.x, pu.y, 16.0, 16.0) {
-                    let kind = self.power_ups[i].kind;
-                    let pux = self.power_ups[i].x;
-                    let puy = self.power_ups[i].y;
-                    let puc = self.power_ups[i].color;
-                    self.power_ups[i].alive = false;
-
-                    self.spawn_particles(pux, puy, 12, puc, 2.0);
-
-                    match kind {
-                        PowerUpKind::Spread => {
-                            self.player.weapon = WeaponType::SpreadShot;
-                            self.player.weapon_timer = 600; // 10 seconds
-                            self.floating_texts.push(FloatingText {
-                                x: pux, y: puy,
-                                text: "SPREAD SHOT".to_string(),
-                                life: 50,
-                                color: NEON_ORANGE,
-                            });
-                        }
-                        PowerUpKind::Homing => {
-                            self.player.weapon = WeaponType::HomingMissile;
-                            self.player.weapon_timer = 600;
-                            self.floating_texts.push(FloatingText {
-                                x: pux, y: puy,
-                                text: "HOMING".to_string(),
-                                life: 50,
-                                color: NEON_PURPLE,
-                            });
-                        }
-                        PowerUpKind::Emp => {
-                            self.player.emp_charges += 1;
-                            self.floating_texts.push(FloatingText {
-                                x: pux, y: puy,
-                                text: "EMP +1".to_string(),
-                                life: 50,
-                                color: NEON_CYAN,
-                            });
-                        }
-                        PowerUpKind::Shield => {
-                            if self.player.shields < self.player.max_shields {
-                                self.player.shields += 1;
-                            }
-                            self.floating_texts.push(FloatingText {
-                                x: pux, y: puy,
-                                text: "SHIELD +1".to_string(),
-                                life: 50,
-                                color: NEON_GREEN,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        // Cleanup
-        self.bullets.retain(|b| b.alive);
-        self.enemies.retain(|e| e.alive);
-        self.power_ups.retain(|p| p.alive);
-
-        // Check boss defeated -> level clear
-        if self.boss_spawned && !self.boss_alive && self.enemies.iter().all(|e| e.etype != EnemyType::Boss) {
-            let clear_text = self.current_level().clear_text;
-            if clear_text.is_empty() {
-                // Final level, no clear text -> victory
-                self.show_victory();
-            } else {
-                self.start_level_story(clear_text);
-            }
+        // Screen shake decay
+        if self.shake_mag > 0.5 {
+            self.shake_x = (rand::gen_range(0.0f32, 1.0) - 0.5) * self.shake_mag * 2.0;
+            self.shake_y = (rand::gen_range(0.0f32, 1.0) - 0.5) * self.shake_mag * 2.0;
+            self.shake_mag *= 0.85;
+        } else {
+            self.shake_mag = 0.0;
+            self.shake_x = 0.0;
+            self.shake_y = 0.0;
         }
     }
 
@@ -1376,144 +1574,46 @@ impl Game {
         let sx = self.shake_x;
         let sy = self.shake_y;
 
-        // Grid lines (cyberpunk aesthetic)
-        {
-            let grid_col = Color::new(0.0, 1.0, 1.0, 0.03);
-            let step = 40.0;
-            let mut gx = 0.0;
-            while gx < SCREEN_W {
-                draw_line(gx + sx, 0.0, gx + sx, SCREEN_H, 1.0, grid_col);
-                gx += step;
-            }
-            let mut gy = 0.0;
-            while gy < SCREEN_H {
-                draw_line(0.0, gy + sy, SCREEN_W, gy + sy, 1.0, grid_col);
-                gy += step;
-            }
-        }
-
-        // Parallax starfield
-        for (i, s) in self.stars.iter().enumerate() {
-            let twinkle = 0.6 + 0.4 * ((self.frame as f32 * 0.04 + i as f32 * 2.1).sin());
-            let alpha = s.brightness * twinkle;
-            let alpha = alpha.clamp(0.2, 1.0);
+        // Stars
+        for (idx, s) in self.stars.iter().enumerate() {
+            let twinkle = s.brightness + (self.frame as f32 * 0.03 + s.x + idx as f32 * 0.1).sin() * 0.15;
+            let alpha = twinkle.clamp(0.1, 1.0);
             let tint = match s.layer {
-                0 => Color::new(0.4, 0.4, 0.6, alpha),
-                1 => Color::new(0.6, 0.7, 1.0, alpha),
-                _ => Color::new(0.8, 0.9, 1.0, alpha),
+                0 => Color::new(0.39, 0.47, 0.78, alpha),
+                1 => Color::new(0.59, 0.63, 0.86, alpha),
+                _ => Color::new(0.78, 0.82, 1.0, alpha),
             };
             draw_rectangle(s.x + sx, s.y + sy, s.size, s.size, tint);
         }
 
-        // EMP flash
-        if self.emp_flash > 0 {
-            let alpha = self.emp_flash as f32 / 15.0 * 0.3;
-            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.0, 1.0, 1.0, alpha));
+        // Chromatic aberration flash
+        if self.aberration_timer > 0 {
+            let a = self.aberration_timer as f32 / 15.0 * 0.1;
+            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(1.0, 0.0, 0.0, a));
         }
 
-        // Power-ups
-        for p in &self.power_ups {
-            let pulse = 1.0 + (self.frame as f32 * 0.1).sin() * 0.15;
-            let r = 10.0 * pulse;
-            draw_circle_lines(p.x + sx, p.y + sy, r, 2.0, p.color);
-            let glow = Color::new(p.color.r, p.color.g, p.color.b, 0.15);
-            draw_circle(p.x + sx, p.y + sy, r + 3.0, glow);
-            let txt = &p.letter.to_string();
-            let tw = measure_text(txt, None, 14, 1.0).width;
-            draw_text(txt, p.x + sx - tw / 2.0, p.y + sy + 5.0, 14.0, p.color);
-        }
-
-        // Particles
-        for p in &self.particles {
-            let c = Color::new(p.color.r, p.color.g, p.color.b, p.life);
-            draw_rectangle(p.x + sx - p.size / 2.0, p.y + sy - p.size / 2.0, p.size, p.size, c);
-        }
-
-        if self.state == GameState::Playing || self.state == GameState::GameOver || self.state == GameState::Win {
-            // Bullets
-            for b in &self.bullets {
-                let gc = Color::new(b.color.r, b.color.g, b.color.b, 0.3);
-                if b.is_player {
-                    // Horizontal laser style
-                    draw_rectangle(b.x + sx - b.w / 2.0, b.y + sy - b.h, b.w, b.h * 2.0, gc);
-                    draw_rectangle(b.x + sx - b.w / 2.0, b.y + sy - b.h / 2.0, b.w, b.h, WHITE);
-                    draw_rectangle_lines(b.x + sx - b.w / 2.0, b.y + sy - b.h / 2.0, b.w, b.h, 1.0, b.color);
-                } else {
-                    // Enemy bullets: small circles
-                    draw_circle(b.x + sx, b.y + sy, 4.0, gc);
-                    draw_circle(b.x + sx, b.y + sy, 2.5, b.color);
-                }
-            }
-
-            // Enemies
-            for e in &self.enemies {
-                self.draw_enemy(e.x + sx, e.y + sy, e.w, e.h, e.etype, e.color, e.hp, e.max_hp);
-                if e.spawn_flash > 0 {
-                    let t = e.spawn_flash as f32 / 6.0;
-                    let radius = e.w * (1.0 + (1.0 - t) * 1.5);
-                    let alpha = t * 0.6;
-                    draw_circle(e.x + sx, e.y + sy, radius, Color::new(1.0, 1.0, 1.0, alpha));
-                }
-            }
-
-            // Dying enemies
-            for de in &self.dying_enemies {
-                let t = de.frames_left as f32 / 15.0;
-                let c = Color::new(de.color.r, de.color.g, de.color.b, t);
-                draw_circle(de.x + sx, de.y + sy, de.w * (2.0 - t), Color::new(1.0, 1.0, 1.0, t * 0.3));
-                draw_rectangle(
-                    de.x + sx - de.w * t / 2.0,
-                    de.y + sy - de.h * t / 2.0,
-                    de.w * t, de.h * t, c,
-                );
-            }
-        }
-
-        // Player
-        if self.state == GameState::Playing {
-            let p = &self.player;
-            if p.invulnerable > 0 && (self.frame / 4) % 2 == 0 {
-                // blink
-            } else {
-                self.draw_player(p);
-            }
-        }
-
-        // Chain display
-        if self.state == GameState::Playing && self.chain_count >= 3 {
-            let chain_txt = format!("CHAIN x{}", self.chain_count);
-            let tw = measure_text(&chain_txt, None, 20, 1.0).width;
-            draw_text(&chain_txt, SCREEN_W / 2.0 - tw / 2.0, 50.0, 20.0, YELLOW);
-            let mult_txt = format!("x{:.1} SCORE", 1.0 + self.chain_count as f32 * 0.5);
-            let tw2 = measure_text(&mult_txt, None, 14, 1.0).width;
-            draw_text(&mult_txt, SCREEN_W / 2.0 - tw2 / 2.0, 68.0, 14.0, WHITE);
-        }
-
-        // Floating texts
-        for ft in &self.floating_texts {
-            let alpha = ft.life as f32 / 45.0;
-            let c = Color::new(ft.color.r, ft.color.g, ft.color.b, alpha);
-            let tw = measure_text(&ft.text, None, 14, 1.0).width;
-            draw_text(&ft.text, ft.x + sx - tw / 2.0, ft.y + sy, 14.0, c);
-        }
-
-        // HUD
-        if self.state == GameState::Playing {
-            self.draw_hud();
-        }
-
-        // Overlay screens
         match self.state {
-            GameState::Start => self.draw_title(),
-            GameState::Story | GameState::LevelStory => self.draw_story(),
-            GameState::GameOver => self.draw_game_over(),
-            GameState::Win => self.draw_win(),
-            GameState::Playing => {}
+            GameState::Start => {
+                self.draw_rain(0.3);
+                self.draw_title();
+            }
+            GameState::LevelStory | GameState::Win => {
+                self.draw_rain(0.6);
+                self.draw_story();
+            }
+            GameState::GameOver => {
+                self.draw_rain(0.4);
+                self.draw_game_over();
+            }
+            GameState::Playing => {
+                self.draw_city(sx, sy);
+                self.draw_playing(sx, sy);
+            }
         }
 
         // CRT scanline overlay
         {
-            let scanline_color = Color::new(0.0, 0.0, 0.0, 0.15);
+            let scanline_color = Color::new(0.0, 0.0, 0.0, 0.12);
             let mut y = 0.0;
             while y < SCREEN_H {
                 draw_rectangle(0.0, y, SCREEN_W, 2.0, scanline_color);
@@ -1542,379 +1642,484 @@ impl Game {
     // ------------------------------------------------------------------
     // Draw helpers
     // ------------------------------------------------------------------
-    fn draw_player(&self, p: &Player) {
-        let sx = self.shake_x;
-        let sy = self.shake_y;
-        let cx = p.x + sx;
-        let cy = p.y + sy;
-        let hw = p.w / 2.0;
-        let hh = p.h / 2.0;
-
-        // Shield shimmer
-        if p.shields > 0 {
-            let shimmer = (self.frame as f32 * 0.08).sin() * 0.15 + 0.2;
-            let shield_r = p.w * 0.8;
-            draw_circle_lines(cx, cy, shield_r, 1.5, Color::new(0.0, 1.0, 1.0, shimmer));
-            if p.shields >= 2 {
-                draw_circle_lines(cx, cy, shield_r + 3.0, 1.0, Color::new(0.0, 0.8, 1.0, shimmer * 0.5));
+    fn draw_rain(&self, alpha: f32) {
+        for col in &self.rain_columns {
+            for j in 0..col.len {
+                let cy = col.y + j as f32 * 14.0;
+                if cy < 0.0 || cy > SCREEN_H { continue; }
+                let a = if j == 0 { 1.0 } else { 1.0 - j as f32 / col.len as f32 };
+                let c = Color::new(0.22, 1.0, 0.08, a * 0.5 * alpha);
+                draw_rectangle(col.x, cy, 6.0, 10.0, c);
             }
-        }
-
-        // Ship body (arrow shape pointing right)
-        let nose = Vec2::new(cx + hw, cy);
-        let top_wing = Vec2::new(cx - hw, cy - hh);
-        let bot_wing = Vec2::new(cx - hw, cy + hh);
-        let notch_top = Vec2::new(cx - hw * 0.3, cy - hh * 0.3);
-        let notch_bot = Vec2::new(cx - hw * 0.3, cy + hh * 0.3);
-        let tail = Vec2::new(cx - hw * 0.6, cy);
-
-        // Filled dark body
-        draw_triangle(nose, top_wing, tail, Color::new(0.0, 0.05, 0.1, 0.9));
-        draw_triangle(nose, tail, bot_wing, Color::new(0.0, 0.05, 0.1, 0.9));
-
-        // Outline in cyan
-        let col = NEON_CYAN;
-        draw_line(nose.x, nose.y, top_wing.x, top_wing.y, 2.0, col);
-        draw_line(top_wing.x, top_wing.y, notch_top.x, notch_top.y, 2.0, col);
-        draw_line(notch_top.x, notch_top.y, tail.x, tail.y, 2.0, col);
-        draw_line(tail.x, tail.y, notch_bot.x, notch_bot.y, 2.0, col);
-        draw_line(notch_bot.x, notch_bot.y, bot_wing.x, bot_wing.y, 2.0, col);
-        draw_line(bot_wing.x, bot_wing.y, nose.x, nose.y, 2.0, col);
-
-        // Engine glow
-        draw_circle(cx - hw * 0.6, cy, 3.0, WHITE);
-        draw_circle(cx - hw * 0.6, cy, 5.0, Color::new(0.0, 0.8, 1.0, 0.4));
-
-        // Muzzle flash
-        if self.muzzle_flash > 0 {
-            let r = 5.0 + self.muzzle_flash as f32 * 2.0;
-            let a = self.muzzle_flash as f32 / 4.0;
-            draw_circle(cx + hw, cy, r, Color::new(1.0, 1.0, 1.0, a * 0.5));
         }
     }
 
-    fn draw_enemy(&self, x: f32, y: f32, w: f32, h: f32, etype: EnemyType, color: Color, hp: i32, max_hp: i32) {
-        let hw = w / 2.0;
-        let hh = h / 2.0;
-        let fill = Color::new(0.0, 0.0, 0.0, 0.8 * color.a);
-
-        match etype {
-            EnemyType::Drone => {
-                // Small diamond
-                draw_triangle(Vec2::new(x, y - hh), Vec2::new(x + hw, y), Vec2::new(x, y + hh), fill);
-                draw_triangle(Vec2::new(x, y - hh), Vec2::new(x, y + hh), Vec2::new(x - hw, y), fill);
-                draw_line(x, y - hh, x + hw, y, 1.5, color);
-                draw_line(x + hw, y, x, y + hh, 1.5, color);
-                draw_line(x, y + hh, x - hw, y, 1.5, color);
-                draw_line(x - hw, y, x, y - hh, 1.5, color);
-                draw_circle(x, y, 2.0, color);
-            }
-            EnemyType::Gunship => {
-                // Hexagonal shape
-                draw_triangle(
-                    Vec2::new(x - hw, y),
-                    Vec2::new(x - hw * 0.5, y - hh),
-                    Vec2::new(x + hw * 0.5, y - hh),
-                    fill,
-                );
-                draw_triangle(
-                    Vec2::new(x - hw, y),
-                    Vec2::new(x + hw * 0.5, y - hh),
-                    Vec2::new(x + hw, y),
-                    fill,
-                );
-                draw_triangle(
-                    Vec2::new(x - hw, y),
-                    Vec2::new(x + hw, y),
-                    Vec2::new(x + hw * 0.5, y + hh),
-                    fill,
-                );
-                draw_triangle(
-                    Vec2::new(x - hw, y),
-                    Vec2::new(x + hw * 0.5, y + hh),
-                    Vec2::new(x - hw * 0.5, y + hh),
-                    fill,
-                );
-                // Outline
-                draw_line(x - hw, y, x - hw * 0.5, y - hh, 2.0, color);
-                draw_line(x - hw * 0.5, y - hh, x + hw * 0.5, y - hh, 2.0, color);
-                draw_line(x + hw * 0.5, y - hh, x + hw, y, 2.0, color);
-                draw_line(x + hw, y, x + hw * 0.5, y + hh, 2.0, color);
-                draw_line(x + hw * 0.5, y + hh, x - hw * 0.5, y + hh, 2.0, color);
-                draw_line(x - hw * 0.5, y + hh, x - hw, y, 2.0, color);
-                // Cockpit
-                draw_circle(x, y, 3.0, color);
-            }
-            EnemyType::Turret => {
-                // Square with rotating cross
-                draw_rectangle(x - hw, y - hh, w, h, fill);
-                draw_rectangle_lines(x - hw, y - hh, w, h, 2.0, color);
-                // Rotating barrel indicator
-                let a = self.frame as f32 * 0.02;
-                let bx = a.cos() * hw * 0.8;
-                let by = a.sin() * hh * 0.8;
-                draw_line(x, y, x + bx, y + by, 2.0, color);
-                draw_line(x, y, x - bx, y - by, 2.0, color);
-                draw_circle(x, y, 3.0, color);
-            }
-            EnemyType::Boss => {
-                // Large menacing shape
-                // Main body
-                draw_rectangle(x - hw, y - hh * 0.6, w, h * 0.6, fill);
-                draw_rectangle_lines(x - hw, y - hh * 0.6, w, h * 0.6, 2.0, color);
-                // Wings
-                draw_triangle(
-                    Vec2::new(x - hw, y - hh * 0.6),
-                    Vec2::new(x - hw * 0.5, y - hh),
-                    Vec2::new(x, y - hh * 0.6),
-                    fill,
-                );
-                draw_triangle(
-                    Vec2::new(x - hw, y + hh * 0.6),
-                    Vec2::new(x - hw * 0.5, y + hh),
-                    Vec2::new(x, y + hh * 0.6),
-                    fill,
-                );
-                // Wing outlines
-                draw_line(x - hw, y - hh * 0.6, x - hw * 0.5, y - hh, 2.0, color);
-                draw_line(x - hw * 0.5, y - hh, x, y - hh * 0.6, 2.0, color);
-                draw_line(x - hw, y + hh * 0.6, x - hw * 0.5, y + hh, 2.0, color);
-                draw_line(x - hw * 0.5, y + hh, x, y + hh * 0.6, 2.0, color);
-                // Nose weapon
-                draw_line(x + hw, y - 4.0, x + hw + 8.0, y, 2.0, color);
-                draw_line(x + hw, y + 4.0, x + hw + 8.0, y, 2.0, color);
-                // Eye
-                let pulse = (self.frame as f32 * 0.1).sin() * 0.3 + 0.7;
-                draw_circle(x, y, 6.0, Color::new(color.r, color.g, color.b, pulse));
-                draw_circle(x, y, 3.0, WHITE);
-
-                // HP bar
-                if hp < max_hp {
-                    let bar_w = w * 1.2;
-                    let bar_h = 4.0;
-                    let bar_x = x - bar_w / 2.0;
-                    let bar_y = y - hh - 12.0;
-                    draw_rectangle(bar_x, bar_y, bar_w, bar_h, Color::new(0.3, 0.0, 0.0, 0.8));
-                    let fill_w = bar_w * (hp as f32 / max_hp as f32);
-                    draw_rectangle(bar_x, bar_y, fill_w, bar_h, NEON_PINK);
-                    draw_rectangle_lines(bar_x, bar_y, bar_w, bar_h, 1.0, color);
+    fn draw_city(&self, sx: f32, sy: f32) {
+        let wrap = 30.0 * 60.0 + 200.0;
+        for b in &self.city_buildings {
+            let bx = ((b.x - self.city_scroll_x * 0.5) % wrap + wrap) % wrap - 50.0;
+            if bx < -b.w || bx > SCREEN_W + b.w { continue; }
+            draw_rectangle(bx + sx, SCREEN_H - b.h + sy, b.w, b.h, b.color);
+            if b.has_windows {
+                let win_color = Color::new(0.0, 0.95, 1.0, 0.06);
+                let mut wy = SCREEN_H - b.h + 5.0;
+                while wy < SCREEN_H - 5.0 {
+                    let mut wx = bx + 3.0;
+                    while wx < bx + b.w - 3.0 {
+                        if (wx * 3.7 + wy * 2.1).sin() > 0.3 {
+                            draw_rectangle(wx + sx, wy + sy, 3.0, 4.0, win_color);
+                        }
+                        wx += 6.0;
+                    }
+                    wy += 10.0;
                 }
             }
         }
     }
 
-    fn draw_hud(&self) {
-        // Score
-        let score_txt = format!("SCORE: {}", self.score);
-        draw_text(&score_txt, 10.0, 20.0, 16.0, NEON_CYAN);
-
-        // Level name
-        let level = self.current_level();
-        draw_text(level.name, 10.0, 38.0, 12.0, Color::new(0.5, 0.5, 0.5, 0.8));
-
-        // Shields
-        let shield_txt = format!("SHIELDS: {}", self.player.shields);
-        let shield_col = if self.player.shields <= 1 { NEON_PINK } else { NEON_GREEN };
-        draw_text(&shield_txt, SCREEN_W - 140.0, 20.0, 16.0, shield_col);
-
-        // EMP charges
-        let emp_txt = format!("EMP: {}", self.player.emp_charges);
-        draw_text(&emp_txt, SCREEN_W - 140.0, 38.0, 14.0, NEON_CYAN);
-
-        // Weapon indicator
-        let weapon_name = match self.player.weapon {
-            WeaponType::DualLaser => "DUAL LASER",
-            WeaponType::SpreadShot => "SPREAD SHOT",
-            WeaponType::HomingMissile => "HOMING",
-        };
-        let wc = match self.player.weapon {
-            WeaponType::DualLaser => NEON_CYAN,
-            WeaponType::SpreadShot => NEON_ORANGE,
-            WeaponType::HomingMissile => NEON_PURPLE,
-        };
-        draw_text(weapon_name, 10.0, SCREEN_H - 10.0, 14.0, wc);
-
-        // Weapon timer bar
-        if self.player.weapon_timer > 0 {
-            let bar_w = 100.0;
-            let bar_h = 4.0;
-            let fill = bar_w * (self.player.weapon_timer as f32 / 600.0);
-            draw_rectangle(10.0, SCREEN_H - 26.0, bar_w, bar_h, Color::new(0.2, 0.2, 0.2, 0.6));
-            draw_rectangle(10.0, SCREEN_H - 26.0, fill, bar_h, wc);
+    fn draw_playing(&self, sx: f32, sy: f32) {
+        // Power-ups
+        for p in &self.power_ups {
+            let glow_color = match p.kind {
+                PowerUpKind::Spread => NEON_PINK,
+                PowerUpKind::Homing => NEON_GREEN,
+                PowerUpKind::Shield => NEON_CYAN,
+                PowerUpKind::Emp => NEON_PURPLE,
+            };
+            let pulse = 1.0 + (self.frame as f32 * 0.1).sin() * 0.15;
+            let r = (p.w / 2.0) * pulse;
+            draw_circle_lines(p.x + p.w / 2.0 + sx, p.y + p.h / 2.0 + sy, r + 2.0, 1.5, glow_color);
+            draw_circle(p.x + p.w / 2.0 + sx, p.y + p.h / 2.0 + sy, r, Color::new(glow_color.r, glow_color.g, glow_color.b, 0.3));
+            let letter = match p.kind {
+                PowerUpKind::Spread => "S",
+                PowerUpKind::Homing => "H",
+                PowerUpKind::Shield => "+",
+                PowerUpKind::Emp => "E",
+            };
+            let tw = measure_text(letter, None, 10, 1.0).width;
+            draw_text(letter, p.x + p.w / 2.0 - tw / 2.0 + sx, p.y + p.h / 2.0 + 4.0 + sy, 10.0, glow_color);
         }
 
-        // Boss indicator
+        // Enemies
         for e in &self.enemies {
-            if e.etype == EnemyType::Boss {
-                let boss_name = self.current_level().boss_name;
-                let txt = format!(">> {} <<", boss_name);
-                let tw = measure_text(&txt, None, 18, 1.0).width;
-                let blink = if (self.frame / 20) % 2 == 0 { 1.0 } else { 0.5 };
-                draw_text(&txt, SCREEN_W / 2.0 - tw / 2.0, 30.0, 18.0,
-                    Color::new(1.0, 0.1, 0.3, blink));
+            if !e.alive { continue; }
+            if e.flash_timer > 0 {
+                // Flash white when hit
+                draw_rectangle(e.x + sx, e.y + sy, e.w, e.h, WHITE);
+            } else {
+                let color = match e.etype {
+                    EnemyType::Drone => NEON_PINK,
+                    EnemyType::Gunship => NEON_PURPLE,
+                    EnemyType::Turret => NEON_ORANGE,
+                    EnemyType::ShieldGen => NEON_GREEN,
+                };
+                self.draw_enemy_shape(e.x + sx, e.y + sy, e.w, e.h, e.etype, color);
+            }
+            // HP bar for tough enemies
+            if e.max_hp > 1 {
+                let hp_pct = e.hp as f32 / e.max_hp as f32;
+                let bar_color = if hp_pct > 0.5 { NEON_GREEN } else if hp_pct > 0.25 { YELLOW } else { NEON_PINK };
+                draw_rectangle(e.x + sx, e.y - 4.0 + sy, e.w, 2.0, Color::new(0.0, 0.0, 0.0, 0.5));
+                draw_rectangle(e.x + sx, e.y - 4.0 + sy, e.w * hp_pct, 2.0, bar_color);
+            }
+        }
+
+        // Boss
+        self.draw_boss(sx, sy);
+
+        // Player bullets
+        for b in &self.bullets {
+            if !b.alive { continue; }
+            match b.btype {
+                BulletType::Laser => {
+                    draw_rectangle(b.x + sx, b.y - 1.0 + sy, 8.0, 2.0, NEON_CYAN);
+                    // Trail
+                    draw_rectangle(b.x - 6.0 + sx, b.y - 0.5 + sy, 6.0, 1.0, Color::new(0.0, 0.95, 1.0, 0.2));
+                }
+                BulletType::Spread => {
+                    draw_rectangle(b.x + sx, b.y - 1.0 + sy, 6.0, 2.0, NEON_PINK);
+                }
+                BulletType::Homing => {
+                    draw_circle(b.x + sx, b.y + sy, 3.0, NEON_GREEN);
+                    draw_rectangle(b.x - 8.0 + sx, b.y - 0.5 + sy, 8.0, 1.0, Color::new(0.22, 1.0, 0.08, 0.15));
+                }
+                BulletType::Enemy => {}
+            }
+        }
+
+        // Enemy bullets
+        for b in &self.enemy_bullets {
+            if !b.alive { continue; }
+            draw_circle(b.x + sx, b.y + sy, 2.5, Color::new(1.0, 0.4, 0.2, 1.0));
+        }
+
+        // EMP waves
+        for emp in &self.emp_waves {
+            let alpha = 1.0 - emp.radius / emp.max_radius;
+            draw_circle_lines(emp.x + sx, emp.y + sy, emp.radius, 3.0,
+                Color::new(0.545, 0.0, 1.0, alpha * 0.7));
+        }
+
+        // Particles
+        for p in &self.particles {
+            let alpha = (p.life / p.max_life).clamp(0.0, 1.0);
+            let c = Color::new(p.color.r, p.color.g, p.color.b, alpha);
+            draw_rectangle(p.x + sx, p.y + sy, p.size, p.size, c);
+        }
+
+        // Player
+        if self.player.alive {
+            if self.player.invulnerable > 0 && (self.player.invulnerable / 4) % 2 == 0 {
+                // blink - skip drawing
+            } else {
+                self.draw_player_ship(sx, sy);
+            }
+        }
+
+        // Floating texts
+        for ft in &self.floating_texts {
+            let alpha = ft.life as f32 / 60.0;
+            let c = Color::new(ft.color.r, ft.color.g, ft.color.b, alpha);
+            let tw = measure_text(&ft.text, None, 12, 1.0).width;
+            draw_text(&ft.text, ft.x - tw / 2.0 + sx, ft.y + sy, 12.0, c);
+        }
+
+        // HUD
+        self.draw_hud();
+    }
+
+    fn draw_player_ship(&self, sx: f32, sy: f32) {
+        let p = &self.player;
+        let px = p.x + sx;
+        let py = p.y + sy;
+
+        // Thruster glow
+        let thr_pulse = if self.frame % 8 < 4 { 0.8 } else { 0.5 };
+        draw_rectangle(px - 6.0, py + p.h / 2.0 - 3.0, 8.0, 6.0,
+            Color::new(1.0, 0.4, 0.0, thr_pulse));
+
+        // Ship body (triangular arrow pointing right)
+        let nose = Vec2::new(px + p.w, py + p.h / 2.0);
+        let top = Vec2::new(px, py);
+        let bot = Vec2::new(px, py + p.h);
+        draw_triangle(nose, top, bot, Color::new(0.0, 0.05, 0.1, 0.9));
+        // Outline
+        draw_line(nose.x, nose.y, top.x, top.y, 2.0, NEON_CYAN);
+        draw_line(top.x, top.y, bot.x, bot.y, 2.0, NEON_CYAN);
+        draw_line(bot.x, bot.y, nose.x, nose.y, 2.0, NEON_CYAN);
+
+        // Cockpit
+        draw_circle(px + p.w * 0.5, py + p.h * 0.5, 3.0, NEON_CYAN);
+
+        // Shield shimmer
+        if p.shields > 0 {
+            let shimmer = 0.15 + (self.frame as f32 * 0.1).sin() * 0.08;
+            draw_circle_lines(px + p.w / 2.0, py + p.h / 2.0, p.w / 2.0 + 4.0, 1.5,
+                Color::new(0.0, 0.95, 1.0, shimmer));
+        }
+    }
+
+    fn draw_enemy_shape(&self, x: f32, y: f32, w: f32, h: f32, etype: EnemyType, color: Color) {
+        let fill = Color::new(0.0, 0.0, 0.0, 0.8);
+        let hw = w / 2.0;
+        let hh = h / 2.0;
+        let cx = x + hw;
+        let cy = y + hh;
+
+        match etype {
+            EnemyType::Drone => {
+                // Diamond
+                draw_triangle(Vec2::new(cx, cy - hh), Vec2::new(cx + hw, cy), Vec2::new(cx, cy + hh), fill);
+                draw_triangle(Vec2::new(cx, cy - hh), Vec2::new(cx, cy + hh), Vec2::new(cx - hw, cy), fill);
+                draw_line(cx, cy - hh, cx + hw, cy, 1.5, color);
+                draw_line(cx + hw, cy, cx, cy + hh, 1.5, color);
+                draw_line(cx, cy + hh, cx - hw, cy, 1.5, color);
+                draw_line(cx - hw, cy, cx, cy - hh, 1.5, color);
+                draw_circle(cx, cy, 2.0, color);
+            }
+            EnemyType::Gunship => {
+                // Hexagonal shape
+                draw_rectangle(x, y, w, h, fill);
+                draw_rectangle_lines(x, y, w, h, 1.5, color);
+                draw_circle(cx, cy, 3.0, color);
+            }
+            EnemyType::Turret => {
+                // Square with rotating indicator
+                draw_rectangle(x, y, w, h, fill);
+                draw_rectangle_lines(x, y, w, h, 2.0, color);
+                let a = self.frame as f32 * 0.02;
+                let bx2 = a.cos() * hw * 0.8;
+                let by2 = a.sin() * hh * 0.8;
+                draw_line(cx, cy, cx + bx2, cy + by2, 2.0, color);
+                draw_line(cx, cy, cx - bx2, cy - by2, 2.0, color);
+                draw_circle(cx, cy, 3.0, color);
+            }
+            EnemyType::ShieldGen => {
+                // Circle with radial lines
+                draw_circle(cx, cy, hw, fill);
+                draw_circle_lines(cx, cy, hw, 2.0, color);
+                for a_idx in 0..4 {
+                    let ang: f32 = a_idx as f32 * std::f32::consts::FRAC_PI_2 + self.frame as f32 * 0.02;
+                    draw_line(cx, cy, cx + ang.cos() * hw * 0.8, cy + ang.sin() * hh * 0.8, 1.5, color);
+                }
+                draw_circle(cx, cy, 3.0, Color::new(color.r, color.g, color.b, 0.8));
             }
         }
     }
 
-    fn draw_title(&self) {
-        let overlay = Color::new(0.0, 0.0, 0.0, 0.7);
-        draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, overlay);
+    fn draw_boss(&self, sx: f32, sy: f32) {
+        let boss = match &self.boss {
+            Some(b) if b.alive => b,
+            _ => return,
+        };
 
+        // Warning text during enter phase
+        if boss.enter_phase {
+            let blink = 0.5 + (self.frame as f32 * 0.15).sin() * 0.5;
+            let warn_txt = "WARNING";
+            let tw = measure_text(warn_txt, None, 24, 1.0).width;
+            draw_text(warn_txt, SCREEN_W / 2.0 - tw / 2.0, SCREEN_H / 2.0 - 50.0, 24.0,
+                Color::new(1.0, 0.18, 0.47, blink));
+            let boss_name = BOSS_NAMES[boss.boss_type as usize];
+            let tw2 = measure_text(boss_name, None, 16, 1.0).width;
+            draw_text(boss_name, SCREEN_W / 2.0 - tw2 / 2.0, SCREEN_H / 2.0 - 25.0, 16.0,
+                Color::new(0.0, 0.95, 1.0, blink));
+        }
+
+        let bx = boss.x + sx;
+        let by = boss.y + sy;
+
+        // Boss body
+        let fill = Color::new(0.13, 0.0, 0.0, 0.8);
+        draw_rectangle(bx, by, boss.w, boss.h, fill);
+        let boss_color = match boss.boss_type {
+            0 => NEON_PINK,
+            1 => NEON_ORANGE,
+            _ => NEON_PINK,
+        };
+        draw_rectangle_lines(bx, by, boss.w, boss.h, 2.0, boss_color);
+
+        // Boss-specific decorations
+        match boss.boss_type {
+            0 => {
+                // Rotating arms
+                let bcx = bx + boss.w / 2.0;
+                let bcy = by + boss.h / 2.0;
+                for a in 0..4 {
+                    let ang: f32 = boss.angle + a as f32 * std::f32::consts::FRAC_PI_2;
+                    let ex = bcx + ang.cos() * 30.0;
+                    let ey = bcy + ang.sin() * 30.0;
+                    draw_line(bcx, bcy, ex, ey, 2.0, NEON_PINK);
+                    draw_rectangle(ex - 3.0, ey - 3.0, 6.0, 6.0, Color::new(1.0, 0.27, 0.0, 1.0));
+                }
+            }
+            2 => {
+                // Leviathan bulk
+                draw_rectangle(bx - 15.0, by - 10.0, boss.w + 30.0, boss.h + 20.0,
+                    Color::new(0.13, 0.0, 0.07, 0.4));
+                // Glowing eyes
+                let pulse = (self.frame as f32 * 0.1).sin() * 0.3 + 0.7;
+                draw_rectangle(bx + 10.0, by + boss.h / 2.0 - 8.0, 4.0, 4.0,
+                    Color::new(1.0, 0.18, 0.47, pulse));
+                draw_rectangle(bx + 10.0, by + boss.h / 2.0 + 4.0, 4.0, 4.0,
+                    Color::new(1.0, 0.18, 0.47, pulse));
+            }
+            _ => {}
+        }
+
+        // Eye/core
+        draw_circle(bx + boss.w / 2.0, by + boss.h / 2.0, 4.0, boss_color);
+        draw_circle(bx + boss.w / 2.0, by + boss.h / 2.0, 2.0, WHITE);
+
+        // HP bar at top
+        let bar_w = 250.0;
+        let bar_x = (SCREEN_W - bar_w) / 2.0;
+        let hp_pct = (boss.hp as f32 / boss.max_hp as f32).max(0.0);
+        draw_rectangle(bar_x - 2.0, 10.0, bar_w + 4.0, 12.0, Color::new(0.0, 0.0, 0.0, 0.6));
+        draw_rectangle(bar_x, 12.0, bar_w * hp_pct, 8.0, NEON_PINK);
+        draw_rectangle_lines(bar_x - 2.0, 10.0, bar_w + 4.0, 12.0, 1.0, Color::new(1.0, 0.18, 0.47, 0.5));
+        let boss_name = BOSS_NAMES[boss.boss_type as usize];
+        let tw = measure_text(boss_name, None, 12, 1.0).width;
+        draw_text(boss_name, SCREEN_W / 2.0 - tw / 2.0, 9.0, 12.0, WHITE);
+    }
+
+    fn draw_hud(&self) {
+        // Score
+        let score_txt = format!("SCORE {}", self.score);
+        draw_text(&score_txt, 12.0, 30.0, 16.0, NEON_CYAN);
+
+        // Chain
+        if self.chain_multiplier > 1 {
+            let chain_txt = format!("x{}", self.chain_multiplier);
+            draw_text(&chain_txt, 12.0, 50.0, 16.0, YELLOW);
+        }
+
+        // Level name
+        let lv_name = LEVEL_NAMES[self.current_level.min(2)];
+        let lv_txt = format!("LV{} {}", self.current_level + 1, lv_name);
+        let tw = measure_text(&lv_txt, None, 16, 1.0).width;
+        draw_text(&lv_txt, SCREEN_W / 2.0 - tw / 2.0, SCREEN_H - 12.0, 16.0, NEON_CYAN);
+
+        // Shields
+        let shield_txt = "SHIELD";
+        let stw = measure_text(shield_txt, None, 16, 1.0).width;
+        draw_text(shield_txt, SCREEN_W - 12.0 - stw, 30.0, 16.0, NEON_CYAN);
+        for i in 0..self.player.max_shields {
+            let c = if i < self.player.shields {
+                NEON_CYAN
+            } else {
+                Color::new(0.0, 0.95, 1.0, 0.2)
+            };
+            draw_rectangle(SCREEN_W - 75.0 + i as f32 * 20.0, 38.0, 14.0, 7.0, c);
+        }
+
+        // Weapon name
+        let (weapon_name, weapon_color) = match self.player.weapon {
+            WeaponType::DualLaser => ("DUAL LASER", NEON_CYAN),
+            WeaponType::SpreadShot => ("SPREAD", NEON_PINK),
+            WeaponType::HomingMissile => ("HOMING", NEON_GREEN),
+        };
+        let wtw = measure_text(weapon_name, None, 12, 1.0).width;
+        draw_text(weapon_name, SCREEN_W - 12.0 - wtw, 60.0, 12.0, weapon_color);
+
+        // EMP charges
+        let emp_txt = format!("EMP:{}", self.player.emp_charges);
+        let etw = measure_text(&emp_txt, None, 12, 1.0).width;
+        draw_text(&emp_txt, SCREEN_W - 12.0 - etw, 75.0, 12.0, NEON_PURPLE);
+    }
+
+    fn draw_title(&self) {
         // Title
-        let title = "CHROME VIPER";
-        let tw = measure_text(title, None, 40, 1.0).width;
-        let pulse = (self.frame as f32 * 0.05).sin() * 0.2 + 0.8;
-        draw_text(title, SCREEN_W / 2.0 - tw / 2.0 + 2.0, SCREEN_H * 0.3 + 2.0, 40.0,
-            Color::new(0.0, 0.0, 0.0, 0.5));
-        draw_text(title, SCREEN_W / 2.0 - tw / 2.0, SCREEN_H * 0.3, 40.0,
-            Color::new(NEON_CYAN.r, NEON_CYAN.g, NEON_CYAN.b, pulse));
+        let title1 = "CHROME";
+        let tw1 = measure_text(title1, None, 56, 1.0).width;
+        draw_text(title1, SCREEN_W / 2.0 - tw1 / 2.0, 175.0, 56.0, NEON_CYAN);
+
+        let title2 = "VIPER";
+        let tw2 = measure_text(title2, None, 56, 1.0).width;
+        draw_text(title2, SCREEN_W / 2.0 - tw2 / 2.0, 230.0, 56.0, NEON_PINK);
 
         // Subtitle
         let sub = "NEON ABYSS";
-        let sw = measure_text(sub, None, 18, 1.0).width;
-        draw_text(sub, SCREEN_W / 2.0 - sw / 2.0, SCREEN_H * 0.3 + 30.0, 18.0, NEON_PINK);
+        let sw = measure_text(sub, None, 16, 1.0).width;
+        draw_text(sub, SCREEN_W / 2.0 - sw / 2.0, 268.0, 16.0, Color::new(1.0, 1.0, 1.0, 0.5));
 
-        // Tagline
-        let tag = "2187 -- AXIOM MUST FALL";
-        let tgw = measure_text(tag, None, 12, 1.0).width;
-        draw_text(tag, SCREEN_W / 2.0 - tgw / 2.0, SCREEN_H * 0.45, 12.0, NEON_GREEN);
-
-        // Controls
-        let controls = [
-            "D-PAD: Move Ship",
-            "X: Fire Weapon",
-            "SPACE: EMP Blast",
-            "ENTER: Start",
-        ];
-        for (i, ctrl) in controls.iter().enumerate() {
-            let cw = measure_text(ctrl, None, 12, 1.0).width;
-            draw_text(ctrl, SCREEN_W / 2.0 - cw / 2.0, SCREEN_H * 0.55 + i as f32 * 18.0, 12.0,
-                Color::new(0.6, 0.6, 0.6, 0.8));
+        // Glitch effect
+        if rand::gen_range(0.0f32, 1.0) < 0.05 {
+            let gy = 150.0 + rand::gen_range(0.0f32, 100.0);
+            draw_rectangle(125.0 + rand::gen_range(0.0f32, 125.0), gy,
+                250.0 + rand::gen_range(0.0f32, 250.0), 2.0, Color::new(1.0, 0.18, 0.47, 0.3));
         }
 
-        // Start prompt
+        // Story blurb
+        let lines = [
+            "Year 2187. Megacorp AXIOM controls",
+            "the orbital colonies. You pilot the",
+            "Chrome Viper, a stolen prototype.",
+            "",
+            "Breach their defenses. End their reign.",
+        ];
+        for (i, line) in lines.iter().enumerate() {
+            let lw = measure_text(line, None, 12, 1.0).width;
+            draw_text(line, SCREEN_W / 2.0 - lw / 2.0, 325.0 + i as f32 * 20.0, 12.0,
+                Color::new(0.7, 0.7, 0.78, 0.6));
+        }
+
+        // Controls
+        let ctrl = "D-PAD: MOVE  |  X: FIRE  |  B: EMP  |  START: BEGIN";
+        let cw = measure_text(ctrl, None, 10, 1.0).width;
+        draw_text(ctrl, SCREEN_W / 2.0 - cw / 2.0, 475.0, 10.0, Color::new(0.0, 0.95, 1.0, 0.4));
+
+        // Press start blink
         if (self.frame / 30) % 2 == 0 {
-            let prompt = "PRESS ENTER TO BEGIN";
-            let pw = measure_text(prompt, None, 18, 1.0).width;
-            draw_text(prompt, SCREEN_W / 2.0 - pw / 2.0, SCREEN_H * 0.80, 18.0, NEON_CYAN);
+            let prompt = "PRESS START";
+            let pw = measure_text(prompt, None, 20, 1.0).width;
+            draw_text(prompt, SCREEN_W / 2.0 - pw / 2.0, 538.0, 20.0, NEON_CYAN);
         }
     }
 
     fn draw_story(&self) {
-        let overlay = Color::new(0.0, 0.02, 0.0, 0.85);
-        draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, overlay);
+        // Terminal border
+        let term_x = 50.0;
+        let term_y = 38.0;
+        let term_w = SCREEN_W - 100.0;
+        let term_h = SCREEN_H - 76.0;
+        draw_rectangle(term_x, term_y, term_w, term_h, Color::new(0.0, 0.04, 0.0, 0.7));
+        draw_rectangle_lines(term_x, term_y, term_w, term_h, 1.0, Color::new(0.22, 1.0, 0.08, 0.3));
 
-        // Terminal header
-        let header = if self.victory_triggered {
-            "[ MISSION COMPLETE ]"
-        } else {
-            self.current_level().name
-        };
-        let hw_text = measure_text(header, None, 16, 1.0).width;
-        draw_text(header, SCREEN_W / 2.0 - hw_text / 2.0, 40.0, 16.0, NEON_CYAN);
-
-        // Separator line
-        draw_line(40.0, 52.0, SCREEN_W - 40.0, 52.0, 1.0, Color::new(0.0, 0.5, 0.2, 0.5));
+        // Header
+        let header = "CHROME VIPER TERMINAL v2.187";
+        draw_text(header, term_x + 12.0, term_y + 19.0, 12.0, TERMINAL_GREEN);
+        draw_line(term_x, term_y + 28.0, term_x + term_w, term_y + 28.0, 1.0,
+            Color::new(0.22, 1.0, 0.08, 0.3));
 
         // Typewriter text
-        let lines: Vec<&str> = self.story_displayed.split('\n').collect();
-        for (i, line) in lines.iter().enumerate() {
-            draw_text(line, 50.0, 80.0 + i as f32 * 18.0, 14.0, TERMINAL_GREEN);
+        let visible = if self.story_char_idx <= self.story_text.len() {
+            &self.story_text[..self.story_char_idx]
+        } else {
+            &self.story_text
+        };
+
+        let lines: Vec<&str> = visible.split('\n').collect();
+        let mut line_y = term_y + 56.0;
+        for line in &lines {
+            draw_text(line, term_x + 19.0, line_y, 14.0, TERMINAL_GREEN);
+            line_y += 18.0;
         }
 
-        // Cursor blink
-        if self.story_char_idx < self.story_text.len() {
-            let last_line_idx = lines.len().saturating_sub(1);
-            let last_line = if last_line_idx < lines.len() { lines[last_line_idx] } else { "" };
+        // Blinking cursor
+        if self.story_char_idx < self.story_text.len() && (self.frame / 15) % 2 == 0 {
+            let last_line = lines.last().unwrap_or(&"");
             let lw = measure_text(last_line, None, 14, 1.0).width;
-            if (self.frame / 8) % 2 == 0 {
-                draw_rectangle(
-                    50.0 + lw + 2.0,
-                    80.0 + last_line_idx as f32 * 18.0 - 12.0,
-                    8.0, 14.0,
-                    TERMINAL_GREEN,
-                );
-            }
+            draw_rectangle(term_x + 19.0 + lw + 2.0, line_y - 18.0 + 2.0, 6.0, 8.0, TERMINAL_GREEN);
         }
 
-        // Skip hint
-        if self.story_char_idx < self.story_text.len() {
-            let hint = "[PRESS X TO SKIP]";
-            let hw2 = measure_text(hint, None, 10, 1.0).width;
-            draw_text(hint, SCREEN_W / 2.0 - hw2 / 2.0, SCREEN_H - 30.0, 10.0,
-                Color::new(0.3, 0.5, 0.3, 0.6));
-        } else if (self.frame / 30) % 2 == 0 {
-            let hint = "[PRESS ENTER TO CONTINUE]";
-            let hw2 = measure_text(hint, None, 12, 1.0).width;
-            draw_text(hint, SCREEN_W / 2.0 - hw2 / 2.0, SCREEN_H - 30.0, 12.0, TERMINAL_GREEN);
+        // Continue prompt
+        if self.story_char_idx >= self.story_text.len() {
+            if (self.frame / 25) % 2 == 0 {
+                let prompt = "[PRESS FIRE TO CONTINUE]";
+                let pw = measure_text(prompt, None, 14, 1.0).width;
+                draw_text(prompt, SCREEN_W / 2.0 - pw / 2.0, SCREEN_H - 62.0, 14.0, NEON_CYAN);
+            }
         }
     }
 
     fn draw_game_over(&self) {
-        let overlay = Color::new(0.0, 0.0, 0.0, 0.75);
-        draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, overlay);
+        // Glitch bars
+        for _ in 0..5 {
+            if rand::gen_range(0.0f32, 1.0) < 0.3 {
+                let gy = rand::gen_range(0.0f32, SCREEN_H);
+                draw_rectangle(0.0, gy, SCREEN_W, 2.0 + rand::gen_range(0.0f32, 4.0),
+                    Color::new(1.0, 0.18, 0.47, rand::gen_range(0.0f32, 0.15)));
+            }
+        }
 
-        let title = "MISSION FAILED";
-        let tw = measure_text(title, None, 32, 1.0).width;
-        draw_text(title, SCREEN_W / 2.0 - tw / 2.0, SCREEN_H * 0.3, 32.0, NEON_PINK);
+        let title1 = "SYSTEM";
+        let tw1 = measure_text(title1, None, 40, 1.0).width;
+        draw_text(title1, SCREEN_W / 2.0 - tw1 / 2.0, 212.0, 40.0, NEON_PINK);
+        let title2 = "FAILURE";
+        let tw2 = measure_text(title2, None, 40, 1.0).width;
+        draw_text(title2, SCREEN_W / 2.0 - tw2 / 2.0, 262.0, 40.0, NEON_PINK);
 
-        let sc = format!("FINAL SCORE: {}", self.score);
-        let sw = measure_text(&sc, None, 18, 1.0).width;
-        draw_text(&sc, SCREEN_W / 2.0 - sw / 2.0, SCREEN_H * 0.45, 18.0, WHITE);
+        let sub = "CHROME VIPER DESTROYED";
+        let sw = measure_text(sub, None, 16, 1.0).width;
+        draw_text(sub, SCREEN_W / 2.0 - sw / 2.0, 325.0, 16.0, Color::new(1.0, 1.0, 1.0, 0.6));
 
-        let level_name = self.current_level().name;
-        let wv = format!("DESTROYED AT: {}", level_name);
-        let ww = measure_text(&wv, None, 14, 1.0).width;
-        draw_text(&wv, SCREEN_W / 2.0 - ww / 2.0, SCREEN_H * 0.45 + 26.0, 14.0, NEON_CYAN);
+        let sc = format!("SCORE: {}", self.score);
+        let scw = measure_text(&sc, None, 20, 1.0).width;
+        draw_text(&sc, SCREEN_W / 2.0 - scw / 2.0, 375.0, 20.0, NEON_CYAN);
 
-        let lore = "The Chrome Viper drifts into the void. AXIOM prevails.";
-        let lw = measure_text(lore, None, 10, 1.0).width;
-        draw_text(lore, SCREEN_W / 2.0 - lw / 2.0, SCREEN_H * 0.45 + 52.0, 10.0, GRAY);
+        let lore1 = "AXIOM prevails. The colonies remain";
+        let lw1 = measure_text(lore1, None, 12, 1.0).width;
+        draw_text(lore1, SCREEN_W / 2.0 - lw1 / 2.0, 462.0, 12.0, Color::new(0.78, 0.78, 0.86, 0.5));
+        let lore2 = "under corporate control.";
+        let lw2 = measure_text(lore2, None, 12, 1.0).width;
+        draw_text(lore2, SCREEN_W / 2.0 - lw2 / 2.0, 488.0, 12.0, Color::new(0.78, 0.78, 0.86, 0.5));
 
         if (self.frame / 30) % 2 == 0 {
-            let prompt = "PRESS ENTER TO RETRY";
+            let prompt = "PRESS START";
             let pw = measure_text(prompt, None, 16, 1.0).width;
-            draw_text(prompt, SCREEN_W / 2.0 - pw / 2.0, SCREEN_H * 0.70, 16.0, NEON_CYAN);
+            draw_text(prompt, SCREEN_W / 2.0 - pw / 2.0, 550.0, 16.0, NEON_CYAN);
         }
-    }
-
-    fn draw_win(&self) {
-        let overlay = Color::new(0.0, 0.0, 0.0, 0.75);
-        draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, overlay);
-
-        let title = "AXIOM HAS FALLEN";
-        let tw = measure_text(title, None, 32, 1.0).width;
-        let pulse = (self.frame as f32 * 0.05).sin() * 0.2 + 0.8;
-        draw_text(title, SCREEN_W / 2.0 - tw / 2.0, SCREEN_H * 0.25, 32.0,
-            Color::new(NEON_GREEN.r, NEON_GREEN.g, NEON_GREEN.b, pulse));
-
-        let sub = "THE COLONIES ARE FREE";
-        let sw = measure_text(sub, None, 14, 1.0).width;
-        draw_text(sub, SCREEN_W / 2.0 - sw / 2.0, SCREEN_H * 0.35, 14.0, NEON_CYAN);
-
-        let sc = format!("FINAL SCORE: {}", self.score);
-        let sw2 = measure_text(&sc, None, 20, 1.0).width;
-        draw_text(&sc, SCREEN_W / 2.0 - sw2 / 2.0, SCREEN_H * 0.5, 20.0, YELLOW);
-
-        if (self.frame / 30) % 2 == 0 {
-            let prompt = "PRESS ENTER TO PLAY AGAIN";
-            let pw = measure_text(prompt, None, 16, 1.0).width;
-            draw_text(prompt, SCREEN_W / 2.0 - pw / 2.0, SCREEN_H * 0.65, 16.0, NEON_PINK);
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Bullet helper
-// ---------------------------------------------------------------------------
-fn mk_bullet(x: f32, y: f32, vx: f32, vy: f32, color: Color, is_player: bool, homing: bool) -> Bullet {
-    let (w, h) = if is_player { (12.0, 3.0) } else { (5.0, 5.0) };
-    Bullet {
-        x, y, vx, vy, w, h,
-        is_player,
-        alive: true,
-        color,
-        homing,
     }
 }
 

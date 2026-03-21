@@ -153,7 +153,7 @@ const WAVE_STORIES: [[&str; 10]; 10] = [
     ],
 ];
 
-const VICTORY_STORY: [&str; 25] = [
+const VICTORY_STORY: [&str; 35] = [
     "The Queen falls. The chamber doors slide open",
     "for the first time in 847 days.",
     "",
@@ -169,6 +169,8 @@ const VICTORY_STORY: [&str; 25] = [
     "You were never the weapon.",
     "You were always the person holding it.",
     "",
+    "\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}",
+    "",
     "AXIOM CORP was shut down three months later.",
     "Director Holst was never found.",
     "",
@@ -177,6 +179,14 @@ const VICTORY_STORY: [&str; 25] = [
     "",
     "Subject-7 \u{2014} real name: Alex Reeves \u{2014}",
     "disappeared.",
+    "",
+    "But sometimes, in conflict zones around the",
+    "world, impossible things happen.",
+    "Hostage situations resolve in seconds.",
+    "Warlords vanish.",
+    "",
+    "And somewhere, a ghost with silver eyes watches",
+    "over the people who can't fight for themselves.",
     "",
     "PROTOCOL OMEGA \u{2014} COMPLETE",
 ];
@@ -345,7 +355,7 @@ impl Enemy {
             EnemyType::Splitter => (50.0, 1.5, 18.0),
             EnemyType::SplitterSmall => (20.0, 3.0, 10.0),
             EnemyType::MegaTank => (300.0, 0.7, 32.0),
-            EnemyType::SwarmQueen => (500.0, 1.5, 24.0),
+            EnemyType::SwarmQueen => (500.0, 1.2, 24.0),
         };
         Self {
             x,
@@ -427,6 +437,15 @@ struct KillStreakText {
     alive: bool,
 }
 
+#[derive(Clone)]
+struct Hazard {
+    horiz: bool,
+    pos: f32,
+    timer: i32,
+    active: bool,
+    alive: bool,
+}
+
 // ─── Game ────────────────────────────────────────────────────────────────────
 
 struct Game {
@@ -470,6 +489,10 @@ struct Game {
     // Victory state
     victory_page: usize,
     frame_count: u32,
+    // Hazards (laser sweeps from wave 6+)
+    hazards: Vec<Hazard>,
+    // Fence damage timer (fires every 15 frames like web)
+    fence_damage_counter: i32,
 }
 
 impl Game {
@@ -513,6 +536,8 @@ impl Game {
             story_hold_timer: 0,
             victory_page: 0,
             frame_count: 0,
+            hazards: Vec::new(),
+            fence_damage_counter: 0,
         }
     }
 
@@ -539,6 +564,8 @@ impl Game {
         self.fence_spark_timer = 0;
         self.last_streak_milestone = 0;
         self.victory_page = 0;
+        self.hazards.clear();
+        self.fence_damage_counter = 0;
     }
 
     fn start_wave(&mut self) {
@@ -547,10 +574,18 @@ impl Game {
         self.state = GameState::WaveIntro;
         self.wave_intro_timer = 99.0; // managed by typewriter system
 
-        let (count, _types) = wave_config(self.wave);
-        self.wave_total_enemies = count;
-        self.enemies_to_spawn = count;
-        self.spawn_timer = 0.5;
+        let wave_idx = (self.wave - 1).min(9);
+        let def = &WAVE_DEFS[wave_idx];
+        self.wave_total_enemies = def.total;
+        self.enemies_to_spawn = def.total;
+        self.spawn_timer = 1.0; // 60 frames at 60fps
+
+        // Spawn boss at wave start if defined
+        if let Some(boss_type) = def.boss {
+            let bx = SCREEN_W / 2.0;
+            let by = ARENA_Y + 40.0;
+            self.enemies.push(Enemy::new(boss_type, bx, by));
+        }
 
         // Initialize story typewriter
         self.story_line_index = 0;
@@ -639,33 +674,16 @@ impl Game {
         }
         self.spawn_timer -= 1.0 / 60.0;
         if self.spawn_timer <= 0.0 {
-            let types = wave_enemy_types(self.wave);
-            let etype = types[rand::gen_range(0, types.len())];
+            let wave_idx = (self.wave - 1).min(9);
+            let def = &WAVE_DEFS[wave_idx];
+            let etype = pick_weighted_type(wave_idx);
 
-            // Boss spawns
-            if self.wave == 5 && self.enemies_to_spawn == 1 {
-                self.spawn_enemy(EnemyType::MegaTank);
-            } else if self.wave == 10 && self.enemies_to_spawn == 1 {
-                self.spawn_enemy(EnemyType::SwarmQueen);
-            } else {
-                // Spawn a small group of swarmers or single others
-                let group = if etype == EnemyType::Swarmer {
-                    rand::gen_range(2, 5).min(self.enemies_to_spawn)
-                } else {
-                    1
-                };
-                for _ in 0..group {
-                    self.spawn_enemy(etype);
-                    self.enemies_to_spawn -= 1;
-                    if self.enemies_to_spawn <= 0 {
-                        break;
-                    }
-                }
-                // We already decremented, so adjust
-                self.enemies_to_spawn += 1; // compensate the one below
-            }
+            self.spawn_enemy(etype);
             self.enemies_to_spawn -= 1;
-            self.spawn_timer = rand::gen_range(0.5, 1.5);
+
+            // Set next spawn interval from wave def with some randomness
+            let base_interval = def.spawn_interval as f32 / 60.0;
+            self.spawn_timer = base_interval + rand::gen_range(-0.15, 0.15);
         }
     }
 
@@ -997,15 +1015,18 @@ impl Game {
         self.player.x = self.player.x.clamp(ARENA_X + half, ARENA_X + ARENA_W - half);
         self.player.y = self.player.y.clamp(ARENA_Y + half, ARENA_Y + ARENA_H - half);
 
-        // Electric fence damage
+        // Electric fence damage (5 damage every 15 frames when within 12px of fence)
         let px = self.player.x;
         let py = self.player.y;
-        if px - half < ARENA_X + 3.0
-            || px + half > ARENA_X + ARENA_W - 3.0
-            || py - half < ARENA_Y + 3.0
-            || py + half > ARENA_Y + ARENA_H - 3.0
+        let fence_dist = 12.0;
+        if px <= ARENA_X + fence_dist
+            || px >= ARENA_X + ARENA_W - fence_dist
+            || py <= ARENA_Y + fence_dist
+            || py >= ARENA_Y + ARENA_H - fence_dist
         {
-            self.player_take_damage(0.5);
+            if self.frame_count % 15 == 0 {
+                self.player_take_damage(5.0);
+            }
         }
 
         // ── Auto-aim at nearest enemy ──
@@ -1039,11 +1060,8 @@ impl Game {
         self.laser_active = false;
 
         // ── Shoot (A button = KeyCode::X) ──
-        let shooting = if self.player.current_weapon == WeaponType::Laser {
-            is_key_down(KeyCode::X)
-        } else {
-            is_key_pressed(KeyCode::X)
-        };
+        // All weapons auto-fire while held (matching web behavior)
+        let shooting = is_key_down(KeyCode::X);
         if shooting && !self.enemies.is_empty() {
             self.fire_weapon();
         }
@@ -1072,12 +1090,25 @@ impl Game {
                 self.drop_pickup(*kx, *ky);
                 self.wave_enemies_killed += 1;
                 if *etype == EnemyType::Splitter {
-                    let count = rand::gen_range(2, 4) as usize;
+                    let count: usize = 3;
                     for _ in 0..count {
                         let ox = rand::gen_range(-15.0, 15.0);
                         let oy = rand::gen_range(-15.0, 15.0);
                         self.enemies.push(Enemy::new(EnemyType::SplitterSmall, kx + ox, ky + oy));
                     }
+                }
+                // Boss death special effects
+                if *etype == EnemyType::MegaTank || *etype == EnemyType::SwarmQueen {
+                    self.add_screen_shake(10.0);
+                    self.spawn_particles(*kx, *ky, YELLOW, 30);
+                    self.explosion_rings.push(ExplosionRing {
+                        x: *kx,
+                        y: *ky,
+                        max_radius: 60.0,
+                        frame: 0,
+                        max_frames: 15,
+                        alive: true,
+                    });
                 }
             }
         }
@@ -1265,7 +1296,7 @@ impl Game {
 
             // Splitter splits
             if *etype == EnemyType::Splitter {
-                let count = rand::gen_range(2, 4) as usize;
+                let count: usize = 3;
                 for _ in 0..count {
                     let ox = rand::gen_range(-15.0, 15.0);
                     let oy = rand::gen_range(-15.0, 15.0);
@@ -1275,6 +1306,20 @@ impl Game {
                         ky + oy,
                     ));
                 }
+            }
+
+            // Boss death special effects
+            if *etype == EnemyType::MegaTank || *etype == EnemyType::SwarmQueen {
+                self.add_screen_shake(10.0);
+                self.spawn_particles(*kx, *ky, YELLOW, 30);
+                self.explosion_rings.push(ExplosionRing {
+                    x: *kx,
+                    y: *ky,
+                    max_radius: 60.0,
+                    frame: 0,
+                    max_frames: 15,
+                    alive: true,
+                });
             }
         }
 
@@ -1304,11 +1349,10 @@ impl Game {
                 EnemyType::Swarmer => {
                     let edx = player_x - enemy.x;
                     let edy = player_y - enemy.y;
-                    let _dist = (edx * edx + edy * edy).sqrt().max(1.0);
-                    let weave = (self.time * 3.0 + enemy.weave_offset).sin() * 0.3;
-                    let angle = edy.atan2(edx) + weave;
-                    enemy.x += angle.cos() * enemy.speed * freeze_mult;
-                    enemy.y += angle.sin() * enemy.speed * freeze_mult;
+                    let dist = (edx * edx + edy * edy).sqrt().max(1.0);
+                    let weave = (self.frame_count as f32 * 0.1 + enemy.x).sin() * 0.5;
+                    enemy.x += (edx / dist * enemy.speed + weave) * freeze_mult;
+                    enemy.y += (edy / dist * enemy.speed) * freeze_mult;
                 }
                 EnemyType::Tank => {
                     let edx = player_x - enemy.x;
@@ -1319,7 +1363,7 @@ impl Game {
 
                     enemy.fire_timer -= dt * freeze_mult;
                     if enemy.fire_timer <= 0.0 {
-                        enemy.fire_timer = 3.0;
+                        enemy.fire_timer = 2.0 + rand::gen_range(0.0, 1.0);
                         let angle = edy.atan2(edx);
                         new_enemy_bullets.push(EnemyBullet {
                             x: enemy.x,
@@ -1359,8 +1403,10 @@ impl Game {
                     let edx = player_x - enemy.x;
                     let edy = player_y - enemy.y;
                     let dist = (edx * edx + edy * edy).sqrt().max(1.0);
-                    enemy.x += (edx / dist) * enemy.speed * freeze_mult;
-                    enemy.y += (edy / dist) * enemy.speed * freeze_mult;
+                    // Weave movement like swarmers
+                    let weave = (self.frame_count as f32 * 0.1 + enemy.x).sin() * 0.5;
+                    enemy.x += (edx / dist * enemy.speed + weave) * freeze_mult;
+                    enemy.y += (edy / dist * enemy.speed) * freeze_mult;
                 }
                 EnemyType::MegaTank => {
                     let edx = player_x - enemy.x;
@@ -1369,10 +1415,10 @@ impl Game {
                     enemy.x += (edx / dist) * enemy.speed * freeze_mult;
                     enemy.y += (edy / dist) * enemy.speed * freeze_mult;
 
-                    // 3-way spread shot
+                    // 3-way spread shot (every 80 frames = 1.33s)
                     enemy.fire_timer -= dt * freeze_mult;
                     if enemy.fire_timer <= 0.0 {
-                        enemy.fire_timer = 2.0;
+                        enemy.fire_timer = 80.0 / 60.0;
                         let base_angle = edy.atan2(edx);
                         for i in -1..=1 {
                             let a = base_angle + i as f32 * 0.3;
@@ -1406,37 +1452,36 @@ impl Game {
                     enemy.x += (edx / dist) * enemy.speed * freeze_mult;
                     enemy.y += (edy / dist) * enemy.speed * freeze_mult;
 
-                    // Teleport frequently
+                    // Teleport (every 3s + random)
                     enemy.teleport_timer -= dt * freeze_mult;
                     if enemy.teleport_timer <= 0.0 {
                         enemy.x = rand::gen_range(ARENA_X + 30.0, ARENA_X + ARENA_W - 30.0);
                         enemy.y = rand::gen_range(ARENA_Y + 30.0, ARENA_Y + ARENA_H - 30.0);
-                        enemy.teleport_timer = rand::gen_range(2.0, 3.5);
+                        enemy.teleport_timer = 3.0 + rand::gen_range(0.0, 1.0);
                     }
 
-                    // Homing projectiles
+                    // Homing projectiles (every 1s = 60 frames, damage 12)
                     enemy.fire_timer -= dt * freeze_mult;
                     if enemy.fire_timer <= 0.0 {
-                        enemy.fire_timer = 1.5;
+                        enemy.fire_timer = 1.0;
                         let angle = edy.atan2(edx);
                         new_enemy_bullets.push(EnemyBullet {
                             x: enemy.x,
                             y: enemy.y,
                             vx: angle.cos() * 2.5,
                             vy: angle.sin() * 2.5,
-                            damage: 20.0,
+                            damage: 12.0,
                             alive: true,
                             homing: true,
                         });
                     }
 
-                    // Spawn all types
+                    // Spawn swarmer/teleporter/splitter (every 4s = 240 frames)
                     enemy.spawn_timer -= dt * freeze_mult;
                     if enemy.spawn_timer <= 0.0 {
                         enemy.spawn_timer = 4.0;
                         let types = [
                             EnemyType::Swarmer,
-                            EnemyType::Tank,
                             EnemyType::Teleporter,
                             EnemyType::Splitter,
                         ];
@@ -1475,7 +1520,7 @@ impl Game {
             }
         }
         if contact_damage {
-            self.player_take_damage(10.0);
+            self.player_take_damage(15.0);
         }
 
         // ── Update enemy bullets ──
@@ -1484,23 +1529,20 @@ impl Game {
                 continue;
             }
 
-            // Homing adjustment
+            // Homing adjustment (acceleration-based like web version)
             if self.enemy_bullets[i].homing {
-                let edx = player_x - self.enemy_bullets[i].x;
-                let edy = player_y - self.enemy_bullets[i].y;
-                let target_angle = edy.atan2(edx);
-                let current_angle = self.enemy_bullets[i].vy.atan2(self.enemy_bullets[i].vx);
-                let speed = (self.enemy_bullets[i].vx * self.enemy_bullets[i].vx + self.enemy_bullets[i].vy * self.enemy_bullets[i].vy).sqrt();
-                let mut diff = target_angle - current_angle;
-                while diff > std::f32::consts::PI {
-                    diff -= std::f32::consts::TAU;
+                let hdx = player_x - self.enemy_bullets[i].x;
+                let hdy = player_y - self.enemy_bullets[i].y;
+                let hd = (hdx * hdx + hdy * hdy).sqrt().max(1.0);
+                self.enemy_bullets[i].vx += hdx / hd * 0.05;
+                self.enemy_bullets[i].vy += hdy / hd * 0.05;
+                // Cap speed at 3.0
+                let bs = (self.enemy_bullets[i].vx * self.enemy_bullets[i].vx + self.enemy_bullets[i].vy * self.enemy_bullets[i].vy).sqrt();
+                let max_bs: f32 = 3.0;
+                if bs > max_bs {
+                    self.enemy_bullets[i].vx = self.enemy_bullets[i].vx / bs * max_bs;
+                    self.enemy_bullets[i].vy = self.enemy_bullets[i].vy / bs * max_bs;
                 }
-                while diff < -std::f32::consts::PI {
-                    diff += std::f32::consts::TAU;
-                }
-                let new_angle = current_angle + diff.clamp(-0.03, 0.03);
-                self.enemy_bullets[i].vx = new_angle.cos() * speed;
-                self.enemy_bullets[i].vy = new_angle.sin() * speed;
             }
 
             self.enemy_bullets[i].x += self.enemy_bullets[i].vx;
@@ -1676,8 +1718,55 @@ impl Game {
         // ── Remove dead enemies ──
         self.enemies.retain(|e| e.alive);
 
+        // ── Hazards (laser sweeps from wave 6+) ──
+        if self.wave >= 6 {
+            if rand::gen_range(0.0_f32, 1.0) < 0.003 {
+                let horiz = rand::gen_range(0.0_f32, 1.0) < 0.5;
+                let pos = if horiz {
+                    rand::gen_range(ARENA_Y + 30.0, ARENA_Y + ARENA_H - 30.0)
+                } else {
+                    rand::gen_range(ARENA_X + 30.0, ARENA_X + ARENA_W - 30.0)
+                };
+                self.hazards.push(Hazard {
+                    horiz,
+                    pos,
+                    timer: 120,
+                    active: false,
+                    alive: true,
+                });
+            }
+        }
+        for i in 0..self.hazards.len() {
+            if !self.hazards[i].alive { continue; }
+            self.hazards[i].timer -= 1;
+            if self.hazards[i].timer <= 0 && !self.hazards[i].active {
+                self.hazards[i].active = true;
+                self.hazards[i].timer = 30;
+            }
+            if self.hazards[i].active {
+                self.hazards[i].timer -= 1;
+                if self.hazards[i].horiz {
+                    if (self.player.y - self.hazards[i].pos).abs() < 8.0 && self.player.invincible <= 0 {
+                        self.player_take_damage(20.0);
+                    }
+                } else {
+                    if (self.player.x - self.hazards[i].pos).abs() < 8.0 && self.player.invincible <= 0 {
+                        self.player_take_damage(20.0);
+                    }
+                }
+                if self.hazards[i].timer <= 0 {
+                    self.hazards[i].alive = false;
+                }
+            }
+        }
+        self.hazards.retain(|h| h.alive);
+
         // ── Check wave completion ──
         if self.enemies_to_spawn <= 0 && self.enemies.is_empty() {
+            // Heal 15% between waves (like web version)
+            let heal_amount = PLAYER_MAX_HP * 0.15;
+            self.player.hp = (self.player.hp + heal_amount).min(PLAYER_MAX_HP);
+
             if self.wave >= MAX_WAVES {
                 self.state = GameState::Victory;
             } else {
@@ -1697,6 +1786,13 @@ impl Game {
             GameState::Playing | GameState::WaveIntro => {
                 self.draw_arena(shake_x, shake_y);
                 self.draw_entities(shake_x, shake_y);
+                // Freeze tint overlay
+                if self.player.freeze_timer > 0.0 {
+                    draw_rectangle(
+                        ARENA_X, ARENA_Y, ARENA_W, ARENA_H,
+                        Color::new(0.4, 0.6, 1.0, 0.06),
+                    );
+                }
                 self.draw_hud();
                 if self.state == GameState::WaveIntro {
                     self.draw_wave_intro();
@@ -1855,6 +1951,38 @@ impl Game {
                 _ => (ARENA_X + ARENA_W, rand::gen_range(ARENA_Y, ARENA_Y + ARENA_H)),
             };
             draw_circle(spark_x + sx, spark_y + sy, 2.0, WHITE);
+        }
+
+        // Hazard laser sweeps
+        for hz in &self.hazards {
+            if !hz.alive { continue; }
+            if hz.active {
+                // Active laser line
+                if hz.horiz {
+                    draw_line(ARENA_X + sx, hz.pos + sy, ARENA_X + ARENA_W + sx, hz.pos + sy, 4.0, RED);
+                    draw_line(ARENA_X + sx, hz.pos + sy, ARENA_X + ARENA_W + sx, hz.pos + sy, 2.0, Color::new(1.0, 0.5, 0.5, 0.8));
+                } else {
+                    draw_line(hz.pos + sx, ARENA_Y + sy, hz.pos + sx, ARENA_Y + ARENA_H + sy, 4.0, RED);
+                    draw_line(hz.pos + sx, ARENA_Y + sy, hz.pos + sx, ARENA_Y + ARENA_H + sy, 2.0, Color::new(1.0, 0.5, 0.5, 0.8));
+                }
+            } else {
+                // Warning dashed line
+                let warn_alpha = 0.2 + (self.time * 6.0).sin() * 0.2;
+                let warn_color = Color::new(1.0, 0.0, 0.0, warn_alpha);
+                if hz.horiz {
+                    let mut dx = ARENA_X;
+                    while dx < ARENA_X + ARENA_W {
+                        draw_line(dx + sx, hz.pos + sy, (dx + 8.0).min(ARENA_X + ARENA_W) + sx, hz.pos + sy, 2.0, warn_color);
+                        dx += 16.0;
+                    }
+                } else {
+                    let mut dy = ARENA_Y;
+                    while dy < ARENA_Y + ARENA_H {
+                        draw_line(hz.pos + sx, dy + sy, hz.pos + sx, (dy + 8.0).min(ARENA_Y + ARENA_H) + sy, 2.0, warn_color);
+                        dy += 16.0;
+                    }
+                }
+            }
         }
     }
 
@@ -2527,40 +2655,44 @@ fn draw_text_centered(text: &str, x: f32, y: f32, font_size: f32, color: Color) 
     draw_text(text, x - dims.width / 2.0, y + dims.height / 2.0, font_size, color);
 }
 
-fn wave_config(wave: usize) -> (i32, &'static str) {
-    match wave {
-        1 => (8, "Swarmers"),
-        2 => (12, "Swarmers+Tanks"),
-        3 => (16, "Swarmers+Tanks+Teleporters"),
-        4 => (20, "All"),
-        5 => (16, "All+Boss"), // 15 + boss
-        6 => (25, "All"),
-        7 => (30, "All"),
-        8 => (35, "All"),
-        9 => (40, "All"),
-        10 => (31, "All+Boss"), // 30 + boss
-        _ => (8, "Swarmers"),
-    }
+// Wave definitions: (totalEnemies, swarmerWeight, tankWeight, teleporterWeight, splitterWeight, spawnInterval_frames, bossType)
+struct WaveDef {
+    total: i32,
+    w_swarmer: i32,
+    w_tank: i32,
+    w_teleporter: i32,
+    w_splitter: i32,
+    spawn_interval: i32,
+    boss: Option<EnemyType>,
 }
 
-fn wave_enemy_types(wave: usize) -> Vec<EnemyType> {
-    match wave {
-        1 => vec![EnemyType::Swarmer],
-        2 => vec![EnemyType::Swarmer, EnemyType::Swarmer, EnemyType::Tank],
-        3 => vec![
-            EnemyType::Swarmer,
-            EnemyType::Swarmer,
-            EnemyType::Tank,
-            EnemyType::Teleporter,
-        ],
-        _ => vec![
-            EnemyType::Swarmer,
-            EnemyType::Swarmer,
-            EnemyType::Tank,
-            EnemyType::Teleporter,
-            EnemyType::Splitter,
-        ],
+const WAVE_DEFS: [WaveDef; 10] = [
+    WaveDef { total: 10, w_swarmer: 10, w_tank: 0, w_teleporter: 0, w_splitter: 0, spawn_interval: 90, boss: None },
+    WaveDef { total: 14, w_swarmer: 7, w_tank: 3, w_teleporter: 0, w_splitter: 0, spawn_interval: 80, boss: None },
+    WaveDef { total: 18, w_swarmer: 6, w_tank: 3, w_teleporter: 3, w_splitter: 0, spawn_interval: 70, boss: None },
+    WaveDef { total: 22, w_swarmer: 5, w_tank: 3, w_teleporter: 3, w_splitter: 2, spawn_interval: 65, boss: None },
+    WaveDef { total: 16, w_swarmer: 4, w_tank: 3, w_teleporter: 2, w_splitter: 1, spawn_interval: 60, boss: Some(EnemyType::MegaTank) },
+    WaveDef { total: 26, w_swarmer: 5, w_tank: 4, w_teleporter: 4, w_splitter: 3, spawn_interval: 55, boss: None },
+    WaveDef { total: 30, w_swarmer: 4, w_tank: 3, w_teleporter: 6, w_splitter: 3, spawn_interval: 50, boss: None },
+    WaveDef { total: 34, w_swarmer: 4, w_tank: 4, w_teleporter: 4, w_splitter: 5, spawn_interval: 45, boss: None },
+    WaveDef { total: 38, w_swarmer: 5, w_tank: 5, w_teleporter: 5, w_splitter: 5, spawn_interval: 40, boss: None },
+    WaveDef { total: 30, w_swarmer: 5, w_tank: 4, w_teleporter: 5, w_splitter: 4, spawn_interval: 40, boss: Some(EnemyType::SwarmQueen) },
+];
+
+fn pick_weighted_type(wave_idx: usize) -> EnemyType {
+    let def = &WAVE_DEFS[wave_idx.min(9)];
+    let total = def.w_swarmer + def.w_tank + def.w_teleporter + def.w_splitter;
+    if total <= 0 {
+        return EnemyType::Swarmer;
     }
+    let mut r = rand::gen_range(0, total);
+    r -= def.w_swarmer;
+    if r < 0 { return EnemyType::Swarmer; }
+    r -= def.w_tank;
+    if r < 0 { return EnemyType::Tank; }
+    r -= def.w_teleporter;
+    if r < 0 { return EnemyType::Teleporter; }
+    EnemyType::Splitter
 }
 
 // ─── Window config ───────────────────────────────────────────────────────────

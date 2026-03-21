@@ -45,8 +45,8 @@
         const LOW_END = (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
 
         // --- SCALING ---
-        const GAME_W = 640;
-        const GAME_H = 480;
+        const GAME_W = 800;
+        const GAME_H = 600;
         let scaleX = 1, scaleY = 1, offsetX = 0, offsetY = 0, renderScale = 1;
 
         function resizeCanvas() {
@@ -77,6 +77,8 @@
         const WALL_JUMP_Y = -6.5; const WALL_JUMP_X = 6.0;
         const BULLET_SPEED = 10; const ENEMY_BULLET_SPEED = 4.0; const ANCHOR_SPEED = 15; const CLIMB_SPEED = 3.0;
         const TILE_SIZE = 20;
+        const SPRITE_SIZE = 14; // Visual sprite size (smaller than grid cell for better mobile readability)
+        const SPRITE_OFFSET = (TILE_SIZE - SPRITE_SIZE) / 2; // Center sprite in grid cell
 
         // --- ASSETS ---
         function createSprite(art, colors) {
@@ -439,9 +441,9 @@
             if (fullReset === undefined) fullReset = false;
             if (fullReset) { score = 0; currentLevel = 0; lives = MAX_LIVES; }
 
-            player = { x: 300, y: 0, w: 24, h: 24, vx: 0, vy: 0, onGround: false, wallDir: 0, facingRight: true, jumps: 0, maxJumps: 2 };
+            player = { x: 300, y: 0, w: 16, h: 16, vx: 0, vy: 0, onGround: false, wallDir: 0, facingRight: true, jumps: 0, maxJumps: 2 };
             bullets = []; enemyBullets = []; particles = []; popups = []; gems = []; textPopups = []; lavaBubbles = []; damageFlashTimer = 0; shakeMagnitude = 0; screenShakeX = 0; screenShakeY = 0;
-            anchor = { active: false, isAttached: false, x: 0, y: 0, vx: 0, vy: 0, length: 0, w: 16, h: 16 };
+            anchor = { active: false, isAttached: false, x: 0, y: 0, vx: 0, vy: 0, length: 0, w: 11, h: 11 };
             keys.anchor_fired = false;
             coyoteFrames = 0;
             jumpBufferFrames = 0;
@@ -465,20 +467,20 @@
                     else if (char === 'P') {
                         // Ensure enemies don't spawn inside walls
                         if (!overlapsAnySolid(px, py, TILE_SIZE, TILE_SIZE)) {
-                            enemies.push({ type: 'patrol', x: px, y: py, w: TILE_SIZE, h: TILE_SIZE, vx: 1.5, startX: px, range: 40 });
+                            enemies.push({ type: 'patrol', x: px + SPRITE_OFFSET, y: py + SPRITE_OFFSET, w: SPRITE_SIZE, h: SPRITE_SIZE, vx: 1.5, startX: px + SPRITE_OFFSET, range: 40 });
                         }
                     }
                     else if (char === 'B') {
                         if (!overlapsAnySolid(px, py, TILE_SIZE, TILE_SIZE)) {
-                            enemies.push({ type: 'bat', x: px, y: py, w: TILE_SIZE, h: TILE_SIZE, vx: 0, vy: 0 });
+                            enemies.push({ type: 'bat', x: px + SPRITE_OFFSET, y: py + SPRITE_OFFSET, w: SPRITE_SIZE, h: SPRITE_SIZE, vx: 0, vy: 0 });
                         }
                     }
                     else if (char === 'T') {
                         if (!overlapsAnySolid(px, py, TILE_SIZE, TILE_SIZE)) {
-                            enemies.push({ type: 'turret', x: px, y: py, w: TILE_SIZE, h: TILE_SIZE, shootTimer: Math.random() * 60 });
+                            enemies.push({ type: 'turret', x: px + SPRITE_OFFSET, y: py + SPRITE_OFFSET, w: SPRITE_SIZE, h: SPRITE_SIZE, shootTimer: Math.random() * 60 });
                         }
                     }
-                    else if (char === 'G') gems.push({ x: px + 2, y: py + 2, w: 16, h: 16, vx: 0, vy: 0 });
+                    else if (char === 'G') gems.push({ x: px + 4, y: py + 4, w: 11, h: 11, vx: 0, vy: 0 });
                 }
             }
 
@@ -524,18 +526,21 @@
             if (e.code === 'Space' || e.code === 'KeyZ' || e.code === 'KeyK') releaseB();
         });
 
-        // Touch Setup - Joystick
+        // Touch Setup - Floating Joystick
         const joyZone = document.getElementById('joystickZone');
         const joyBase = document.getElementById('joystickBase');
         const joyStick = document.getElementById('joystickStick');
-        let joyActive = false; let joyStart = { x: 0, y: 0 };
+        let joyTouchId = null; // track by identifier to prevent multi-touch conflicts
+        let joyStart = { x: 0, y: 0 };
         const JOY_DEADZONE = 20;
         const JOY_MAX_DIST = 50;
 
         joyZone.addEventListener('touchstart', (e) => {
             e.preventDefault(); initAudio();
-            joyActive = true;
+            // Only accept if no joystick touch is active
+            if (joyTouchId !== null) return;
             const touch = e.changedTouches[0];
+            joyTouchId = touch.identifier;
             joyStart = { x: touch.clientX, y: touch.clientY };
             joyBase.style.display = 'block';
             joyBase.classList.add('active');
@@ -544,8 +549,15 @@
             joyStick.style.transform = 'translate(-50%, -50%)';
         });
         joyZone.addEventListener('touchmove', (e) => {
-            if (!joyActive) return; e.preventDefault();
-            const touch = e.changedTouches[0];
+            if (joyTouchId === null) return; e.preventDefault();
+            // Find the tracked touch by identifier
+            let touch = null;
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === joyTouchId) {
+                    touch = e.changedTouches[i]; break;
+                }
+            }
+            if (!touch) return;
             const dx = touch.clientX - joyStart.x;
             const dy = touch.clientY - joyStart.y;
             const distance = Math.min(Math.sqrt(dx * dx + dy * dy), JOY_MAX_DIST);
@@ -558,11 +570,18 @@
             keys.down = dy > JOY_DEADZONE;
             keys.up = dy < -JOY_DEADZONE;
         });
-        const resetJoy = () => {
-            joyActive = false;
-            joyBase.style.display = 'none';
-            joyBase.classList.remove('active');
-            keys.right = keys.left = keys.up = keys.down = false;
+        const resetJoy = (e) => {
+            if (joyTouchId === null) return;
+            // Only reset if our tracked touch ended
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === joyTouchId) {
+                    joyTouchId = null;
+                    joyBase.style.display = 'none';
+                    joyBase.classList.remove('active');
+                    keys.right = keys.left = keys.up = keys.down = false;
+                    return;
+                }
+            }
         };
         joyZone.addEventListener('touchend', resetJoy);
         joyZone.addEventListener('touchcancel', resetJoy);
@@ -688,7 +707,7 @@
                     if (overlaps(anchor, p)) {
                         if (p.type === 'stone' || p.type === 'chest') {
                             if (p.type === 'chest') {
-                                gems.push({ x: p.x + 2, y: p.y, w: 16, h: 16, vx: (Math.random() - 0.5) * 4, vy: -5 });
+                                gems.push({ x: p.x + 4, y: p.y, w: 11, h: 11, vx: (Math.random() - 0.5) * 4, vy: -5 });
                             }
                             platforms.splice(i, 1);
                             if (particles.length < MAX_PARTICLES) {
@@ -811,7 +830,7 @@
             // --- SHOOTING ---
             if (keys.shootPressed) {
                 let traj = getTrajectory(BULLET_SPEED);
-                bullets.push({ x: player.x + player.w / 2 - 4, y: player.y + player.h / 2 - 4, vx: traj.vx, vy: traj.vy, w: 8, h: 8 });
+                bullets.push({ x: player.x + player.w / 2 - 3, y: player.y + player.h / 2 - 3, vx: traj.vx, vy: traj.vy, w: 6, h: 6 });
                 keys.shootPressed = false; playSound('shoot');
             }
 
@@ -853,7 +872,7 @@
                         let dx = player.x - e.x; let dy = player.y - e.y;
                         let dist = Math.sqrt(dx * dx + dy * dy);
                         if (dist > 0.001 && dist < 300) {
-                            enemyBullets.push({ x: e.x + e.w / 2 - 4, y: e.y + e.h / 2 - 4, vx: (dx / dist) * ENEMY_BULLET_SPEED, vy: (dy / dist) * ENEMY_BULLET_SPEED, w: 8, h: 8 });
+                            enemyBullets.push({ x: e.x + e.w / 2 - 3, y: e.y + e.h / 2 - 3, vx: (dx / dist) * ENEMY_BULLET_SPEED, vy: (dy / dist) * ENEMY_BULLET_SPEED, w: 6, h: 6 });
                         }
                         e.shootTimer = 0;
                     }
@@ -886,7 +905,7 @@
             // GOAL COLLISION & LEVEL TRANSITION
             const mapHeight = levels[currentLevel].map.length;
             const startY = -(mapHeight * TILE_SIZE) + GAME_H;
-            const goalRect = { x: 280, y: startY + (2 * TILE_SIZE), w: 30, h: 30 };
+            const goalRect = { x: 283, y: startY + (2 * TILE_SIZE) + 2, w: 22, h: 22 };
 
             if (overlaps(player, goalRect)) {
                 const justFinished = currentLevel;
@@ -943,8 +962,8 @@
             // Background parallax
             const bgSize = 64;
             const startYBg = Math.floor((cameraY * 0.5) / bgSize) - 1;
-            for (let y = startYBg; y < startYBg + 12; y++) {
-                for (let x = 0; x < 12; x++) {
+            for (let y = startYBg; y < startYBg + 14; y++) {
+                for (let x = 0; x < 15; x++) {
                     ctx.drawImage(bgTex, x * bgSize, (y * bgSize) - (cameraY * 0.5), bgSize, bgSize);
                 }
             }
@@ -965,7 +984,7 @@
 
                     if (textObj.ghost) {
                         const pulse = 0.4 + Math.sin(Date.now() * 0.002 + textObj.row) * 0.3;
-                        ctx.font = 'italic 15px monospace';
+                        ctx.font = 'italic 12px monospace';
                         ctx.save();
                         ctx.shadowColor = 'rgba(160, 120, 255, 0.6)';
                         ctx.shadowBlur = 10;
@@ -973,7 +992,7 @@
                         ctx.fillText(textObj.text, textX, textY);
                         ctx.restore();
                     } else {
-                        ctx.font = 'bold 16px monospace';
+                        ctx.font = 'bold 13px monospace';
                         ctx.strokeStyle = 'black'; ctx.lineWidth = 4;
                         ctx.strokeText(textObj.text, textX, textY);
                         ctx.fillStyle = 'white';
@@ -996,7 +1015,7 @@
             for (let p of chestPlats) ctx.drawImage(chestTex, p.x, p.y - cameraY, TILE_SIZE, TILE_SIZE);
 
             // Particles - batch
-            for (let p of particles) { ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y - cameraY, 4, 4); }
+            for (let p of particles) { ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y - cameraY, 3, 3); }
             // Gems
             for (let g of gems) { ctx.drawImage(gemTex, g.x, g.y - cameraY, g.w, g.h); }
 
@@ -1034,7 +1053,7 @@
             if (gameState === 'PLAYING') {
                 const mapHeight2 = levels[currentLevel].map.length;
                 const startY2 = -(mapHeight2 * TILE_SIZE) + GAME_H;
-                ctx.drawImage(goalTex, 280, startY2 + (2 * TILE_SIZE) - cameraY, 30, 30);
+                ctx.drawImage(goalTex, 283, startY2 + (2 * TILE_SIZE) - cameraY + 2, 22, 22);
             }
 
             // Animated lava
@@ -1082,20 +1101,20 @@
             for (let tp of textPopups) {
                 const alpha = tp.life / 30;
                 ctx.fillStyle = 'rgba(255, 255, 0, ' + alpha + ')';
-                ctx.font = 'bold 18px monospace'; ctx.textAlign = 'center';
+                ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
                 ctx.fillText(tp.text, tp.x + 10, tp.y - cameraY);
             }
 
             // HUD
             for (let p of popups) {
                 ctx.fillStyle = 'rgba(255, 255, 255, ' + (p.life / 30) + ')';
-                ctx.font = 'bold 16px monospace'; ctx.textAlign = 'left';
+                ctx.font = 'bold 13px monospace'; ctx.textAlign = 'left';
                 ctx.fillText(p.text, p.x + 10, p.y - cameraY);
             }
 
             ctx.fillStyle = 'white';
             if (gameState === 'PLAYING') {
-                ctx.textAlign = 'left'; ctx.font = 'bold 20px monospace';
+                ctx.textAlign = 'left'; ctx.font = 'bold 16px monospace';
                 ctx.fillText('SCORE: ' + score, 20, 40);
                 ctx.fillText('LIVES: ' + lives, 20, 65);
                 ctx.textAlign = 'right';
@@ -1121,29 +1140,29 @@
                 // Title
                 ctx.save();
                 ctx.shadowColor = '#ff8800'; ctx.shadowBlur = 20;
-                ctx.fillStyle = 'white'; ctx.font = 'bold 42px monospace';
+                ctx.fillStyle = 'white'; ctx.font = 'bold 34px monospace';
                 ctx.fillText("NANO WIZARDS", GAME_W / 2, GAME_H / 2 - 50);
                 ctx.restore();
                 ctx.save();
                 ctx.shadowColor = '#6644aa'; ctx.shadowBlur = 12;
-                ctx.fillStyle = 'rgba(255,200,100,0.9)'; ctx.font = 'bold 22px monospace';
+                ctx.fillStyle = 'rgba(255,200,100,0.9)'; ctx.font = 'bold 18px monospace';
                 ctx.fillText("The Obsidian Spire", GAME_W / 2, GAME_H / 2 - 15);
                 ctx.restore();
-                ctx.fillStyle = 'rgba(200, 180, 255, 0.7)'; ctx.font = '16px monospace';
+                ctx.fillStyle = 'rgba(200, 180, 255, 0.7)'; ctx.font = '13px monospace';
                 ctx.fillText("The last Nano Wizard ascends", GAME_W / 2, GAME_H / 2 + 15);
                 // Blinking prompt
                 if (Math.floor(Date.now() / 500) % 2 === 0) {
-                    ctx.fillStyle = '#ffaa00'; ctx.font = '20px monospace';
+                    ctx.fillStyle = '#ffaa00'; ctx.font = '16px monospace';
                     ctx.fillText("Press B/Z/Space to Begin", GAME_W / 2, GAME_H / 2 + 55);
                 }
             }
             else if (gameState === 'LEVEL_STORY') {
                 ctx.fillStyle = 'rgba(0,0,0,0.92)'; ctx.fillRect(0, 0, GAME_W, GAME_H);
                 const storyLines = storyFullText.split('\n');
-                const lineHeight = 28;
+                const lineHeight = 24;
                 const totalHeight = storyLines.length * lineHeight;
                 const startYStory = (GAME_H - totalHeight) / 2 - 40;
-                ctx.font = '18px monospace';
+                ctx.font = '14px monospace';
                 for (let si = 0; si < storyLines.length; si++) {
                     ctx.fillStyle = 'rgba(200, 180, 255, 1.0)';
                     ctx.fillText(storyLines[si], GAME_W / 2, startYStory + si * lineHeight);
@@ -1156,18 +1175,18 @@
                     }
                 } else {
                     if (Math.floor(Date.now() / 500) % 2 === 0) {
-                        ctx.fillStyle = '#ffaa00'; ctx.font = '16px monospace';
+                        ctx.fillStyle = '#ffaa00'; ctx.font = '13px monospace';
                         ctx.fillText("Press B/Z/Space to continue...", GAME_W / 2, GAME_H - 60);
                     }
                 }
             }
             else if (gameState === 'GAMEOVER') {
                 ctx.fillStyle = 'rgba(200, 0, 0, 0.5)'; ctx.fillRect(0, 0, GAME_W, GAME_H);
-                ctx.fillStyle = 'white'; ctx.font = 'bold 48px monospace'; ctx.fillText("THE SPIRE CLAIMS YOU", GAME_W / 2, GAME_H / 2 - 20);
-                ctx.font = '20px monospace';
+                ctx.fillStyle = 'white'; ctx.font = 'bold 38px monospace'; ctx.fillText("THE SPIRE CLAIMS YOU", GAME_W / 2, GAME_H / 2 - 20);
+                ctx.font = '16px monospace';
                 ctx.fillStyle = 'rgba(200, 180, 255, 0.8)';
                 ctx.fillText("The corruption swallows another soul...", GAME_W / 2, GAME_H / 2 + 20);
-                ctx.fillStyle = 'white'; ctx.font = '24px monospace';
+                ctx.fillStyle = 'white'; ctx.font = '19px monospace';
                 ctx.fillText('SCORE: ' + score, GAME_W / 2, GAME_H / 2 + 60);
                 ctx.fillText("Press B/Z to Retry", GAME_W / 2, GAME_H / 2 + 100);
             }
@@ -1175,14 +1194,14 @@
                 ctx.fillStyle = 'rgba(20, 0, 40, 0.85)'; ctx.fillRect(0, 0, GAME_W, GAME_H);
                 ctx.save();
                 ctx.shadowColor = '#aa66ff'; ctx.shadowBlur = 20;
-                ctx.fillStyle = 'white'; ctx.font = 'bold 36px monospace';
+                ctx.fillStyle = 'white'; ctx.font = 'bold 29px monospace';
                 ctx.fillText("FREE AT LAST", GAME_W / 2, GAME_H / 2 - 40);
                 ctx.restore();
-                ctx.fillStyle = 'rgba(200, 180, 255, 0.8)'; ctx.font = '18px monospace';
+                ctx.fillStyle = 'rgba(200, 180, 255, 0.8)'; ctx.font = '14px monospace';
                 ctx.fillText("The Obsidian Spire crumbles into dust.", GAME_W / 2, GAME_H / 2 + 10);
                 ctx.fillText("Vael walks into the dawn -- no longer a heart,", GAME_W / 2, GAME_H / 2 + 38);
                 ctx.fillText("no longer a weapon. Just free.", GAME_W / 2, GAME_H / 2 + 66);
-                ctx.fillStyle = 'white'; ctx.font = '24px monospace';
+                ctx.fillStyle = 'white'; ctx.font = '19px monospace';
                 ctx.fillText('FINAL SCORE: ' + score, GAME_W / 2, GAME_H / 2 + 110);
                 ctx.fillStyle = '#ffaa00';
                 ctx.fillText("Press B/Z to Play Again", GAME_W / 2, GAME_H / 2 + 150);
@@ -1207,7 +1226,7 @@
                 const joyHintY = GAME_H - 140;
                 ctx.strokeStyle = 'white'; ctx.lineWidth = 2;
                 ctx.beginPath(); ctx.arc(joyHintX, joyHintY, 45, 0, Math.PI * 2); ctx.stroke();
-                ctx.fillStyle = 'white'; ctx.font = 'bold 14px monospace'; ctx.textAlign = 'center';
+                ctx.fillStyle = 'white'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center';
                 ctx.fillText('MOVE', joyHintX, joyHintY + 70);
                 // Arrows
                 ctx.beginPath(); ctx.moveTo(joyHintX, joyHintY - 20); ctx.lineTo(joyHintX - 6, joyHintY - 10); ctx.lineTo(joyHintX + 6, joyHintY - 10); ctx.fill();

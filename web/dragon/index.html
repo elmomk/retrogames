@@ -71,26 +71,30 @@
             display: block;
         }
 
-        /* Joystick zone - bottom left */
+        /* Joystick zone - left half of screen (floating joystick) */
         #joy-zone {
             position: fixed;
-            left: 10px;
-            bottom: 10px;
-            width: 160px;
-            height: 160px;
+            left: 0;
+            top: 0;
+            width: 50vw;
+            height: 100vh;
             pointer-events: auto;
             touch-action: none;
         }
 
         #joy-base {
-            position: absolute;
-            left: 20px;
-            bottom: 20px;
+            position: fixed;
             width: 120px;
             height: 120px;
             border-radius: 50%;
             background: rgba(255, 0, 102, 0.08);
             border: 3px solid rgba(255, 0, 102, 0.35);
+            display: none;
+            pointer-events: none;
+        }
+
+        #joy-base.visible {
+            display: block;
         }
 
         #joy-stick {
@@ -192,9 +196,10 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-const GW = 640, GH = 480;
-const GROUND_MIN = 300, GROUND_MAX = 440;
+const GW = 800, GH = 600;
+const GROUND_MIN = 375, GROUND_MAX = 550;
 const GRAVITY = 0.7;
+const SPRITE_SCALE = 0.7; // Scale factor for all entities to fit phone screens
 
 // --- Detect touch device ---
 let isTouchDevice = false;
@@ -334,21 +339,32 @@ const keys = {};
 document.addEventListener('keydown', e => { keys[e.code] = true; if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyZ','KeyX','KeyC','Enter','Space'].includes(e.code)) e.preventDefault(); });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
 
-// --- Joystick ---
+// --- Floating Joystick ---
 const joystick = { active: false, vx: 0, vy: 0 };
 const joyZone = document.getElementById('joy-zone');
 const joyBase = document.getElementById('joy-base');
 const joyStick = document.getElementById('joy-stick');
 let joyTouchId = null;
+let joyOriginX = 0, joyOriginY = 0; // center of base when placed
 const JOY_DEADZONE = 20;
-const JOY_MAX_R = 45;
+const JOY_MAX_R = 50;
+
+function showJoyAt(cx, cy) {
+    joyOriginX = cx;
+    joyOriginY = cy;
+    joyBase.style.left = (cx - 60) + 'px';
+    joyBase.style.top = (cy - 60) + 'px';
+    joyBase.classList.add('visible');
+    joyStick.style.transform = 'translate(0px, 0px)';
+}
+
+function hideJoy() {
+    joyBase.classList.remove('visible');
+}
 
 function updateJoy(cx, cy) {
-    const r = joyBase.getBoundingClientRect();
-    const centerX = r.left + r.width / 2;
-    const centerY = r.top + r.height / 2;
-    let dx = cx - centerX;
-    let dy = cy - centerY;
+    let dx = cx - joyOriginX;
+    let dy = cy - joyOriginY;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     if (dist < JOY_DEADZONE) {
@@ -377,6 +393,7 @@ function resetJoy() {
     joystick.vx = 0;
     joystick.vy = 0;
     joyStick.style.transform = 'translate(0px, 0px)';
+    hideJoy();
 }
 
 joyZone.addEventListener('touchstart', function(e) {
@@ -385,7 +402,7 @@ joyZone.addEventListener('touchstart', function(e) {
         const t = e.changedTouches[0];
         joyTouchId = t.identifier;
         joystick.active = true;
-        updateJoy(t.clientX, t.clientY);
+        showJoyAt(t.clientX, t.clientY);
     }
 }, { passive: false });
 
@@ -409,9 +426,9 @@ joyZone.addEventListener('touchend', function(e) {
 });
 joyZone.addEventListener('touchcancel', resetJoy);
 
-// Mouse fallback for joystick
+// Mouse fallback for floating joystick
 let isJoyMouseDrag = false;
-joyZone.addEventListener('mousedown', function(e) { isJoyMouseDrag = true; joystick.active = true; updateJoy(e.clientX, e.clientY); });
+joyZone.addEventListener('mousedown', function(e) { isJoyMouseDrag = true; joystick.active = true; showJoyAt(e.clientX, e.clientY); });
 window.addEventListener('mousemove', function(e) { if (isJoyMouseDrag) updateJoy(e.clientX, e.clientY); });
 window.addEventListener('mouseup', function() { if (isJoyMouseDrag) { isJoyMouseDrag = false; resetJoy(); } });
 
@@ -587,8 +604,8 @@ function showBossIntro(data) {
 // --- Hit Numbers & Screen Flash ---
 let hitNumbers = [];
 function spawnHitNumber(x, y, value, color) {
-    x = safeNum(x, 320);
-    y = safeNum(y, 240);
+    x = safeNum(x, 400);
+    y = safeNum(y, 300);
     value = safeNum(value, 0);
     hitNumbers.push({ x: x, y: y, value: value, life: 40, maxLife: 40, color: color || '#ffff00' });
     // Cap hit numbers
@@ -599,8 +616,8 @@ let screenFlashTimer = 0;
 // --- Particles ---
 let particles = [];
 function spawnParticle(x, y, color, count, speed, life) {
-    x = safeNum(x, 320);
-    y = safeNum(y, 240);
+    x = safeNum(x, 400);
+    y = safeNum(y, 300);
     // Reduce particle count on low-end
     if (performanceLevel === 'low') count = Math.ceil(count * 0.5);
     for (let i = 0; i < count; i++) {
@@ -670,20 +687,25 @@ function drawEntity(entity, camX) {
     // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.beginPath();
-    ctx.ellipse((sx + w/2) | 0, (entity.groundY + 2) | 0, w * 0.6, 6, 0, 0, Math.PI*2);
+    ctx.ellipse((sx + w/2) | 0, (entity.groundY + 2) | 0, w * 0.6, 4, 0, 0, Math.PI*2);
     ctx.fill();
 
     const bx = sx, by = sy;
 
+    // Scale sprite drawing so procedural art (designed at 32x48) fits scaled entity size
+    ctx.save();
+    ctx.translate(bx | 0, by | 0);
+    ctx.scale(SPRITE_SCALE, SPRITE_SCALE);
     if (entity.type === 'player') {
-        drawPlayerSprite(bx | 0, by | 0, w, h, entity, flip);
+        drawPlayerSprite(0, 0, w, h, entity, flip);
     } else {
-        drawEnemySprite(bx | 0, by | 0, w, h, entity, flip);
+        drawEnemySprite(0, 0, w, h, entity, flip);
     }
+    ctx.restore();
 
     // Weapon in hand
     if (entity.weapon && entity.type === 'player') {
-        drawWeaponHeld(sx | 0, sy | 0, w, h, entity, flip);
+        drawWeaponHeld(bx | 0, by | 0, w, h, entity, flip);
     }
 
     ctx.restore();
@@ -875,69 +897,71 @@ function drawEnemySprite(x, y, w, h, ent, flip) {
 }
 
 function drawWeaponHeld(sx, sy, w, h, ent, flip) {
-    const wx = flip ? sx - 12 : sx + w;
-    const wy = sy + 18;
+    const wx = flip ? sx - (12 * SPRITE_SCALE) : sx + w;
+    const wy = sy + 18 * SPRITE_SCALE;
+    const ss = SPRITE_SCALE;
     ctx.fillStyle = ent.weapon.type === 'pipe' ? '#999999' : ent.weapon.type === 'knife' ? '#cccccc' : '#336633';
     if (ent.weapon.type === 'pipe') {
-        ctx.fillRect(wx, wy, flip ? -20 : 20, 4);
+        ctx.fillRect(wx, wy, flip ? -20*ss : 20*ss, 4*ss);
     } else if (ent.weapon.type === 'knife') {
-        ctx.fillRect(wx, wy, flip ? -14 : 14, 3);
+        ctx.fillRect(wx, wy, flip ? -14*ss : 14*ss, 3*ss);
         ctx.fillStyle = C.brown;
-        ctx.fillRect(wx, wy-1, flip ? -5 : 5, 5);
+        ctx.fillRect(wx, wy-1*ss, flip ? -5*ss : 5*ss, 5*ss);
     }
 }
 
 function drawWeaponGround(weapon, camX) {
     const sx = (weapon.x - camX) | 0;
     if (sx < -30 || sx > GW + 30) return;
-    const sy = (weapon.groundY - 6) | 0;
+    const sy = (weapon.groundY - 4) | 0;
+    const ss = SPRITE_SCALE;
     ctx.fillStyle = weapon.type === 'pipe' ? '#999999' : weapon.type === 'knife' ? '#cccccc' : '#88aa44';
     if (weapon.type === 'pipe') {
-        ctx.fillRect(sx, sy, 24, 5);
+        ctx.fillRect(sx, sy, 17*ss|0, 4*ss|0);
         ctx.fillStyle = '#777777';
-        ctx.fillRect(sx, sy, 4, 5);
+        ctx.fillRect(sx, sy, 3*ss|0, 4*ss|0);
     } else {
-        ctx.fillRect(sx, sy, 16, 3);
+        ctx.fillRect(sx, sy, 11*ss|0, 2*ss|0);
         ctx.fillStyle = C.brown;
-        ctx.fillRect(sx, sy-1, 5, 5);
+        ctx.fillRect(sx, sy-1, 4*ss|0, 4*ss|0);
     }
     // Glint
     if (frameCount % 60 < 10) {
         ctx.fillStyle = 'rgba(255,255,255,0.6)';
-        ctx.fillRect(sx + 8, sy - 2, 3, 2);
+        ctx.fillRect(sx + 6, sy - 2, 2, 2);
     }
 }
 
 function drawPickup(pickup, camX) {
     const sx = (pickup.x - camX) | 0;
     if (sx < -30 || sx > GW + 30) return;
-    const sy = (pickup.groundY - 14) | 0;
-    const bob = Math.sin(frameCount * 0.08) * 3;
+    const sy = (pickup.groundY - 10) | 0;
+    const bob = Math.sin(frameCount * 0.08) * 2;
 
     if (pickup.type === 'chicken') {
         // Drumstick
         ctx.fillStyle = '#cc8844';
-        ctx.fillRect(sx+2, (sy+bob)|0, 12, 8);
+        ctx.fillRect(sx+1, (sy+bob)|0, 9, 6);
         ctx.fillStyle = '#ffaa66';
-        ctx.fillRect(sx+4, (sy+bob+1)|0, 8, 6);
+        ctx.fillRect(sx+3, (sy+bob+1)|0, 6, 4);
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(sx+12, (sy+bob+2)|0, 5, 4);
+        ctx.fillRect(sx+9, (sy+bob+1)|0, 4, 3);
     } else if (pickup.type === 'pizza') {
         ctx.fillStyle = '#ffcc33';
-        ctx.beginPath(); ctx.moveTo(sx+8, (sy+bob)|0); ctx.lineTo(sx+18, (sy+bob+12)|0); ctx.lineTo(sx-2, (sy+bob+12)|0); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(sx+6, (sy+bob)|0); ctx.lineTo(sx+13, (sy+bob+9)|0); ctx.lineTo(sx-1, (sy+bob+9)|0); ctx.fill();
         ctx.fillStyle = '#cc3300';
-        ctx.fillRect(sx+3, (sy+bob+5)|0, 3, 3);
-        ctx.fillRect(sx+8, (sy+bob+7)|0, 3, 3);
+        ctx.fillRect(sx+2, (sy+bob+4)|0, 2, 2);
+        ctx.fillRect(sx+6, (sy+bob+5)|0, 2, 2);
     } else if (pickup.type === 'life') {
         ctx.fillStyle = '#ffff00';
-        const px = sx + 6, py = (sy + bob + 2) | 0;
+        const px = sx + 4, py = (sy + bob + 2) | 0;
         // Star shape
         ctx.beginPath();
         for (let i = 0; i < 5; i++) {
             const a = -Math.PI/2 + i * Math.PI*2/5;
             const a2 = a + Math.PI*2/10;
-            ctx.lineTo(px + Math.cos(a)*8, py + Math.sin(a)*8);
-            ctx.lineTo(px + Math.cos(a2)*4, py + Math.sin(a2)*4);
+            ctx.lineTo(px + Math.cos(a)*6, py + Math.sin(a)*6);
+            ctx.lineTo(px + Math.cos(a2)*3, py + Math.sin(a2)*3);
         }
         ctx.fill();
     }
@@ -1019,8 +1043,8 @@ let player, enemies, groundWeapons, pickups;
 
 function createPlayer() {
     return {
-        type: 'player', x: 80, groundY: 370, z: 0, vz: 0,
-        w: 32, h: 48, facing: 1,
+        type: 'player', x: 80, groundY: 460, z: 0, vz: 0,
+        w: 22, h: 34, facing: 1,
         health: 100, maxHealth: 100, lives: 3,
         state: 'IDLE', animFrame: 0, animTimer: 0,
         comboCount: 0, comboTimer: 0,
@@ -1036,14 +1060,14 @@ function createPlayer() {
 
 function createEnemy(type, x, y, bossName) {
     const defs = {
-        thug:    { health: 60,  speed: 1.2, damage: 10, w: 32, h: 48, score: 100, canGrab: true, armor: 0 },
-        knife:   { health: 40,  speed: 1.8, damage: 18, w: 32, h: 48, score: 200, canGrab: true, armor: 0 },
-        brawler: { health: 150, speed: 0.7, damage: 25, w: 42, h: 56, score: 500, canGrab: false, armor: 3 },
-        boss:    { health: 350, speed: 1.0, damage: 30, w: 42, h: 56, score: 2000, canGrab: false, armor: 2 }
+        thug:    { health: 60,  speed: 1.2, damage: 10, w: 22, h: 34, score: 100, canGrab: true, armor: 0 },
+        knife:   { health: 40,  speed: 1.8, damage: 18, w: 22, h: 34, score: 200, canGrab: true, armor: 0 },
+        brawler: { health: 150, speed: 0.7, damage: 25, w: 29, h: 39, score: 500, canGrab: false, armor: 3 },
+        boss:    { health: 350, speed: 1.0, damage: 30, w: 29, h: 39, score: 2000, canGrab: false, armor: 2 }
     };
     const d = defs[type] || defs.thug;
-    x = safeNum(x, 320);
-    y = safeNum(y, 370);
+    x = safeNum(x, 400);
+    y = safeNum(y, 460);
     return {
         type: 'enemy', enemyType: type, x: x, groundY: y, z: 0, vz: 0,
         w: d.w, h: d.h, facing: -1,
@@ -1094,7 +1118,7 @@ function initStage(idx) {
     });
 
     player.x = 80;
-    player.groundY = 370;
+    player.groundY = 460;
     player.z = 0; player.vz = 0;
     player.state = 'IDLE';
     player.weapon = null;
@@ -1217,7 +1241,7 @@ function drawAlleyBG(camX) {
             ctx.shadowColor = neonColors[i%4];
             ctx.fillStyle = neonColors[i%4];
             ctx.fillRect(nx, GROUND_MIN - 90 - (i%3)*30, 60, 15);
-            ctx.font = '8px monospace';
+            ctx.font = '7px monospace';
             ctx.fillText(['BAR','CLUB','24H','XXX','BEER','OPEN','LIVE','EAT'][i], nx+5, GROUND_MIN - 80 - (i%3)*30);
         }
     }
@@ -1345,7 +1369,7 @@ function drawRooftopBG(camX) {
 function drawHUD() {
     // Player name + health bar
     ctx.fillStyle = '#ffffff';
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '8px "Press Start 2P", monospace';
     ctx.fillText('DRAGON', 15, 25);
 
     // Health bar background
@@ -1376,7 +1400,7 @@ function drawHUD() {
     // Weapon indicator
     if (player.weapon) {
         ctx.fillStyle = '#ffffff';
-        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.font = '7px "Press Start 2P", monospace';
         ctx.textAlign = 'right';
         ctx.fillText(player.weapon.type.toUpperCase() + ' x' + player.weapon.durability, GW - 15, 50);
         ctx.textAlign = 'left';
@@ -1386,15 +1410,15 @@ function drawHUD() {
     const boss = enemies.find(function(e) { return e.bossName && !e.dead; });
     if (boss) {
         ctx.fillStyle = '#ffffff';
-        ctx.font = '10px "Press Start 2P", monospace';
+        ctx.font = '8px "Press Start 2P", monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(boss.bossName, GW/2, GH - 40);
+        ctx.fillText(boss.bossName, GW/2, GH - 50);
         ctx.fillStyle = '#333333';
-        ctx.fillRect(GW/2 - 100, GH - 32, 200, 10);
+        ctx.fillRect(GW/2 - 100, GH - 42, 200, 10);
         ctx.fillStyle = '#ff0066';
-        ctx.fillRect(GW/2 - 100, GH - 32, (200 * Math.max(0, boss.health / boss.maxHealth)) | 0, 10);
+        ctx.fillRect(GW/2 - 100, GH - 42, (200 * Math.max(0, boss.health / boss.maxHealth)) | 0, 10);
         ctx.strokeStyle = '#ffffff';
-        ctx.strokeRect(GW/2 - 100, GH - 32, 200, 10);
+        ctx.strokeRect(GW/2 - 100, GH - 42, 200, 10);
         ctx.textAlign = 'left';
     }
 
@@ -1402,7 +1426,7 @@ function drawHUD() {
     if (!scrollLocked && enemies.length === 0 && waveIndex < stages[stageIndex].waves.length) {
         if (frameCount % 40 < 25) {
             ctx.fillStyle = '#ffff00';
-            ctx.font = '14px "Press Start 2P", monospace';
+            ctx.font = '12px "Press Start 2P", monospace';
             ctx.textAlign = 'right';
             ctx.fillText('GO >>>', GW - 20, GH/2);
             ctx.textAlign = 'left';
@@ -1416,7 +1440,7 @@ function updatePlayer() {
 
     // Sanitize positions
     player.x = safeNum(player.x, 80);
-    player.groundY = safeNum(player.groundY, 370);
+    player.groundY = safeNum(player.groundY, 460);
     player.z = safeNum(player.z, 0);
     player.vz = safeNum(player.vz, 0);
     player.knockbackVx = safeNum(player.knockbackVx, 0);
@@ -1487,7 +1511,7 @@ function updatePlayer() {
         }
         // Keep grabbed enemy in place
         if (player.grabTarget) {
-            player.grabTarget.x = player.x + player.facing * 35;
+            player.grabTarget.x = player.x + player.facing * 25;
             player.grabTarget.groundY = player.groundY;
         }
         return;
@@ -1498,9 +1522,9 @@ function updatePlayer() {
         player.animTimer--;
         // Attack hitbox active during punch
         if (player.animTimer > 4 && player.animTimer < 12) {
-            const hx = player.facing > 0 ? player.x + player.w : player.x - 40;
+            const hx = player.facing > 0 ? player.x + player.w : player.x - 28;
             const dmgIdx = Math.min(player.comboCount - 1, 2);
-            player.attackHitbox = { x: hx, y: player.groundY - player.h, w: 40, h: player.h, damage: [12, 18, 30][dmgIdx >= 0 ? dmgIdx : 0] || 12 };
+            player.attackHitbox = { x: hx, y: player.groundY - player.h, w: 28, h: player.h, damage: [12, 18, 30][dmgIdx >= 0 ? dmgIdx : 0] || 12 };
         }
         if (player.animTimer <= 0) {
             player.state = 'IDLE';
@@ -1513,7 +1537,7 @@ function updatePlayer() {
         player.animTimer--;
         // Special hitbox (wide area)
         if (player.animTimer > 5 && player.animTimer < 20) {
-            player.attackHitbox = { x: player.x - 50, y: player.groundY - 60, w: player.w + 100, h: 70, damage: 40 };
+            player.attackHitbox = { x: player.x - 35, y: player.groundY - 42, w: player.w + 70, h: 49, damage: 40 };
         }
         if (player.animTimer <= 0) {
             player.state = 'IDLE';
@@ -1535,8 +1559,8 @@ function updatePlayer() {
         }
 
         if (player.state === 'JUMP_KICKING') {
-            const hx = player.facing > 0 ? player.x + player.w : player.x - 35;
-            player.attackHitbox = { x: hx, y: player.groundY - player.z - player.h, w: 35, h: player.h, damage: 30 };
+            const hx = player.facing > 0 ? player.x + player.w : player.x - 25;
+            player.attackHitbox = { x: hx, y: player.groundY - player.z - player.h, w: 25, h: player.h, damage: 30 };
         }
 
         if (player.z <= 0) {
@@ -1726,8 +1750,8 @@ function updateEnemy(e) {
     }
 
     // Sanitize
-    e.x = safeNum(e.x, 320);
-    e.groundY = safeNum(e.groundY, 370);
+    e.x = safeNum(e.x, 400);
+    e.groundY = safeNum(e.groundY, 460);
     e.knockbackVx = safeNum(e.knockbackVx, 0);
     e.knockbackVy = safeNum(e.knockbackVy, 0);
 
@@ -1778,8 +1802,8 @@ function updateEnemy(e) {
     if (e.state === 'ATTACKING') {
         e.attackTimer--;
         if (e.attackTimer > 3 && e.attackTimer < 10) {
-            const hx = e.facing > 0 ? e.x + e.w : e.x - 35;
-            e.attackHitbox = { x: hx, y: e.groundY - e.h, w: 35, h: e.h };
+            const hx = e.facing > 0 ? e.x + e.w : e.x - 25;
+            e.attackHitbox = { x: hx, y: e.groundY - e.h, w: 25, h: e.h };
         }
         if (e.attackTimer <= 0) {
             e.state = 'IDLE';
@@ -2199,7 +2223,7 @@ function render() {
             const h = hitNumbers[i];
             ctx.globalAlpha = h.life / h.maxLife;
             ctx.fillStyle = h.color;
-            const fontSize = h.color === '#00ffff' ? 14 : 11;
+            const fontSize = h.color === '#00ffff' ? 12 : 9;
             ctx.font = fontSize + 'px "Press Start 2P", monospace';
             ctx.textAlign = 'center';
             ctx.shadowBlur = 4;
@@ -2240,15 +2264,15 @@ function drawTitleScreen() {
 
     // Skyline silhouette
     ctx.fillStyle = '#111128';
-    for (let i = 0; i < 15; i++) {
-        const bx = i * 50;
+    for (let i = 0; i < 20; i++) {
+        const bx = i * 45;
         const bh = 60 + (i * 37 % 80);
-        ctx.fillRect(bx, GH - 120 - bh, 42, bh + 120);
+        ctx.fillRect(bx, GH - 150 - bh, 38, bh + 150);
     }
 
     // Neon ground
     ctx.fillStyle = '#1a1a2e';
-    ctx.fillRect(0, GH - 120, GW, 120);
+    ctx.fillRect(0, GH - 150, GW, 150);
 
     // Title
     ctx.textAlign = 'center';
@@ -2256,12 +2280,12 @@ function drawTitleScreen() {
 
     ctx.shadowColor = '#ff0066';
     ctx.fillStyle = '#ff0066';
-    ctx.font = '42px "Press Start 2P", monospace';
-    ctx.fillText('DRAGON', GW/2, 150);
+    ctx.font = '36px "Press Start 2P", monospace';
+    ctx.fillText('DRAGON', GW/2, 175);
 
     ctx.shadowColor = '#ff6600';
     ctx.fillStyle = '#ff6600';
-    ctx.fillText('FURY', GW/2, 210);
+    ctx.fillText('FURY', GW/2, 230);
 
     ctx.shadowBlur = 0;
 
@@ -2269,30 +2293,30 @@ function drawTitleScreen() {
     ctx.shadowBlur = 10;
     ctx.shadowColor = '#00ffff';
     ctx.fillStyle = '#00ffff';
-    ctx.font = '12px "Press Start 2P", monospace';
-    ctx.fillText('STREETS OF VENGEANCE', GW/2, 245);
+    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.fillText('STREETS OF VENGEANCE', GW/2, 262);
     ctx.shadowBlur = 0;
 
     // Tagline
     ctx.fillStyle = '#ff0066';
-    ctx.font = '9px "Press Start 2P", monospace';
-    ctx.fillText('A Dragon Fist Story', GW/2, 268);
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.fillText('A Dragon Fist Story', GW/2, 285);
 
     // Character preview
-    drawPlayerPreview(GW/2 - 16, 280);
+    drawPlayerPreview(GW/2 - 16, 300);
 
     // Press start blink
     if (Math.floor(titleBlinkTimer / 30) % 2 === 0) {
         ctx.fillStyle = '#ffffff';
-        ctx.font = '16px "Press Start 2P", monospace';
-        ctx.fillText('PRESS START', GW/2, 410);
+        ctx.font = '14px "Press Start 2P", monospace';
+        ctx.fillText('PRESS START', GW/2, 510);
     }
 
     // Controls hint
     ctx.fillStyle = '#888888';
-    ctx.font = '8px "Press Start 2P", monospace';
-    ctx.fillText('Z: PUNCH   X: JUMP   C: SPECIAL', GW/2, 440);
-    ctx.fillText('ARROW KEYS TO MOVE', GW/2, 458);
+    ctx.font = '7px "Press Start 2P", monospace';
+    ctx.fillText('Z: PUNCH   X: JUMP   C: SPECIAL', GW/2, 545);
+    ctx.fillText('ARROW KEYS TO MOVE', GW/2, 565);
 
     ctx.textAlign = 'left';
 }
@@ -2300,7 +2324,7 @@ function drawTitleScreen() {
 function drawPlayerPreview(x, y) {
     ctx.save();
     ctx.translate(x, y);
-    const s = 3;
+    const s = 2;
     // Simplified large player sprite
     ctx.fillStyle = C.hair;
     ctx.fillRect(8*s, 0, 16*s, 6*s);
@@ -2336,11 +2360,11 @@ function drawStageIntro() {
 
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ff0066';
-    ctx.font = '14px "Press Start 2P", monospace';
+    ctx.font = '12px "Press Start 2P", monospace';
     ctx.fillText('STAGE ' + (stageIndex + 1), GW/2, GH/2 - 30);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = '22px "Press Start 2P", monospace';
+    ctx.font = '18px "Press Start 2P", monospace';
     ctx.shadowBlur = 15;
     ctx.shadowColor = '#ff0066';
     ctx.fillText(stage.name, GW/2, GH/2 + 10);
@@ -2358,21 +2382,21 @@ function drawGameOver() {
     ctx.shadowBlur = 20;
     ctx.shadowColor = '#ff0000';
     ctx.fillStyle = '#ff0000';
-    ctx.font = '36px "Press Start 2P", monospace';
+    ctx.font = '30px "Press Start 2P", monospace';
     ctx.fillText('GAME OVER', GW/2, GH/2 - 40);
     ctx.shadowBlur = 0;
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = '14px "Press Start 2P", monospace';
+    ctx.font = '12px "Press Start 2P", monospace';
     ctx.fillText('CONTINUE?', GW/2, GH/2 + 10);
 
     const secs = Math.max(0, Math.ceil(continueTimer / 60));
     ctx.fillStyle = '#ffff00';
-    ctx.font = '28px "Press Start 2P", monospace';
+    ctx.font = '24px "Press Start 2P", monospace';
     ctx.fillText(secs.toString(), GW/2, GH/2 + 60);
 
     ctx.fillStyle = '#888888';
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '8px "Press Start 2P", monospace';
     ctx.fillText('PRESS START TO CONTINUE', GW/2, GH/2 + 100);
 
     ctx.textAlign = 'left';
@@ -2393,29 +2417,29 @@ function drawVictoryScreen() {
     ctx.shadowBlur = 20;
     ctx.shadowColor = '#ffff00';
     ctx.fillStyle = '#ffff00';
-    ctx.font = '28px "Press Start 2P", monospace';
-    ctx.fillText('VICTORY', GW/2, 70);
+    ctx.font = '24px "Press Start 2P", monospace';
+    ctx.fillText('VICTORY', GW/2, 80);
     ctx.shadowBlur = 0;
 
     ctx.fillStyle = '#00ffff';
-    ctx.font = '10px "Press Start 2P", monospace';
-    ctx.fillText('STREETS OF VENGEANCE', GW/2, 100);
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.fillText('STREETS OF VENGEANCE', GW/2, 110);
 
     ctx.fillStyle = '#00ffff';
-    ctx.font = '14px "Press Start 2P", monospace';
-    ctx.fillText('SCORE: ' + score.toString().padStart(7, '0'), GW/2, 140);
+    ctx.font = '12px "Press Start 2P", monospace';
+    ctx.fillText('SCORE: ' + score.toString().padStart(7, '0'), GW/2, 150);
 
     // The Dragon Fist Endures
     ctx.fillStyle = '#ff0066';
-    ctx.font = '10px "Press Start 2P", monospace';
-    ctx.fillText('THE DRAGON FIST ENDURES', GW/2, 175);
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.fillText('THE DRAGON FIST ENDURES', GW/2, 185);
 
-    drawPlayerPreview(GW/2 - 16, 200);
+    drawPlayerPreview(GW/2 - 16, 210);
 
     if (Math.floor(frameCount / 30) % 2 === 0) {
         ctx.fillStyle = '#ffffff';
-        ctx.font = '12px "Press Start 2P", monospace';
-        ctx.fillText('PRESS START', GW/2, 440);
+        ctx.font = '10px "Press Start 2P", monospace';
+        ctx.fillText('PRESS START', GW/2, 550);
     }
 
     ctx.textAlign = 'left';
@@ -2439,7 +2463,7 @@ function drawStoryScreen() {
     // Title bar for phase
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ff0066';
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '8px "Press Start 2P", monospace';
     if (storyPhase === 'INTRO') {
         ctx.fillText('STREETS OF VENGEANCE', GW/2, 40);
     } else if (storyPhase === 'PRE_STAGE') {
@@ -2460,16 +2484,16 @@ function drawStoryScreen() {
 
     // Draw completed lines
     ctx.textAlign = 'left';
-    const lineHeight = 28;
+    const lineHeight = 24;
     const startY = 100;
-    const maxWidth = GW - 100;
+    const maxWidth = GW - 120;
 
     for (let i = 0; i <= storyLineIndex && i < storyLines.length; i++) {
         const text = (i < storyLineIndex) ? storyLines[i] : storyLines[i].substring(0, storyCharIndex);
         const alpha = (i < storyLineIndex) ? 0.7 : 1.0;
         ctx.globalAlpha = alpha;
         ctx.fillStyle = (i === storyLineIndex) ? '#ffffff' : '#cccccc';
-        ctx.font = '10px "Press Start 2P", monospace';
+        ctx.font = '8px "Press Start 2P", monospace';
 
         // Word wrap
         wrapText(ctx, text, 50, startY + i * (lineHeight + 12), maxWidth, lineHeight);
@@ -2491,13 +2515,13 @@ function drawStoryScreen() {
     if (storyLineIndex < storyLines.length && storyCharIndex >= storyLines[storyLineIndex].length) {
         if (Math.floor(frameCount / 20) % 2 === 0) {
             ctx.fillStyle = '#888888';
-            ctx.font = '8px "Press Start 2P", monospace';
+            ctx.font = '7px "Press Start 2P", monospace';
             ctx.fillText('PRESS START TO CONTINUE', GW/2, GH - 30);
         }
     } else if (storyLineIndex >= storyLines.length) {
         if (Math.floor(frameCount / 20) % 2 === 0) {
             ctx.fillStyle = '#888888';
-            ctx.font = '8px "Press Start 2P", monospace';
+            ctx.font = '7px "Press Start 2P", monospace';
             ctx.fillText('PRESS START', GW/2, GH - 30);
         }
     }
@@ -2557,7 +2581,7 @@ function getWrappedLineOffset(ctx, text, maxWidth) {
             line = testLine;
         }
     }
-    return extraLines * 28;
+    return extraLines * 24;
 }
 
 function drawBossIntroScreen() {
@@ -2585,7 +2609,7 @@ function drawBossIntroScreen() {
     // Warning flash
     if (bossIntroTimer < 60 && Math.floor(bossIntroTimer / 4) % 2 === 0) {
         ctx.fillStyle = '#ff0000';
-        ctx.font = '10px "Press Start 2P", monospace';
+        ctx.font = '8px "Press Start 2P", monospace';
         ctx.fillText('!! WARNING !!', GW/2, GH/2 - 100);
     }
 
@@ -2593,13 +2617,13 @@ function drawBossIntroScreen() {
     ctx.shadowBlur = 20;
     ctx.shadowColor = '#ff0066';
     ctx.fillStyle = '#ff0066';
-    ctx.font = '24px "Press Start 2P", monospace';
+    ctx.font = '20px "Press Start 2P", monospace';
     ctx.fillText(bossIntroData.name, GW/2, GH/2 - 40);
     ctx.shadowBlur = 0;
 
     // Title
     ctx.fillStyle = '#ffff00';
-    ctx.font = '10px "Press Start 2P", monospace';
+    ctx.font = '8px "Press Start 2P", monospace';
     ctx.fillText(bossIntroData.title, GW/2, GH/2);
 
     // Divider
@@ -2613,14 +2637,14 @@ function drawBossIntroScreen() {
     // Quote
     ctx.textAlign = 'left';
     ctx.fillStyle = '#ffffff';
-    ctx.font = '9px "Press Start 2P", monospace';
-    wrapText(ctx, '"' + bossIntroData.quote + '"', GW * 0.15, GH/2 + 50, GW * 0.7, 22);
+    ctx.font = '8px "Press Start 2P", monospace';
+    wrapText(ctx, '"' + bossIntroData.quote + '"', GW * 0.15, GH/2 + 50, GW * 0.7, 20);
 
     // Prompt
     ctx.textAlign = 'center';
     if (bossIntroTimer > 30 && Math.floor(frameCount / 20) % 2 === 0) {
         ctx.fillStyle = '#888888';
-        ctx.font = '8px "Press Start 2P", monospace';
+        ctx.font = '7px "Press Start 2P", monospace';
         ctx.fillText('PRESS START TO FIGHT', GW/2, GH - 40);
     }
 
@@ -2639,16 +2663,16 @@ function drawMidStageDialogue() {
 
     // Semi-transparent text box at bottom
     ctx.fillStyle = 'rgba(0,0,0,0.8)';
-    ctx.fillRect(20, GH - 130, GW - 40, 80);
+    ctx.fillRect(20, GH - 150, GW - 40, 90);
     ctx.strokeStyle = '#ff006688';
     ctx.lineWidth = 2;
-    ctx.strokeRect(20, GH - 130, GW - 40, 80);
+    ctx.strokeRect(20, GH - 150, GW - 40, 90);
 
     // Text
     ctx.fillStyle = '#ffffff';
-    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.font = '7px "Press Start 2P", monospace';
     ctx.textAlign = 'left';
-    wrapText(ctx, midStageDialogue, 35, GH - 112, GW - 80, 18);
+    wrapText(ctx, midStageDialogue, 35, GH - 132, GW - 80, 16);
 
     ctx.globalAlpha = 1;
 }

@@ -71,29 +71,34 @@
             display: block;
         }
 
-        /* Joystick */
+        /* Floating Joystick - left half touch zone */
         #joy-zone {
             position: fixed;
-            bottom: 20px;
-            left: 20px;
-            width: 140px;
-            height: 140px;
+            top: 0;
+            left: 0;
+            width: 50vw;
+            height: 100vh;
             pointer-events: auto;
             touch-action: none;
         }
 
         #joy-container {
-            position: relative;
+            position: fixed;
             width: 120px;
             height: 120px;
             border-radius: 50%;
             background: rgba(255, 50, 50, 0.08);
             border: 2px solid rgba(255, 50, 50, 0.35);
-            display: flex;
+            display: none;
             justify-content: center;
             align-items: center;
             touch-action: none;
-            margin: 10px;
+            pointer-events: none;
+            z-index: 60;
+        }
+
+        #joy-container.visible {
+            display: flex;
         }
 
         #joy-stick {
@@ -192,8 +197,9 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-const GW = 640, GH = 480;
+const GW = 800, GH = 600;
 const TILE = 16;
+const SPR_SCALE = 1.4; // Sprite render scale (reduced from 2 for mobile)
 const GRAVITY = 0.55;
 const MAX_FALL = 9;
 
@@ -259,7 +265,7 @@ function drawSprite(spr, x, y, scale, flipX) {
     if (!spriteCache[key]) {
         const h = spr.length, w = spr[0].length;
         const oc = document.createElement('canvas');
-        oc.width = w * scale; oc.height = h * scale;
+        oc.width = Math.ceil(w * scale); oc.height = Math.ceil(h * scale);
         const ox = oc.getContext('2d');
         for (let r = 0; r < h; r++) {
             for (let c = 0; c < w; c++) {
@@ -693,12 +699,21 @@ const joyStick = document.getElementById('joy-stick');
 const joyZone = document.getElementById('joy-zone');
 let joyDragging = false;
 let joyTouchId = null;
+let joyBaseX = 0, joyBaseY = 0; // center of joystick base when placed
 const DEADZONE = 20;
-const maxJoyR = 45;
+const maxJoyR = 50;
+
+function showJoyAt(cx, cy) {
+    joyBaseX = cx;
+    joyBaseY = cy;
+    joyContainer.style.left = (cx - 60) + 'px';
+    joyContainer.style.top = (cy - 60) + 'px';
+    joyContainer.classList.add('visible');
+    joyStick.style.transform = 'translate(0,0)';
+}
 
 function updateJoy(cx, cy) {
-    const r = joyContainer.getBoundingClientRect();
-    let dx = cx - (r.left + r.width/2), dy = cy - (r.top + r.height/2);
+    let dx = cx - joyBaseX, dy = cy - joyBaseY;
     let d = Math.sqrt(dx*dx+dy*dy);
     if (d > maxJoyR) { dx = dx/d*maxJoyR; dy = dy/d*maxJoyR; }
     joyStick.style.transform = 'translate('+dx+'px,'+dy+'px)';
@@ -718,6 +733,7 @@ function resetJoy() {
     joystick.vx = 0;
     joystick.vy = 0;
     joyStick.style.transform = 'translate(0,0)';
+    joyContainer.classList.remove('visible');
 }
 
 joyZone.addEventListener('touchstart', function(e) {
@@ -725,10 +741,11 @@ joyZone.addEventListener('touchstart', function(e) {
     initAudio();
     for (let i = 0; i < e.changedTouches.length; i++) {
         if (joyTouchId === null) {
-            joyTouchId = e.changedTouches[i].identifier;
+            const t = e.changedTouches[i];
+            joyTouchId = t.identifier;
             joyDragging = true;
             joystick.active = true;
-            updateJoy(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+            showJoyAt(t.clientX, t.clientY);
         }
     }
 }, {passive:false});
@@ -757,10 +774,16 @@ joyZone.addEventListener('touchcancel', function(e) {
     }
 });
 
-// Mouse fallback for joystick
-joyZone.addEventListener('mousedown', function(e) { joyDragging = true; joystick.active = true; updateJoy(e.clientX, e.clientY); });
-window.addEventListener('mousemove', function(e) { if (joyDragging) updateJoy(e.clientX, e.clientY); });
-window.addEventListener('mouseup', function() { if (joyDragging) resetJoy(); });
+// Mouse fallback for floating joystick
+let joyMouseDown = false;
+joyZone.addEventListener('mousedown', function(e) {
+    joyMouseDown = true;
+    joyDragging = true;
+    joystick.active = true;
+    showJoyAt(e.clientX, e.clientY);
+});
+window.addEventListener('mousemove', function(e) { if (joyMouseDown && joyDragging) updateJoy(e.clientX, e.clientY); });
+window.addEventListener('mouseup', function() { if (joyMouseDown) { joyMouseDown = false; resetJoy(); } });
 
 // Button touch tracking with identifier
 const btnTouchIds = { jump: null, attack: null, dash: null, shuriken: null };
@@ -1297,7 +1320,7 @@ function drawParticles() {
 class Player {
     constructor(x, y) {
         this.x = safeNum(x, 48); this.y = safeNum(y, 384);
-        this.w = 14; this.h = 28;
+        this.w = 10; this.h = 20;
         this.vx = 0; this.vy = 0;
         this.facing = 1;
         this.onGround = false;
@@ -1375,13 +1398,13 @@ class Player {
             this.attackTimer = dur;
             this.animFrame = 0;
 
-            const hbw = this.combo === 3 ? 30 : 24;
-            const hbh = this.combo === 3 ? 24 : 18;
+            const hbw = this.combo === 3 ? 21 : 17;
+            const hbh = this.combo === 3 ? 17 : 13;
             const hbx = this.facing > 0 ? this.x + this.w : this.x - hbw;
-            const hby = this.y + (this.combo === 3 ? -4 : 4);
+            const hby = this.y + (this.combo === 3 ? -3 : 3);
             this.attackHitbox = { x: hbx, y: hby, w: hbw, h: hbh, damage: this.combo === 3 ? 2 : 1, hit: new Set() };
 
-            spawnSlashParticle(this.x + this.w/2 + this.facing * 12, this.y + this.h/2, this.facing, this.combo);
+            spawnSlashParticle(this.x + this.w/2 + this.facing * 8, this.y + this.h/2, this.facing, this.combo);
             playSound(this.combo === 1 ? 'slash' : this.combo === 2 ? 'slash2' : 'slash3');
         }
 
@@ -1390,8 +1413,8 @@ class Player {
             this.shurikens--;
             this.shurikenCooldown = 18;
             projectiles.push({
-                x: this.x + (this.facing > 0 ? this.w : -6), y: this.y + 10,
-                vx: this.facing * 7, vy: 0, w: 6, h: 6,
+                x: this.x + (this.facing > 0 ? this.w : -4), y: this.y + 7,
+                vx: this.facing * 7, vy: 0, w: 4, h: 4,
                 damage: 1, fromPlayer: true, life: 120, type: 'shuriken', rot: 0
             });
             playSound('shuriken');
@@ -1399,9 +1422,9 @@ class Player {
 
         // Update attack hitbox position
         if (this.attackHitbox) {
-            const hbw = this.combo === 3 ? 30 : 24;
+            const hbw = this.combo === 3 ? 21 : 17;
             this.attackHitbox.x = this.facing > 0 ? this.x + this.w : this.x - hbw;
-            this.attackHitbox.y = this.y + (this.combo === 3 ? -4 : 4);
+            this.attackHitbox.y = this.y + (this.combo === 3 ? -3 : 3);
         }
 
         // Dashing
@@ -1646,9 +1669,9 @@ class Player {
             ctx.globalAlpha = Math.max(0, 1 - this.deathTimer / 30);
         }
 
-        const sprW = spr[0].length * 2;
-        const sprH = spr.length * 2;
-        drawSprite(spr, sx - (sprW - this.w)/2, sy - (sprH - this.h) + 2, 2, flip);
+        const sprW = spr[0].length * SPR_SCALE;
+        const sprH = spr.length * SPR_SCALE;
+        drawSprite(spr, sx - (sprW - this.w)/2, sy - (sprH - this.h) + 2, SPR_SCALE, flip);
 
         ctx.globalAlpha = 1;
 
@@ -1659,9 +1682,9 @@ class Player {
             ctx.lineWidth = 2;
             ctx.shadowBlur = 8;
             ctx.shadowColor = this.combo === 3 ? '#ff0' : '#0ff';
-            const cx = sx + this.w/2 + this.facing * 18;
-            const cy = sy + this.h/2 + (this.combo === 3 ? -8 : 0);
-            const r = this.combo === 3 ? 20 : 16;
+            const cx = sx + this.w/2 + this.facing * 13;
+            const cy = sy + this.h/2 + (this.combo === 3 ? -6 : 0);
+            const r = this.combo === 3 ? 14 : 11;
             const aStart = this.facing > 0 ? -1.2 : 1.9;
             ctx.beginPath();
             ctx.arc(cx, cy, r, aStart, aStart + 1.5);
@@ -1679,7 +1702,7 @@ class Enemy {
     constructor(x, y, type) {
         this.x = safeNum(x, 0); this.y = safeNum(y, 0);
         this.type = type;
-        this.w = 14; this.h = 26;
+        this.w = 10; this.h = 18;
         this.vx = 0; this.vy = 0;
         this.facing = -1;
         this.onGround = false;
@@ -1738,8 +1761,8 @@ class Enemy {
                 this.shootTimer--;
                 if (this.shootTimer <= 0 && dist < 250 && !player.dead) {
                     projectiles.push({
-                        x: this.x + (this.facing > 0 ? this.w : -8), y: this.y + 10,
-                        vx: this.facing * 4, vy: 0, w: 8, h: 3,
+                        x: this.x + (this.facing > 0 ? this.w : -6), y: this.y + 7,
+                        vx: this.facing * 4, vy: 0, w: 6, h: 2,
                         damage: 1, fromPlayer: false, life: 150, type: 'arrow'
                     });
                     this.shootTimer = this.shootCooldown;
@@ -1821,7 +1844,7 @@ class Enemy {
             if (Math.random() < 0.3) {
                 const types = ['health','scroll','ammo'];
                 const t = types[Math.floor(Math.random()*types.length)];
-                pickups.push({ x: this.x, y: this.y, w: 12, h: 12, type: t, vy: -3, life: 600 });
+                pickups.push({ x: this.x, y: this.y, w: 8, h: 8, type: t, vy: -3, life: 600 });
             }
         }
     }
@@ -1838,9 +1861,9 @@ class Enemy {
         const flip = this.facing < 0;
         const spr = this.type === 'guard' ?
             (Math.abs(this.vx) > 0.5 ? SPR_GUARD_RUN : SPR_GUARD) : SPR_ARCHER;
-        const sprW = spr[0].length * 2;
-        const sprH = spr.length * 2;
-        drawSprite(spr, sx - (sprW-this.w)/2, sy - (sprH-this.h)+2, 2, flip);
+        const sprW = spr[0].length * SPR_SCALE;
+        const sprH = spr.length * SPR_SCALE;
+        drawSprite(spr, sx - (sprW-this.w)/2, sy - (sprH-this.h)+2, SPR_SCALE, flip);
 
         ctx.globalAlpha = 1;
 
@@ -1898,12 +1921,12 @@ function drawProjectiles() {
         if (sx < -20 || sx > GW+20) continue;
         if (p.type === 'shuriken') {
             ctx.save();
-            ctx.translate(sx+3, sy+3);
+            ctx.translate(sx+2, sy+2);
             ctx.rotate(p.rot||0);
-            drawSprite(SPR_SHURIKEN, -6, -6, 2, false);
+            drawSprite(SPR_SHURIKEN, -4, -4, SPR_SCALE, false);
             ctx.restore();
         } else {
-            drawSprite(SPR_ARROW, sx, sy, 2, p.vx < 0);
+            drawSprite(SPR_ARROW, sx, sy, SPR_SCALE, p.vx < 0);
         }
     }
 }
@@ -1951,7 +1974,7 @@ function drawPickups() {
         if (sx < -20 || sx > GW+20) continue;
         const bob = Math.sin(frameCount * 0.08) * 2;
         const spr = p.type === 'health' ? SPR_HEART : p.type === 'scroll' ? SPR_SCROLL : SPR_AMMO;
-        drawSprite(spr, sx, sy + bob, 2, false);
+        drawSprite(spr, sx, sy + bob, SPR_SCALE, false);
     }
 }
 
@@ -2049,12 +2072,12 @@ function drawBackground() {
     // Stars
     ctx.fillStyle = '#fff';
     for (let i = 0; i < 60; i++) {
-        const sx = ((i * 137 + 50) % 800) - (camera.x * 0.02) % 800;
-        const sy = ((i * 97 + 30) % 300);
+        const sx = ((i * 137 + 50) % GW) - (camera.x * 0.02) % GW;
+        const sy = ((i * 97 + 30) % (GH / 2));
         const blink = Math.sin(frameCount * 0.02 + i) > 0.3;
         if (blink) {
             ctx.globalAlpha = 0.3 + (Math.sin(frameCount*0.03+i*2)*0.3);
-            ctx.fillRect(sx < 0 ? sx + 800 : sx, sy, 1 + (i%3===0?1:0), 1);
+            ctx.fillRect(sx < 0 ? sx + GW : sx, sy, 1 + (i%3===0?1:0), 1);
         }
     }
     ctx.globalAlpha = 1;
@@ -2303,12 +2326,12 @@ function spawnLevelEntities() {
         spawnGuard(200); spawnGuard(400); spawnGuard(600); spawnGuard(900);
         spawnArcher(15*TILE, 20*TILE);
         spawnArcher(60*TILE, 16*TILE);
-        pickups.push({ x: 12*TILE, y: 22*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
-        pickups.push({ x: 22*TILE, y: 16*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
-        pickups.push({ x: 50*TILE, y: 20*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
-        pickups.push({ x: 73*TILE, y: 8*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
-        pickups.push({ x: 35*TILE, y: 24*TILE, w: 12, h: 12, type: 'health', vy: 0, life: 999999 });
-        pickups.push({ x: 55*TILE, y: 18*TILE, w: 12, h: 12, type: 'ammo', vy: 0, life: 999999 });
+        pickups.push({ x: 12*TILE, y: 22*TILE, w: 8, h: 8, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 22*TILE, y: 16*TILE, w: 8, h: 8, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 50*TILE, y: 20*TILE, w: 8, h: 8, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 73*TILE, y: 8*TILE, w: 8, h: 8, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 35*TILE, y: 24*TILE, w: 8, h: 8, type: 'health', vy: 0, life: 999999 });
+        pickups.push({ x: 55*TILE, y: 18*TILE, w: 8, h: 8, type: 'ammo', vy: 0, life: 999999 });
     } else if (currentLevel === 1) {
         spawnGuard(150); spawnGuard(300); spawnGuard(450); spawnGuard(600);
         spawnGuard(800); spawnGuard(950); spawnGuard(1100); spawnGuard(1300);
@@ -2316,12 +2339,12 @@ function spawnLevelEntities() {
         spawnArcher(36*TILE, 15*TILE);
         spawnArcher(62*TILE, 14*TILE);
         spawnArcher(76*TILE, 12*TILE);
-        pickups.push({ x: 10*TILE, y: 22*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
-        pickups.push({ x: 49*TILE, y: 8*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
-        pickups.push({ x: 70*TILE, y: 10*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
-        pickups.push({ x: 30*TILE, y: 18*TILE, w: 12, h: 12, type: 'health', vy: 0, life: 999999 });
-        pickups.push({ x: 65*TILE, y: 20*TILE, w: 12, h: 12, type: 'health', vy: 0, life: 999999 });
-        pickups.push({ x: 45*TILE, y: 10*TILE, w: 12, h: 12, type: 'ammo', vy: 0, life: 999999 });
+        pickups.push({ x: 10*TILE, y: 22*TILE, w: 8, h: 8, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 49*TILE, y: 8*TILE, w: 8, h: 8, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 70*TILE, y: 10*TILE, w: 8, h: 8, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 30*TILE, y: 18*TILE, w: 8, h: 8, type: 'health', vy: 0, life: 999999 });
+        pickups.push({ x: 65*TILE, y: 20*TILE, w: 8, h: 8, type: 'health', vy: 0, life: 999999 });
+        pickups.push({ x: 45*TILE, y: 10*TILE, w: 8, h: 8, type: 'ammo', vy: 0, life: 999999 });
     } else {
         spawnGuard(150); spawnGuard(350); spawnGuard(500); spawnGuard(700);
         spawnGuard(900); spawnGuard(1050); spawnGuard(1200);
@@ -2329,12 +2352,12 @@ function spawnLevelEntities() {
         spawnArcher(28*TILE, 16*TILE);
         spawnArcher(53*TILE, 15*TILE);
         spawnArcher(76*TILE, 15*TILE);
-        pickups.push({ x: 20*TILE, y: 18*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
-        pickups.push({ x: 39*TILE, y: 6*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
-        pickups.push({ x: 67*TILE, y: 8*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
-        pickups.push({ x: 48*TILE, y: 20*TILE, w: 12, h: 12, type: 'health', vy: 0, life: 999999 });
-        pickups.push({ x: 78*TILE, y: 20*TILE, w: 12, h: 12, type: 'health', vy: 0, life: 999999 });
-        pickups.push({ x: 58*TILE, y: 12*TILE, w: 12, h: 12, type: 'ammo', vy: 0, life: 999999 });
+        pickups.push({ x: 20*TILE, y: 18*TILE, w: 8, h: 8, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 39*TILE, y: 6*TILE, w: 8, h: 8, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 67*TILE, y: 8*TILE, w: 8, h: 8, type: 'scroll', vy: 0, life: 999999 });
+        pickups.push({ x: 48*TILE, y: 20*TILE, w: 8, h: 8, type: 'health', vy: 0, life: 999999 });
+        pickups.push({ x: 78*TILE, y: 20*TILE, w: 8, h: 8, type: 'health', vy: 0, life: 999999 });
+        pickups.push({ x: 58*TILE, y: 12*TILE, w: 8, h: 8, type: 'ammo', vy: 0, life: 999999 });
     }
 }
 

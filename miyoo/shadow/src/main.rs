@@ -10,24 +10,36 @@ const SCREEN_H: f32 = 480.0;
 const TILE: f32 = 16.0;
 const MAP_ROWS: usize = 30; // 480 / 16
 const MAP_COLS: usize = 260;
-const GRAVITY: f32 = 0.5;
-const MAX_FALL: f32 = 8.0;
-const PLAYER_SPEED: f32 = 4.0;
-const JUMP_VEL: f32 = -10.0;
-const JUMP_HOLD_MAX: i32 = 12;
-const DASH_SPEED: f32 = 16.0;
-const DASH_FRAMES: i32 = 6;
-const SLIDE_FRAMES: i32 = 10;
-const SHURIKEN_SPEED: f32 = 8.0;
-const SHURIKEN_COOLDOWN: i32 = 15;
-const ARROW_SPEED: f32 = 5.0;
+const GRAVITY: f32 = 0.55;
+const MAX_FALL: f32 = 9.0;
+const PLAYER_SPEED: f32 = 3.5;
+const JUMP_VEL: f32 = -9.5;
+const JUMP_HOLD_MAX: i32 = 10;
+const DASH_SPEED: f32 = 14.0;
+const DASH_FRAMES: i32 = 7;
+const SLIDE_FRAMES: i32 = 12;
+const SLIDE_SPEED: f32 = 6.0;
+const SHURIKEN_SPEED: f32 = 7.0;
+const SHURIKEN_COOLDOWN: i32 = 18;
+const ARROW_SPEED: f32 = 4.0;
 const MAX_PARTICLES: usize = 200;
+#[allow(dead_code)]
 const MAX_ENEMIES: usize = 20;
 const MAX_PROJECTILES: usize = 30;
-const COMBO_WINDOW: i32 = 20;
-const ATTACK_DURATION: i32 = 12;
-const INVULN_FRAMES: i32 = 40;
+const COMBO_WINDOW: i32 = 18;
+const ATTACK_DURATION: i32 = 10;
+const ATTACK_DURATION_COMBO3: i32 = 14;
+const INVULN_FRAMES: i32 = 45;
 const CAMERA_MARGIN: f32 = 64.0;
+const WALL_SLIDE_SPEED: f32 = 1.5;
+const COYOTE_TIME: i32 = 6;
+const JUMP_BUFFER: i32 = 5;
+const GUARD_PATROL_SPEED: f32 = 1.2;
+const GUARD_CHASE_SPEED: f32 = 2.8;
+const GUARD_DETECT_RANGE: f32 = 200.0;
+const GUARD_CHASE_RANGE: f32 = 130.0;
+const ARCHER_DETECT_RANGE: f32 = 250.0;
+const ARCHER_COOLDOWN: i32 = 90;
 
 // Tile types
 const TILE_EMPTY: u8 = 0;
@@ -53,6 +65,14 @@ fn palette(ch: char) -> Option<Color> {
         'D' => Some(Color::new(0.2, 0.2, 0.2, 1.0)),
         'S' => Some(Color::new(0.75, 0.75, 0.75, 1.0)),
         'M' => Some(MAGENTA),
+        'r' => Some(Color::new(0.5, 0.0, 0.0, 1.0)),
+        'g' => Some(Color::new(0.22, 0.5, 0.22, 1.0)),
+        'b' => Some(Color::new(0.0, 0.0, 0.27, 1.0)),
+        'L' => Some(Color::new(0.4, 0.4, 0.4, 1.0)),
+        'T' => Some(Color::new(0.65, 0.32, 0.13, 1.0)),
+        'H' => Some(Color::new(1.0, 0.8, 0.8, 1.0)),
+        'E' => Some(Color::new(0.8, 0.0, 0.0, 1.0)),
+        'F' => Some(Color::new(1.0, 0.67, 0.0, 1.0)),
         _ => None,
     }
 }
@@ -81,178 +101,271 @@ fn sprite_to_texture(rows: &[&str], w: usize, h: usize) -> Texture2D {
 
 fn ninja_idle_sprite() -> Vec<&'static str> {
     vec![
-        "......KKKK......",
-        ".....KDDDDK.....",
-        ".....KDWWDK.....",
-        ".....KKRRKK.....",
-        "......KKKK......",
-        ".....KDDDDK.....",
-        "....KDDDDDDDK...",
-        "...KDDCDDDDDK..",
-        "...KDDDDDDDDDK.",
-        "....KDDDDDDDK..",
-        ".....KDDDDDK...",
-        ".....KDDDDDK...",
-        "......KDDDK....",
-        ".....KK..KK....",
-        "....KDK..KDK...",
-        "....KKK..KKK...",
+        "....KKKKKK......",
+        "...KDDDDDDDK....",
+        "...KDDDDDDDK....",
+        "...KKRRKKRRKKK...",
+        "....KWWKKWWK.....",
+        "....KKKKKKK......",
+        ".....KHHHK.......",
+        "....KKDDDKK......",
+        "...KDDKDKDDK.....",
+        "..KDDDDDDDDDK...",
+        "..KDDDDDDDDDK...",
+        "..KDDDDDDDDDK...",
+        "...KDDDDDDDDK...",
+        "...KDDDDDDDK....",
+        "....KDDDDDK.....",
+        "....KDDKDDK.....",
+        "...KDK..KDDK....",
+        "...KDK..KDDK....",
+        "..KKK...KKKK....",
     ]
 }
 
-fn ninja_run_sprite() -> Vec<&'static str> {
+fn ninja_run1_sprite() -> Vec<&'static str> {
     vec![
-        "......KKKK......",
-        ".....KDDDDK.....",
-        ".....KDWWDK.....",
-        ".....KKRRKK.....",
-        "......KKKK......",
+        "....KKKKKK......",
+        "...KDDDDDDDK....",
+        "...KDDDDDDDK....",
+        "...KKRRKKRRKKK...",
+        "....KWWKKWWK.....",
+        "....KKKKKKK......",
+        ".....KHHHK.......",
+        "...KKDDDKKK......",
+        "..KDDKDKDDDK....",
+        "..KDDDDDDDDDK...",
+        "..KDDDDDDDDDK...",
+        "...KDDDDDDDK....",
         "....KDDDDDK.....",
-        "...KDDDDDDDDK..",
-        "..KDDCDDDDDDDK.",
-        "...KDDDDDDDDDK.",
-        "....KDDDDDDDK..",
-        "....KKDDDDKK...",
-        "...KDK....KDK..",
-        "..KDK......KDK.",
-        "..KK........KK.",
-        "................",
-        "................",
+        "...KDDK.KDDK....",
+        "..KDDK...KDDK...",
+        "..KKK.....KK....",
+    ]
+}
+
+fn ninja_run2_sprite() -> Vec<&'static str> {
+    vec![
+        "....KKKKKK......",
+        "...KDDDDDDDK....",
+        "...KDDDDDDDK....",
+        "...KKRRKKRRKKK...",
+        "....KWWKKWWK.....",
+        "....KKKKKKK......",
+        ".....KHHHK.......",
+        "...KKDDDKKK......",
+        "..KDDKDKDDDK....",
+        "..KDDDDDDDDDK...",
+        "..KDDDDDDDDDK...",
+        "...KDDDDDDDK....",
+        "...KKDDDDKK.....",
+        "..KDDK..KDDK....",
+        ".KDDK....KDDK...",
+        ".KKK......KKK...",
     ]
 }
 
 fn ninja_jump_sprite() -> Vec<&'static str> {
     vec![
-        "......KKKK......",
-        ".....KDDDDK.....",
-        ".....KDWWDK.....",
-        ".....KKRRKK.....",
-        "......KKKK......",
-        "....KKDDDKKK....",
-        "...KDDDDDDDDDK.",
-        "..KDDDCDDDDDDDK",
-        "...KDDDDDDDDDK.",
-        "....KDDDDDDDK..",
-        ".....KDDDDDK...",
-        "....KDK..KDK...",
-        "...KDK....KDK..",
-        "...KK......KK..",
-        "................",
-        "................",
+        "....KKKKKK......",
+        "...KDDDDDDDK....",
+        "...KDDDDDDDK....",
+        "...KKRRKKRRKKK...",
+        "....KWWKKWWK.....",
+        "....KKKKKKK......",
+        ".....KHHHK.......",
+        ".KKKKDDDKKKKK....",
+        "KDDDDKDKDDDDK...",
+        ".KDDDDDDDDDK....",
+        "..KDDDDDDDK.....",
+        "...KDDDDDK......",
+        "...KDDKDDK......",
+        "..KDDK.KDDK.....",
+        "..KKK..KDDK.....",
+        ".......KKK......",
     ]
 }
 
-fn ninja_attack_sprite() -> Vec<&'static str> {
+fn ninja_attack1_sprite() -> Vec<&'static str> {
     vec![
-        "......KKKK......",
-        ".....KDDDDKCCCC.",
-        ".....KDWWDKCCCC.",
-        ".....KKRRKKCCCC.",
-        "......KKKKCCCC..",
-        "....KDDDDDDCCCC.",
-        "...KDDDDDDDDCCCC",
-        "..KDDCDDDDDDCCCC",
-        "...KDDDDDDDDDK.",
-        "....KDDDDDDDK..",
-        ".....KDDDDDK...",
-        ".....KK..KK....",
-        "....KDK..KDK...",
-        "....KKK..KKK...",
-        "................",
-        "................",
+        "....KKKKKK......",
+        "...KDDDDDDDK....",
+        "...KDDDDDDDK....",
+        "...KKRRKKRRKKK...",
+        "....KWWKKWWK.....",
+        "....KKKKKKK......",
+        ".....KHHHK.......",
+        "...KKDDDKKKKSSSK.",
+        "..KDDKDKDDDKSSWSK",
+        "..KDDDDDDDDKKSSK.",
+        "..KDDDDDDDDDK...",
+        "...KDDDDDDDK....",
+        "....KDDDDDK.....",
+        "....KDDKDDK.....",
+        "...KDK..KDDK....",
+        "..KKK...KKKK....",
+    ]
+}
+
+fn ninja_attack2_sprite() -> Vec<&'static str> {
+    vec![
+        "....KKKKKK......",
+        "...KDDDDDDDK....",
+        "...KDDDDDDDK....",
+        "...KKRRKKRRKKK...",
+        "....KWWKKWWK.....",
+        "....KKKKKKK......",
+        ".....KHHHK.......",
+        ".KSSSKDDDKKK.....",
+        "KSWSKKDKDDDDK...",
+        ".KSSKDDDDDDDK...",
+        "..KDDDDDDDDDK...",
+        "...KDDDDDDDK....",
+        "....KDDDDDK.....",
+        "....KDDKDDK.....",
+        "...KDK..KDDK....",
+        "..KKK...KKKK....",
+    ]
+}
+
+fn ninja_attack3_sprite() -> Vec<&'static str> {
+    vec![
+        "....KSSKK........",
+        "...KSWSKK........",
+        "....KSSK.........",
+        "....KKKKKK.......",
+        "...KDDDDDDDK....",
+        "...KDDDDDDDK....",
+        "...KKRRKKRRKKK...",
+        "....KWWKKWWK.....",
+        "....KKKKKKK......",
+        ".....KHHHK.......",
+        "...KKDDDKKK......",
+        "..KDDKDKDDDDK...",
+        "..KDDDDDDDDDK...",
+        "...KDDDDDDDK....",
+        "....KDDDDDK.....",
+        "...KDDKKDDK.....",
+        "..KDDK..KDDK....",
+        "..KKK...KKKK....",
     ]
 }
 
 fn guard_sprite() -> Vec<&'static str> {
     vec![
-        "....KKKK....",
-        "...KGGGSK...",
-        "...KGSSGK...",
-        "...KKGGKK...",
-        "....KKKK....",
-        "...KGGSSGK..",
-        "..KGGSSGGGK.",
-        "..KGGGGGGKK.",
-        "...KGGGGGK..",
-        "....KGGGK...",
-        "...KGK.KGK..",
-        "..KGK...KGK.",
-        "..KK.....KK.",
-        "............",
+        "...KKKKKK...",
+        "..KLLLLLLK..",
+        "..KLLLLLLK..",
+        "..KKWKKWKK..",
+        "...KHHHHK...",
+        "...KKKKK....",
+        "..KTTTTTK...",
+        "..KTTKTTK...",
+        ".KTTTTTTTK..",
+        ".KTTTTTTTK..",
+        "..KTTTTTK...",
+        "..KTTTTTK...",
+        "...KTTTK....",
+        "..KTKKTK....",
+        "..KTK.KTK...",
+        "..KKK.KKK...",
+    ]
+}
+
+fn guard_run_sprite() -> Vec<&'static str> {
+    vec![
+        "...KKKKKK...",
+        "..KLLLLLLK..",
+        "..KLLLLLLK..",
+        "..KKWKKWKK..",
+        "...KHHHHK...",
+        "...KKKKK....",
+        "..KTTTTTK...",
+        "..KTTKTTK...",
+        ".KTTTTTTTK..",
+        ".KTTTTTTTK..",
+        "..KTTTTTK...",
+        "...KTTTK....",
+        "..KTKKTK....",
+        ".KTK...KTK..",
+        ".KK.....KK..",
     ]
 }
 
 fn archer_sprite() -> Vec<&'static str> {
     vec![
-        "....KKKK....",
-        "...KPDDPK...",
-        "...KPWWPK...",
-        "...KKPPKK...",
-        "....KKKK....",
-        "...KPDDPK...",
-        "..KPDDDDPK..",
-        "..KPDDDDPKN.",
-        "..KPDDDDPKNK",
-        "...KPDDPK.NK",
-        "....KPPK..NK",
-        "...KPK.KPK..",
-        "..KPK...KPK.",
-        "..KK.....KK.",
+        "...KKKKKK...",
+        "..KrrrrrK...",
+        "..KrrrrrK...",
+        "..KKWKKWKK..",
+        "...KHHHHK...",
+        "...KKKKK....",
+        "..KPPPPPK...",
+        "..KPPKPPK...",
+        ".KPPPPPPPK..",
+        ".KPPPPPPPK..",
+        "..KPPPPPK...",
+        "..KPPPPPK...",
+        "...KPPPK....",
+        "..KPKKPK....",
+        "..KPK.KPK...",
+        "..KKK.KKK...",
     ]
 }
 
 fn heart_sprite() -> Vec<&'static str> {
     vec![
-        "........",
-        ".RR.RR..",
-        "RRRRRR..",
-        "RRRRRR..",
-        ".RRRR...",
-        "..RR....",
-        "........",
-        "........",
+        "..K..K..",
+        ".KRK.KRK",
+        "KRRRKRRK",
+        "KRRRRRRK",
+        "KRRRRRRK",
+        ".KRRRRK.",
+        "..KRRK..",
+        "...KK...",
     ]
 }
 
 fn scroll_sprite() -> Vec<&'static str> {
     vec![
-        "..YYYY..",
-        ".YNNNY..",
-        ".YNNNY..",
-        ".YNNNY..",
-        ".YNNNY..",
-        ".YNNNY..",
-        "..YYYY..",
-        "........",
+        ".KKKKKK.",
+        "KYYYYYK.",
+        "KYNNNYK.",
+        "KYNNNYK.",
+        "KYNNNYK.",
+        "KYNNNYK.",
+        "KYYYYYK.",
+        ".KKKKKK.",
     ]
 }
 
 fn ammo_sprite() -> Vec<&'static str> {
     vec![
-        "...SS...",
-        "..SSSS..",
-        ".SSSSSS.",
-        "..SSSS..",
-        "...SS...",
-        "........",
-        "........",
-        "........",
+        "..KK....",
+        ".KSSK...",
+        "KSSSSKK.",
+        ".KSSKSS.",
+        "..KKSSSK",
+        "...KSSK.",
+        "....KK..",
     ]
 }
 
 fn shuriken_proj_sprite() -> Vec<&'static str> {
     vec![
-        ".SS.",
-        "SSSS",
-        "SSSS",
-        ".SS.",
+        "..KK..",
+        ".KSSK.",
+        "KSSSK.",
+        ".KSSKK",
+        ".KSSK.",
+        "..KK..",
     ]
 }
 
 fn arrow_proj_sprite() -> Vec<&'static str> {
     vec![
-        "NNNN",
-        ".....",
+        "KKKKKKYY",
+        "KKKKKKNN",
     ]
 }
 
@@ -300,19 +413,38 @@ struct Player {
     facing: f32, // 1.0 right, -1.0 left
     on_ground: bool,
     on_wall: i32, // 0=none, 1=right wall, -1=left wall
+    wall_sliding: bool,
     jump_held: i32,
+    coyote_time: i32,
+    jump_buffered: i32,
     can_dash: bool,
     dashing: i32,
+    dash_dir: f32,
     sliding: i32,
     attacking: i32,
+    attack_timer: i32,
     combo: i32,
-    combo_timer: i32,
+    combo_window: i32,
     shuriken: i32,
     shuriken_cd: i32,
     invuln: i32,
     dead: bool,
+    death_timer: i32,
     anim_timer: i32,
     score: i32,
+    state: PlayerState,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum PlayerState {
+    Idle,
+    Run,
+    Jump,
+    Fall,
+    Attack,
+    Dash,
+    Slide,
+    WallSlide,
 }
 
 impl Player {
@@ -320,24 +452,31 @@ impl Player {
         Self {
             x, y,
             vx: 0.0, vy: 0.0,
-            w: 16.0, h: 28.0,
+            w: 14.0, h: 28.0,
             hp: 5, max_hp: 5,
             facing: 1.0,
             on_ground: false,
             on_wall: 0,
+            wall_sliding: false,
             jump_held: 0,
+            coyote_time: 0,
+            jump_buffered: 0,
             can_dash: true,
             dashing: 0,
+            dash_dir: 1.0,
             sliding: 0,
             attacking: 0,
+            attack_timer: 0,
             combo: 0,
-            combo_timer: 0,
-            shuriken: 10,
+            combo_window: 0,
+            shuriken: 15,
             shuriken_cd: 0,
             invuln: 0,
             dead: false,
+            death_timer: 0,
             anim_timer: 0,
             score: 0,
+            state: PlayerState::Idle,
         }
     }
 
@@ -348,9 +487,11 @@ impl Player {
     }
 
     fn attack_rect(&self) -> Rect {
-        let range = if self.combo == 3 { 28.0 } else { 22.0 };
-        let ax = if self.facing > 0.0 { self.x + self.w } else { self.x - range };
-        Rect::new(ax, self.y, range, self.h)
+        let hbw = if self.combo == 3 { 30.0 } else { 24.0 };
+        let hbh = if self.combo == 3 { 24.0 } else { 18.0 };
+        let ax = if self.facing > 0.0 { self.x + self.w } else { self.x - hbw };
+        let ay = self.y + if self.combo == 3 { -4.0 } else { 4.0 };
+        Rect::new(ax, ay, hbw, hbh)
     }
 }
 
@@ -365,11 +506,17 @@ struct Enemy {
     h: f32,
     hp: i32,
     facing: f32,
+    on_ground: bool,
     patrol_left: f32,
     patrol_right: f32,
+    chasing: bool,
     shoot_timer: i32,
+    stun_timer: i32,
     hurt_timer: i32,
+    dead: bool,
+    death_timer: i32,
     score_val: i32,
+    anim_timer: i32,
 }
 
 impl Enemy {
@@ -474,6 +621,7 @@ enum StoryCallback {
     None,
     StartLevelIntro,   // After backstory, show level intro
     BeginLevel,        // After level intro, start playing
+    #[allow(dead_code)]
     ShowPostLevel,     // Not used directly; we call advance_level
     AdvanceAfterPost,  // After post-level story, advance to next level or victory
 }
@@ -649,12 +797,18 @@ struct Game {
     wall_sparks: Vec<WallSpark>,
     hit_stop: i32,
     grass_tufts: Vec<GrassTuft>,
+    // Hit flash
+    hit_flash: i32,
     // Textures
     tex_ninja_idle: Texture2D,
-    tex_ninja_run: Texture2D,
+    tex_ninja_run1: Texture2D,
+    tex_ninja_run2: Texture2D,
     tex_ninja_jump: Texture2D,
-    tex_ninja_attack: Texture2D,
+    tex_ninja_attack1: Texture2D,
+    tex_ninja_attack2: Texture2D,
+    tex_ninja_attack3: Texture2D,
     tex_guard: Texture2D,
+    tex_guard_run: Texture2D,
     tex_archer: Texture2D,
     tex_heart: Texture2D,
     tex_scroll: Texture2D,
@@ -717,27 +871,33 @@ fn generate_level(lvl: usize) -> (Vec<Vec<u8>>, Vec<Enemy>, Vec<Pickup>, usize) 
         for ty in 20..h {
             let t = if tile_x < map[0].len() && ty < map.len() { map[ty][tile_x] } else { 0 };
             if t == TILE_GROUND || t == TILE_WALL {
-                spawn_y = ty as f32 * TILE - 28.0;
+                spawn_y = ty as f32 * TILE - 26.0;
                 break;
             }
         }
-        let patrol_range = 80.0;
+        let patrol_range = 60.0;
         enemies.push(Enemy {
             active: true,
             kind: EnemyKind::Guard,
             x: gx,
             y: spawn_y,
-            vx: 1.5,
+            vx: 0.0,
             vy: 0.0,
-            w: 16.0,
-            h: 28.0,
+            w: 14.0,
+            h: 26.0,
             hp: 2,
-            facing: 1.0,
+            facing: -1.0,
+            on_ground: false,
             patrol_left: (gx - patrol_range).max(0.0),
             patrol_right: gx + patrol_range,
+            chasing: false,
             shoot_timer: 0,
+            stun_timer: 0,
             hurt_timer: 0,
+            dead: false,
+            death_timer: 0,
             score_val: 100,
+            anim_timer: 0,
         });
     }
 
@@ -748,7 +908,7 @@ fn generate_level(lvl: usize) -> (Vec<Vec<u8>>, Vec<Enemy>, Vec<Pickup>, usize) 
         for ty in start_ty..h {
             let t = if tx < map[0].len() && ty < map.len() { map[ty][tx] } else { 0 };
             if t == TILE_GROUND || t == TILE_WALL || t == TILE_PLATFORM {
-                spawn_y = ty as f32 * TILE - 28.0;
+                spawn_y = ty as f32 * TILE - 26.0;
                 break;
             }
         }
@@ -759,15 +919,21 @@ fn generate_level(lvl: usize) -> (Vec<Vec<u8>>, Vec<Enemy>, Vec<Pickup>, usize) 
             y: spawn_y,
             vx: 0.0,
             vy: 0.0,
-            w: 16.0,
-            h: 28.0,
+            w: 14.0,
+            h: 26.0,
             hp: 1,
             facing: -1.0,
+            on_ground: false,
             patrol_left: ax,
             patrol_right: ax,
-            shoot_timer: 60,
+            chasing: false,
+            shoot_timer: 60 + (rand::gen_range(0.0, 40.0) as i32),
+            stun_timer: 0,
             hurt_timer: 0,
+            dead: false,
+            death_timer: 0,
             score_val: 150,
+            anim_timer: 0,
         });
     }
 
@@ -987,6 +1153,7 @@ fn is_solid(map: &[Vec<u8>], x: f32, y: f32) -> bool {
     t == TILE_GROUND || t == TILE_WALL
 }
 
+#[allow(dead_code)]
 fn is_solid_or_platform_top(map: &[Vec<u8>], x: f32, y: f32, vy: f32, foot_y: f32) -> bool {
     let t = tile_at(map, x, y);
     if t == TILE_GROUND || t == TILE_WALL {
@@ -1041,6 +1208,7 @@ fn spawn_particles(particles: &mut Vec<Particle>, x: f32, y: f32, count: usize, 
     }
 }
 
+#[allow(dead_code)]
 fn spawn_blood_particles(particles: &mut Vec<Particle>, x: f32, y: f32) {
     let count = rand::gen_range(5, 9) as usize;
     for _ in 0..count {
@@ -1094,6 +1262,7 @@ fn spawn_slash_particles(particles: &mut Vec<Particle>, x: f32, y: f32, facing: 
     }
 }
 
+#[allow(dead_code)]
 fn spawn_dash_trail(particles: &mut Vec<Particle>, x: f32, y: f32, h: f32) {
     for _ in 0..3 {
         let p = Particle {
@@ -1163,17 +1332,22 @@ impl Game {
             wall_sparks: Vec::with_capacity(30),
             hit_stop: 0,
             grass_tufts,
-            tex_ninja_idle: sprite_to_texture(&ninja_idle_sprite(), 16, 16),
-            tex_ninja_run: sprite_to_texture(&ninja_run_sprite(), 16, 16),
+            hit_flash: 0,
+            tex_ninja_idle: sprite_to_texture(&ninja_idle_sprite(), 16, 19),
+            tex_ninja_run1: sprite_to_texture(&ninja_run1_sprite(), 16, 16),
+            tex_ninja_run2: sprite_to_texture(&ninja_run2_sprite(), 16, 16),
             tex_ninja_jump: sprite_to_texture(&ninja_jump_sprite(), 16, 16),
-            tex_ninja_attack: sprite_to_texture(&ninja_attack_sprite(), 16, 16),
-            tex_guard: sprite_to_texture(&guard_sprite(), 12, 14),
-            tex_archer: sprite_to_texture(&archer_sprite(), 14, 14),
+            tex_ninja_attack1: sprite_to_texture(&ninja_attack1_sprite(), 18, 16),
+            tex_ninja_attack2: sprite_to_texture(&ninja_attack2_sprite(), 16, 16),
+            tex_ninja_attack3: sprite_to_texture(&ninja_attack3_sprite(), 17, 18),
+            tex_guard: sprite_to_texture(&guard_sprite(), 12, 16),
+            tex_guard_run: sprite_to_texture(&guard_run_sprite(), 12, 15),
+            tex_archer: sprite_to_texture(&archer_sprite(), 12, 16),
             tex_heart: sprite_to_texture(&heart_sprite(), 8, 8),
             tex_scroll: sprite_to_texture(&scroll_sprite(), 8, 8),
-            tex_ammo: sprite_to_texture(&ammo_sprite(), 8, 8),
-            tex_shuriken: sprite_to_texture(&shuriken_proj_sprite(), 4, 4),
-            tex_arrow: sprite_to_texture(&arrow_proj_sprite(), 5, 2),
+            tex_ammo: sprite_to_texture(&ammo_sprite(), 8, 7),
+            tex_shuriken: sprite_to_texture(&shuriken_proj_sprite(), 6, 6),
+            tex_arrow: sprite_to_texture(&arrow_proj_sprite(), 8, 2),
         }
     }
 
@@ -1232,9 +1406,21 @@ impl Game {
         self.player.vx = 0.0;
         self.player.vy = 0.0;
         self.player.dead = false;
+        self.player.death_timer = 0;
         self.player.hp = self.player.max_hp;
         self.player.invuln = 0;
-        self.player.shuriken = 10;
+        self.player.shuriken = 15;
+        self.player.combo = 0;
+        self.player.combo_window = 0;
+        self.player.attacking = 0;
+        self.player.attack_timer = 0;
+        self.player.dashing = 0;
+        self.player.sliding = 0;
+        self.player.coyote_time = 0;
+        self.player.jump_buffered = 0;
+        self.player.can_dash = true;
+        self.player.wall_sliding = false;
+        self.player.on_wall = 0;
         self.camera = Camera { x: 0.0, y: 0.0 };
         self.shake_timer = 0;
         self.death_timer = 0;
@@ -1384,17 +1570,8 @@ impl Game {
                 }
             }
         }
-        if self.death_timer > 120 {
-            if self.player.hp <= 0 {
-                self.phase = GamePhase::GameOver;
-            } else {
-                // Respawn
-                self.player.dead = false;
-                self.player.invuln = INVULN_FRAMES * 2;
-                self.player.vy = 0.0;
-                self.player.vx = 0.0;
-                self.phase = GamePhase::Playing;
-            }
+        if self.death_timer > 90 {
+            self.phase = GamePhase::GameOver;
         }
     }
 
@@ -1452,6 +1629,9 @@ impl Game {
         if self.shake_timer > 0 {
             self.shake_timer -= 1;
         }
+        if self.hit_flash > 0 {
+            self.hit_flash -= 1;
+        }
 
         // Level end check: reach end platform area
         let end_zone = (self.level_cols as f32 - 12.0) * TILE;
@@ -1463,6 +1643,7 @@ impl Game {
     fn update_player(&mut self) {
         let p = &mut self.player;
         if p.dead {
+            p.death_timer += 1;
             return;
         }
 
@@ -1473,34 +1654,93 @@ impl Game {
         if p.shuriken_cd > 0 {
             p.shuriken_cd -= 1;
         }
-        if p.combo_timer > 0 {
-            p.combo_timer -= 1;
-            if p.combo_timer == 0 {
-                p.combo = 0;
+
+        // Detect walls
+        p.on_wall = 0;
+        if !p.on_ground {
+            let mid_y = ((p.y + p.h * 0.5) / TILE) as isize;
+            let top_y = (p.y / TILE) as isize;
+            let left_x = ((p.x - 2.0) / TILE) as isize;
+            let right_x = ((p.x + p.w + 1.0) / TILE) as isize;
+            if left_x >= 0 {
+                let left_mid = tile_at(&self.map, p.x - 2.0, p.y + p.h * 0.5);
+                let left_top = tile_at(&self.map, p.x - 2.0, p.y);
+                if left_mid == TILE_GROUND || left_mid == TILE_WALL || left_top == TILE_GROUND || left_top == TILE_WALL {
+                    p.on_wall = -1;
+                }
+            }
+            if right_x >= 0 {
+                let right_mid = tile_at(&self.map, p.x + p.w + 1.0, p.y + p.h * 0.5);
+                let right_top = tile_at(&self.map, p.x + p.w + 1.0, p.y);
+                if right_mid == TILE_GROUND || right_mid == TILE_WALL || right_top == TILE_GROUND || right_top == TILE_WALL {
+                    p.on_wall = 1;
+                }
+            }
+            // Suppress unused variable warnings
+            let _ = mid_y;
+            let _ = top_y;
+        }
+
+        // Attack
+        if p.attacking > 0 {
+            p.attack_timer -= 1;
+            if p.attack_timer <= 0 {
+                p.attacking = 0;
+                p.combo_window = COMBO_WINDOW;
             }
         }
 
-        // Movement input
-        let mut move_x = 0.0f32;
-        if p.dashing <= 0 && p.sliding <= 0 {
-            if is_key_down(KeyCode::Left) || is_key_down(KeyCode::A) {
-                move_x = -1.0;
-                p.facing = -1.0;
+        if p.combo_window > 0 {
+            p.combo_window -= 1;
+        }
+        if p.combo_window <= 0 && p.attacking <= 0 {
+            p.combo = 0;
+        }
+
+        // Attack input (Space = A button on Miyoo)
+        let attack_pressed = is_key_pressed(KeyCode::Space);
+        if attack_pressed && p.attacking <= 0 && p.dashing <= 0 {
+            if p.combo_window > 0 && p.combo < 3 {
+                p.combo += 1;
+            } else {
+                p.combo = 1;
             }
-            if is_key_down(KeyCode::Right) || is_key_down(KeyCode::D) {
-                move_x = 1.0;
-                p.facing = 1.0;
+            p.combo_window = 0;
+            let dur = if p.combo == 3 { ATTACK_DURATION_COMBO3 } else { ATTACK_DURATION };
+            p.attacking = dur;
+            p.attack_timer = dur;
+            spawn_slash_particles(&mut self.particles, p.x + p.w * 0.5 + p.facing * 12.0, p.y + p.h * 0.5, p.facing);
+            self.shake_intensity = 2.0;
+            self.shake_timer = 4;
+        }
+
+        // Shuriken (C = mapped input)
+        if is_key_pressed(KeyCode::C) && p.shuriken > 0 && p.shuriken_cd <= 0 && p.attacking <= 0 {
+            p.shuriken -= 1;
+            p.shuriken_cd = SHURIKEN_COOLDOWN;
+            let sx = if p.facing > 0.0 { p.x + p.w } else { p.x - 6.0 };
+            let sy = p.y + 10.0;
+            if self.projectiles.len() < MAX_PROJECTILES {
+                self.projectiles.push(Projectile {
+                    active: true,
+                    x: sx,
+                    y: sy,
+                    vx: SHURIKEN_SPEED * p.facing,
+                    vy: 0.0,
+                    w: 6.0,
+                    h: 6.0,
+                    owner: ProjOwner::Player,
+                    damage: 1,
+                    life: 120,
+                });
             }
         }
 
         // Dashing
         if p.dashing > 0 {
-            p.vx = DASH_SPEED * p.facing;
+            p.vx = p.dash_dir * DASH_SPEED;
             p.vy = 0.0;
             p.dashing -= 1;
-            // Spawn trail
-            spawn_dash_trail(&mut self.particles, p.x, p.y, p.h);
-            // Spawn dash afterimage ghost every 2 frames
             if self.frame % 2 == 0 {
                 self.dash_ghosts.push(DashGhost {
                     active: true,
@@ -1513,223 +1753,251 @@ impl Game {
                 });
             }
             if p.dashing == 0 {
-                p.vx = PLAYER_SPEED * p.facing;
+                p.vx = p.dash_dir * 3.0;
             }
-        } else if p.sliding > 0 {
-            p.vx = PLAYER_SPEED * 1.5 * p.facing;
+        }
+
+        // Sliding
+        if p.sliding > 0 {
+            p.vx = p.facing * SLIDE_SPEED;
             p.sliding -= 1;
-        } else {
-            p.vx = move_x * PLAYER_SPEED;
         }
 
-        // Jump
-        if is_key_pressed(KeyCode::X) {
-            if p.on_ground {
-                p.vy = JUMP_VEL;
-                p.on_ground = false;
-                p.jump_held = 1;
-            } else if p.on_wall != 0 {
-                // Wall jump
-                p.vy = JUMP_VEL;
-                p.vx = -p.on_wall as f32 * PLAYER_SPEED * 1.5;
-                p.facing = -p.on_wall as f32;
-                p.on_wall = 0;
-                p.jump_held = 1;
-                spawn_particles(&mut self.particles, p.x + if p.facing < 0.0 { p.w } else { 0.0 }, p.y + p.h * 0.5, 5, WHITE, 2.0, 8);
+        // Movement (only when not dashing, sliding, or attacking)
+        if p.dashing <= 0 && p.sliding <= 0 && p.attacking <= 0 {
+            let accel = if p.on_ground { 0.8 } else { 0.5 };
+            let mut target_vx = 0.0f32;
+            if is_key_down(KeyCode::Left) || is_key_down(KeyCode::A) {
+                target_vx = -PLAYER_SPEED;
+                p.facing = -1.0;
+            }
+            if is_key_down(KeyCode::Right) || is_key_down(KeyCode::D) {
+                target_vx = PLAYER_SPEED;
+                p.facing = 1.0;
+            }
+            p.vx += (target_vx - p.vx) * accel;
+            if p.vx.abs() < 0.2 && target_vx == 0.0 {
+                p.vx = 0.0;
             }
         }
 
-        // Variable jump height
-        if is_key_down(KeyCode::X) && p.jump_held > 0 && p.jump_held < JUMP_HOLD_MAX {
-            p.jump_held += 1;
-        } else {
-            p.jump_held = 0;
-        }
-        if !is_key_down(KeyCode::X) && p.vy < 0.0 && p.jump_held == 0 {
-            p.vy *= 0.6; // cut jump short
-        }
-
-        // Dash / Slide
-        if is_key_pressed(KeyCode::Z) && p.attacking <= 0 {
-            if !p.on_ground && p.can_dash && p.dashing <= 0 {
+        // Dash trigger (Z = B button on Miyoo)
+        if is_key_pressed(KeyCode::Z) && p.dashing <= 0 && p.sliding <= 0 {
+            let move_left = is_key_down(KeyCode::Left) || is_key_down(KeyCode::A);
+            let move_right = is_key_down(KeyCode::Right) || is_key_down(KeyCode::D);
+            if !p.on_ground && p.can_dash {
                 p.dashing = DASH_FRAMES;
+                p.dash_dir = p.facing;
                 p.can_dash = false;
-                p.invuln = DASH_FRAMES; // brief invincibility
-            } else if p.on_ground && p.vx.abs() > 0.1 && p.sliding <= 0 {
+                p.invuln = p.invuln.max(DASH_FRAMES);
+            } else if p.on_ground && (move_left || move_right) {
                 p.sliding = SLIDE_FRAMES;
             }
         }
 
-        // Attack
-        if is_key_pressed(KeyCode::Space) && p.attacking <= 0 && p.dashing <= 0 {
-            if p.combo_timer > 0 && p.combo < 3 {
-                p.combo += 1;
-            } else {
-                p.combo = 1;
+        // Wall slide
+        p.wall_sliding = false;
+        let input_left = is_key_down(KeyCode::Left) || is_key_down(KeyCode::A);
+        let input_right = is_key_down(KeyCode::Right) || is_key_down(KeyCode::D);
+        if !p.on_ground && p.dashing <= 0 && p.on_wall != 0 && p.vy > 0.0 {
+            if (p.on_wall == -1 && input_left) || (p.on_wall == 1 && input_right) {
+                p.wall_sliding = true;
+                if p.vy > WALL_SLIDE_SPEED {
+                    p.vy = WALL_SLIDE_SPEED;
+                }
+                p.can_dash = true;
             }
-            p.attacking = ATTACK_DURATION;
-            p.combo_timer = COMBO_WINDOW + ATTACK_DURATION;
-            spawn_slash_particles(&mut self.particles, p.x + p.w * 0.5, p.y + p.h * 0.5, p.facing);
-            self.shake_intensity = 2.0;
-            self.shake_timer = 4;
         }
 
-        if p.attacking > 0 {
-            p.attacking -= 1;
-            // Hit detection on enemies handled in update_enemies
-        }
-
-        // Shuriken
-        if is_key_pressed(KeyCode::C) && p.shuriken > 0 && p.shuriken_cd <= 0 {
-            p.shuriken -= 1;
-            p.shuriken_cd = SHURIKEN_COOLDOWN;
-            let sx = if p.facing > 0.0 { p.x + p.w } else { p.x - 4.0 };
-            let sy = p.y + p.h * 0.3;
-            if self.projectiles.len() < MAX_PROJECTILES {
-                self.projectiles.push(Projectile {
+        // Wall-slide dust particles
+        if p.wall_sliding && self.frame % 3 == 0 {
+            let dust_x = if p.on_wall == -1 { p.x - 1.0 } else { p.x + p.w + 1.0 };
+            let dust_y = p.y + p.h * 0.3 + rand::gen_range(0.0, p.h * 0.4);
+            let colors = [
+                Color::new(0.8, 0.8, 0.8, 1.0),
+                Color::new(0.67, 0.67, 0.67, 1.0),
+                Color::new(1.0, 1.0, 1.0, 1.0),
+                Color::new(0.6, 0.6, 0.6, 1.0),
+            ];
+            if self.particles.len() < MAX_PARTICLES {
+                let ci = rand::gen_range(0, 4) as usize;
+                self.particles.push(Particle {
                     active: true,
-                    x: sx,
-                    y: sy,
-                    vx: SHURIKEN_SPEED * p.facing,
-                    vy: 0.0,
-                    w: 4.0,
-                    h: 4.0,
-                    owner: ProjOwner::Player,
-                    damage: 1,
-                    life: 120,
+                    x: dust_x,
+                    y: dust_y,
+                    vx: -p.on_wall as f32 * (0.3 + rand::gen_range(0.0, 0.5)),
+                    vy: -0.5 - rand::gen_range(0.0, 0.5),
+                    life: 10 + rand::gen_range(0, 8),
+                    max_life: 18,
+                    color: colors[ci],
+                    size: 1.0 + rand::gen_range(0.0, 1.5),
+                    gravity: false,
                 });
             }
         }
 
-        // Apply gravity
+        // Gravity
         if p.dashing <= 0 {
-            if p.on_wall != 0 && p.vy > 0.0 {
-                p.vy += GRAVITY * 0.3; // wall slide
-            } else {
-                p.vy += GRAVITY;
+            p.vy += GRAVITY;
+            if p.jump_held > 0 && is_key_down(KeyCode::X) {
+                p.vy -= 0.35;
+                p.jump_held -= 1;
             }
             if p.vy > MAX_FALL {
                 p.vy = MAX_FALL;
             }
         }
 
-        // Move and collide X
-        let new_x = p.x + p.vx;
-        let pr = if p.sliding > 0 {
-            Rect::new(new_x, p.y + p.h * 0.5, p.w, p.h * 0.5)
+        // Coyote time / Jump
+        if p.on_ground {
+            p.coyote_time = COYOTE_TIME;
+            p.can_dash = true;
         } else {
-            Rect::new(new_x, p.y, p.w, p.h)
-        };
+            if p.coyote_time > 0 {
+                p.coyote_time -= 1;
+            }
+        }
 
-        let mut blocked_x = false;
-        // Check left/right edges of player rect
+        if is_key_pressed(KeyCode::X) {
+            p.jump_buffered = JUMP_BUFFER;
+        }
+        if p.jump_buffered > 0 {
+            p.jump_buffered -= 1;
+        }
+
+        if p.jump_buffered > 0 {
+            if p.coyote_time > 0 && p.dashing <= 0 {
+                p.vy = JUMP_VEL;
+                p.jump_held = JUMP_HOLD_MAX;
+                p.on_ground = false;
+                p.coyote_time = 0;
+                p.jump_buffered = 0;
+            } else if p.wall_sliding && p.dashing <= 0 {
+                p.vy = -9.0;
+                p.vx = -p.on_wall as f32 * 5.0;
+                p.facing = -p.on_wall as f32;
+                p.jump_held = 6;
+                p.wall_sliding = false;
+                p.can_dash = true;
+                p.jump_buffered = 0;
+                // Wall jump particles
+                spawn_particles(&mut self.particles, p.x + if p.on_wall == -1 { 0.0 } else { p.w }, p.y + p.h * 0.5, 5, WHITE, 2.0, 8);
+            }
+        }
+
+        // Move & collide (tile-based, matching web version)
+        // Horizontal
+        p.x += p.vx;
+        let h_slide = if p.sliding > 0 { p.h * 0.5 } else { 0.0 };
+        let eff_y = p.y + h_slide;
+        let eff_h = p.h - h_slide;
+
         if p.vx < 0.0 {
-            if is_solid(&self.map, pr.x, pr.y + 2.0) || is_solid(&self.map, pr.x, pr.y + pr.h - 2.0) {
-                blocked_x = true;
-            }
-        } else if p.vx > 0.0 {
-            if is_solid(&self.map, pr.x + pr.w, pr.y + 2.0) || is_solid(&self.map, pr.x + pr.w, pr.y + pr.h - 2.0) {
-                blocked_x = true;
+            let tx = (p.x / TILE) as i32;
+            let ty_start = (eff_y / TILE) as i32;
+            let ty_end = ((eff_y + eff_h - 1.0) / TILE) as i32;
+            for ty in ty_start..=ty_end {
+                let t = tile_at(&self.map, tx as f32 * TILE, ty as f32 * TILE);
+                if t == TILE_GROUND || t == TILE_WALL {
+                    p.x = (tx + 1) as f32 * TILE;
+                    p.vx = 0.0;
+                    break;
+                }
             }
         }
-        if blocked_x {
-            // Snap to tile edge
-            if p.vx > 0.0 {
-                p.x = ((p.x + p.w + p.vx) / TILE).floor() * TILE - p.w;
-            } else {
-                p.x = ((p.x + p.vx) / TILE).ceil() * TILE;
-            }
-            p.vx = 0.0;
-        } else {
-            p.x = new_x;
-        }
-
-        // Wall detection
-        p.on_wall = 0;
-        if !p.on_ground {
-            if (is_key_down(KeyCode::Left) || is_key_down(KeyCode::A))
-                && (is_solid(&self.map, p.x - 1.0, p.y + 4.0) || is_solid(&self.map, p.x - 1.0, p.y + p.h - 4.0))
-            {
-                p.on_wall = -1;
-            }
-            if (is_key_down(KeyCode::Right) || is_key_down(KeyCode::D))
-                && (is_solid(&self.map, p.x + p.w + 1.0, p.y + 4.0) || is_solid(&self.map, p.x + p.w + 1.0, p.y + p.h - 4.0))
-            {
-                p.on_wall = 1;
+        if p.vx > 0.0 {
+            let tx = ((p.x + p.w) / TILE) as i32;
+            let ty_start = (eff_y / TILE) as i32;
+            let ty_end = ((eff_y + eff_h - 1.0) / TILE) as i32;
+            for ty in ty_start..=ty_end {
+                let t = tile_at(&self.map, tx as f32 * TILE, ty as f32 * TILE);
+                if t == TILE_GROUND || t == TILE_WALL {
+                    p.x = tx as f32 * TILE - p.w;
+                    p.vx = 0.0;
+                    break;
+                }
             }
         }
 
-        // Wall-slide sparks
-        if p.on_wall != 0 && p.vy > 0.0 {
-            let wx = if p.on_wall < 0 { p.x } else { p.x + p.w };
-            let scatter_dir = -p.on_wall as f32;
-            for _ in 0..rand::gen_range(2, 4) {
-                self.wall_sparks.push(WallSpark {
-                    active: true,
-                    x: wx + rand::gen_range(-1.0, 1.0),
-                    y: p.y + p.h * rand::gen_range(0.3, 0.9),
-                    vx: scatter_dir * rand::gen_range(0.5, 2.5),
-                    vy: rand::gen_range(-2.0, 0.5),
-                    life: rand::gen_range(6, 12),
-                    max_life: 10,
-                });
-            }
-        }
-
-        // Move and collide Y
-        let new_y = p.y + p.vy;
-        let foot_y = p.y + p.h;
+        // Vertical
+        p.y += p.vy;
         p.on_ground = false;
 
         if p.vy >= 0.0 {
-            // Falling / standing
-            let check_y = new_y + p.h;
-            let left_solid = is_solid_or_platform_top(&self.map, p.x + 2.0, check_y, p.vy, foot_y);
-            let right_solid = is_solid_or_platform_top(&self.map, p.x + p.w - 2.0, check_y, p.vy, foot_y);
-            if left_solid || right_solid {
-                p.y = (check_y / TILE).floor() * TILE - p.h;
-                p.vy = 0.0;
-                p.on_ground = true;
-                p.can_dash = true;
-                p.jump_held = 0;
-            } else {
-                p.y = new_y;
-            }
-        } else {
-            // Rising
-            let check_y = new_y;
-            if is_solid(&self.map, p.x + 2.0, check_y) || is_solid(&self.map, p.x + p.w - 2.0, check_y) {
-                p.y = (check_y / TILE).ceil() * TILE;
-                p.vy = 0.0;
-            } else {
-                p.y = new_y;
+            let by = ((p.y + p.h) / TILE) as i32;
+            let tx_start = (p.x / TILE) as i32;
+            let tx_end = ((p.x + p.w - 1.0) / TILE) as i32;
+            for tx in tx_start..=tx_end {
+                let t = tile_at(&self.map, tx as f32 * TILE, by as f32 * TILE);
+                if t == TILE_GROUND || t == TILE_WALL || t == TILE_PLATFORM {
+                    if t == TILE_PLATFORM {
+                        // Platform: only solid when falling onto top
+                        let prev_foot = p.y + p.h - p.vy;
+                        if prev_foot > by as f32 * TILE + 2.0 {
+                            continue;
+                        }
+                    }
+                    p.y = by as f32 * TILE - p.h;
+                    p.vy = 0.0;
+                    p.on_ground = true;
+                    break;
+                }
             }
         }
 
-        // Spike damage — drop `p` borrow before calling self methods
-        let prect = p.rect();
-        let foot_tile = tile_at(&self.map, prect.x + prect.w * 0.5, prect.y + prect.h + 1.0);
-        let spike_hit = foot_tile == TILE_SPIKE && p.invuln <= 0;
+        if p.vy < 0.0 {
+            let ty = (p.y / TILE) as i32;
+            let tx_start = (p.x / TILE) as i32;
+            let tx_end = ((p.x + p.w - 1.0) / TILE) as i32;
+            for tx in tx_start..=tx_end {
+                let t = tile_at(&self.map, tx as f32 * TILE, ty as f32 * TILE);
+                if t == TILE_GROUND || t == TILE_WALL {
+                    p.y = (ty + 1) as f32 * TILE;
+                    p.vy = 0.0;
+                    break;
+                }
+            }
+        }
 
-        // Clamp position
+        // Clamp to level bounds
         if p.x < 0.0 { p.x = 0.0; }
         let max_x = self.level_cols as f32 * TILE - p.w;
         if p.x > max_x { p.x = max_x; }
 
+        // Spike death
+        let feet_tx = ((p.x + p.w * 0.5) / TILE) as i32;
+        let feet_ty = ((p.y + p.h + 2.0) / TILE) as i32;
+        let feet_tile = tile_at(&self.map, feet_tx as f32 * TILE, feet_ty as f32 * TILE);
+        let spike_hit = feet_tile == TILE_SPIKE;
+
         // Fall death
-        let fell = p.y > MAP_ROWS as f32 * TILE;
-        if fell {
-            p.hp = 0;
+        let fell = p.y > (MAP_ROWS as f32 * TILE) + 50.0;
+
+        // Animation state
+        if p.attacking > 0 {
+            p.state = PlayerState::Attack;
+        } else if p.dashing > 0 {
+            p.state = PlayerState::Dash;
+        } else if p.sliding > 0 {
+            p.state = PlayerState::Slide;
+        } else if p.wall_sliding {
+            p.state = PlayerState::WallSlide;
+        } else if !p.on_ground {
+            p.state = if p.vy < 0.0 { PlayerState::Jump } else { PlayerState::Fall };
+        } else if p.vx.abs() > 0.5 {
+            p.state = PlayerState::Run;
+        } else {
+            p.state = PlayerState::Idle;
         }
 
-        // End the mutable borrow on self.player before calling self methods
+        // End borrow before self methods
         let _ = p;
 
         if spike_hit {
-            self.damage_player(1);
+            self.damage_player(5);
         }
         if fell {
-            self.player_die();
+            self.damage_player(5);
         }
     }
 
@@ -1739,24 +2007,30 @@ impl Game {
         }
         self.player.hp -= dmg;
         self.player.invuln = INVULN_FRAMES;
-        self.start_shake(4.0, 8);
-        spawn_particles(&mut self.particles, self.player.x + self.player.w * 0.5, self.player.y + self.player.h * 0.5, 8, RED, 3.0, 15);
+        self.start_shake(3.0, 5);
+        self.hit_flash = 2;
+        spawn_particles(&mut self.particles, self.player.x + self.player.w * 0.5, self.player.y + self.player.h * 0.5, 10, RED, 5.0, 15);
         if self.player.hp <= 0 {
+            self.player.hp = 0;
             self.player_die();
         }
     }
 
     fn player_die(&mut self) {
+        if self.player.dead {
+            return;
+        }
         self.player.dead = true;
+        self.player.death_timer = 0;
         self.death_timer = 0;
         self.phase = GamePhase::Death;
         spawn_particles(
             &mut self.particles,
             self.player.x + self.player.w * 0.5,
             self.player.y + self.player.h * 0.5,
-            20,
+            30,
             RED,
-            4.0,
+            8.0,
             30,
         );
         self.start_shake(6.0, 15);
@@ -1765,170 +2039,227 @@ impl Game {
     fn update_enemies(&mut self) {
         let px = self.player.x;
         let py = self.player.y;
+        let player_dead = self.player.dead;
         let p_rect = self.player.rect();
-        let p_attacking = self.player.attacking > 0 && self.player.attacking > ATTACK_DURATION - 6;
+        let p_attacking = self.player.attacking > 0;
         let attack_rect = self.player.attack_rect();
         let attack_dmg = if self.player.combo == 3 { 2 } else { 1 };
+        let player_facing = self.player.facing;
 
         for i in 0..self.enemies.len() {
             if !self.enemies[i].active {
                 continue;
             }
 
-            let e = &mut self.enemies[i];
-            if e.hurt_timer > 0 {
-                e.hurt_timer -= 1;
-            }
-
-            // Cull off-screen
-            let dist_to_cam = (e.x - self.camera.x).abs();
-            if dist_to_cam > SCREEN_W + CAMERA_MARGIN * 2.0 {
+            // Handle dead enemies
+            if self.enemies[i].dead {
+                self.enemies[i].death_timer += 1;
+                if self.enemies[i].death_timer >= 60 {
+                    self.enemies[i].active = false;
+                }
                 continue;
             }
 
-            match e.kind {
+            if self.enemies[i].stun_timer > 0 {
+                self.enemies[i].stun_timer -= 1;
+                continue;
+            }
+
+            self.enemies[i].anim_timer += 1;
+
+            // Cull off-screen
+            let dist_to_cam = (self.enemies[i].x - self.camera.x - SCREEN_W * 0.5).abs();
+            if dist_to_cam > SCREEN_W {
+                continue;
+            }
+
+            let dx = px - self.enemies[i].x;
+            let dy = py - self.enemies[i].y;
+            let dist = (dx * dx + dy * dy).sqrt();
+
+            match self.enemies[i].kind {
                 EnemyKind::Guard => {
-                    // Patrol
-                    let detect_range = 120.0;
-                    let dx = px - e.x;
-                    let speed = if dx.abs() < detect_range && (py - e.y).abs() < 60.0 {
-                        e.facing = if dx > 0.0 { 1.0 } else { -1.0 };
-                        3.75 // 1.5 * 2.5
-                    } else {
-                        1.5
-                    };
-
-                    e.x += speed * e.facing;
-
-                    // Turn at patrol bounds
-                    if e.x <= e.patrol_left {
-                        e.x = e.patrol_left;
-                        e.facing = 1.0;
-                    }
-                    if e.x >= e.patrol_right {
-                        e.x = e.patrol_right;
-                        e.facing = -1.0;
-                    }
-
-                    // Simple gravity for guards
-                    e.vy += GRAVITY;
-                    if e.vy > MAX_FALL { e.vy = MAX_FALL; }
-                    let new_y = e.y + e.vy;
-                    let foot_check = new_y + e.h;
-                    if is_solid(&self.map, e.x + 2.0, foot_check) || is_solid(&self.map, e.x + e.w - 2.0, foot_check) {
-                        e.y = (foot_check / TILE).floor() * TILE - e.h;
-                        e.vy = 0.0;
-                    } else {
-                        e.y = new_y;
-                    }
-
-                    // Turn at edges
-                    let ahead_x = e.x + e.facing * (e.w + 2.0);
-                    let below = e.y + e.h + 4.0;
-                    if !is_solid(&self.map, ahead_x, below) {
-                        e.facing = -e.facing;
-                    }
-                }
-                EnemyKind::Archer => {
-                    // Stationary, just shoot
-                    let dx = px - e.x;
-                    if dx.abs() < 200.0 && (py - e.y).abs() < 40.0 {
-                        e.facing = if dx > 0.0 { 1.0 } else { -1.0 };
-                        e.shoot_timer -= 1;
-                        if e.shoot_timer <= 0 {
-                            e.shoot_timer = 90;
-                            // Fire arrow
-                            if self.projectiles.len() < MAX_PROJECTILES {
-                                self.projectiles.push(Projectile {
-                                    active: true,
-                                    x: e.x + if e.facing > 0.0 { e.w } else { -5.0 },
-                                    y: e.y + e.h * 0.3,
-                                    vx: ARROW_SPEED * e.facing,
-                                    vy: 0.0,
-                                    w: 5.0,
-                                    h: 2.0,
-                                    owner: ProjOwner::Enemy,
-                                    damage: 1,
-                                    life: 150,
-                                });
-                            }
+                    if !player_dead {
+                        if dist < GUARD_DETECT_RANGE {
+                            self.enemies[i].facing = if dx > 0.0 { 1.0 } else { -1.0 };
+                            self.enemies[i].chasing = dist < GUARD_CHASE_RANGE;
                         }
                     }
 
-                    // Gravity for archer
-                    e.vy += GRAVITY;
-                    if e.vy > MAX_FALL { e.vy = MAX_FALL; }
-                    let new_y = e.y + e.vy;
-                    let foot_check = new_y + e.h;
-                    if is_solid(&self.map, e.x + 2.0, foot_check) || is_solid(&self.map, e.x + e.w - 2.0, foot_check)
-                        || tile_at(&self.map, e.x + 2.0, foot_check) == TILE_PLATFORM
-                        || tile_at(&self.map, e.x + e.w - 2.0, foot_check) == TILE_PLATFORM
-                    {
-                        e.y = (foot_check / TILE).floor() * TILE - e.h;
-                        e.vy = 0.0;
+                    if self.enemies[i].chasing && !player_dead {
+                        self.enemies[i].vx = self.enemies[i].facing * GUARD_CHASE_SPEED;
                     } else {
-                        e.y = new_y;
+                        self.enemies[i].vx = self.enemies[i].facing * GUARD_PATROL_SPEED;
+                        if self.enemies[i].x <= self.enemies[i].patrol_left {
+                            self.enemies[i].facing = 1.0;
+                        }
+                        if self.enemies[i].x >= self.enemies[i].patrol_right {
+                            self.enemies[i].facing = -1.0;
+                        }
+
+                        // Edge avoidance
+                        let ahead_x = if self.enemies[i].facing > 0.0 {
+                            self.enemies[i].x + self.enemies[i].w + 2.0
+                        } else {
+                            self.enemies[i].x - 2.0
+                        };
+                        let below_tile = tile_at(&self.map, ahead_x, self.enemies[i].y + self.enemies[i].h + 2.0);
+                        if below_tile == TILE_EMPTY || below_tile == TILE_SPIKE {
+                            self.enemies[i].facing *= -1.0;
+                        }
+                    }
+
+                    // Apply movement
+                    self.enemies[i].x += self.enemies[i].vx;
+
+                    // Gravity
+                    self.enemies[i].vy += GRAVITY;
+                    if self.enemies[i].vy > MAX_FALL { self.enemies[i].vy = MAX_FALL; }
+                    self.enemies[i].y += self.enemies[i].vy;
+
+                    // Ground collision
+                    self.enemies[i].on_ground = false;
+                    let by = ((self.enemies[i].y + self.enemies[i].h) / TILE) as i32;
+                    let tx_start = (self.enemies[i].x / TILE) as i32;
+                    let tx_end = ((self.enemies[i].x + self.enemies[i].w - 1.0) / TILE) as i32;
+                    for tx in tx_start..=tx_end {
+                        let t = tile_at(&self.map, tx as f32 * TILE, by as f32 * TILE);
+                        if t == TILE_GROUND || t == TILE_WALL || t == TILE_PLATFORM {
+                            self.enemies[i].y = by as f32 * TILE - self.enemies[i].h;
+                            self.enemies[i].vy = 0.0;
+                            self.enemies[i].on_ground = true;
+                            break;
+                        }
+                    }
+
+                    // Wall collision
+                    if self.enemies[i].vx < 0.0 {
+                        let tx = (self.enemies[i].x / TILE) as i32;
+                        let t = tile_at(&self.map, tx as f32 * TILE, self.enemies[i].y + self.enemies[i].h * 0.5);
+                        if t == TILE_GROUND || t == TILE_WALL {
+                            self.enemies[i].x = (tx + 1) as f32 * TILE;
+                            self.enemies[i].facing = 1.0;
+                        }
+                    }
+                    if self.enemies[i].vx > 0.0 {
+                        let tx = ((self.enemies[i].x + self.enemies[i].w) / TILE) as i32;
+                        let t = tile_at(&self.map, tx as f32 * TILE, self.enemies[i].y + self.enemies[i].h * 0.5);
+                        if t == TILE_GROUND || t == TILE_WALL {
+                            self.enemies[i].x = tx as f32 * TILE - self.enemies[i].w;
+                            self.enemies[i].facing = -1.0;
+                        }
+                    }
+                }
+                EnemyKind::Archer => {
+                    self.enemies[i].facing = if dx > 0.0 { 1.0 } else { -1.0 };
+                    self.enemies[i].shoot_timer -= 1;
+                    if self.enemies[i].shoot_timer <= 0 && dist < ARCHER_DETECT_RANGE && !player_dead {
+                        let e = &self.enemies[i];
+                        if self.projectiles.len() < MAX_PROJECTILES {
+                            self.projectiles.push(Projectile {
+                                active: true,
+                                x: e.x + if e.facing > 0.0 { e.w } else { -8.0 },
+                                y: e.y + 10.0,
+                                vx: ARROW_SPEED * e.facing,
+                                vy: 0.0,
+                                w: 8.0,
+                                h: 3.0,
+                                owner: ProjOwner::Enemy,
+                                damage: 1,
+                                life: 150,
+                            });
+                        }
+                        self.enemies[i].shoot_timer = ARCHER_COOLDOWN;
+                    }
+
+                    // Gravity for archer
+                    self.enemies[i].vy += GRAVITY;
+                    if self.enemies[i].vy > MAX_FALL { self.enemies[i].vy = MAX_FALL; }
+                    self.enemies[i].y += self.enemies[i].vy;
+
+                    let by = ((self.enemies[i].y + self.enemies[i].h) / TILE) as i32;
+                    let tx_start = (self.enemies[i].x / TILE) as i32;
+                    let tx_end = ((self.enemies[i].x + self.enemies[i].w - 1.0) / TILE) as i32;
+                    for tx in tx_start..=tx_end {
+                        let t = tile_at(&self.map, tx as f32 * TILE, by as f32 * TILE);
+                        if t == TILE_GROUND || t == TILE_WALL || t == TILE_PLATFORM {
+                            self.enemies[i].y = by as f32 * TILE - self.enemies[i].h;
+                            self.enemies[i].vy = 0.0;
+                            break;
+                        }
                     }
                 }
             }
 
-            // Player attack hits enemy
+            // Contact damage to player
             let e_rect = self.enemies[i].rect();
-            if p_attacking && rects_overlap(&attack_rect, &e_rect) && self.enemies[i].hurt_timer <= 0 {
+            if !player_dead && rects_overlap(&p_rect, &e_rect) && self.player.invuln <= 0 {
+                self.damage_player(1);
+                self.player.vx = if self.player.x < self.enemies[i].x { -4.0 } else { 4.0 };
+                self.player.vy = -3.0;
+            }
+
+            // Player attack hits enemy
+            if p_attacking && rects_overlap(&attack_rect, &e_rect) && self.enemies[i].hurt_timer <= 0 && !self.enemies[i].dead {
                 self.enemies[i].hp -= attack_dmg;
-                self.enemies[i].hurt_timer = 10;
+                self.enemies[i].stun_timer = 8;
+                self.enemies[i].hurt_timer = 8;
+                // Knockback
+                self.enemies[i].vx = player_facing * 3.0;
+                self.enemies[i].vy = -2.0;
                 spawn_particles(
                     &mut self.particles,
                     self.enemies[i].x + self.enemies[i].w * 0.5,
                     self.enemies[i].y + self.enemies[i].h * 0.5,
                     6,
-                    WHITE,
-                    3.0,
-                    10,
+                    YELLOW,
+                    4.0,
+                    12,
                 );
-                // Blood/impact particles on enemy hit
-                spawn_blood_particles(
-                    &mut self.particles,
-                    self.enemies[i].x + self.enemies[i].w * 0.5,
-                    self.enemies[i].y + self.enemies[i].h * 0.4,
-                );
-                // Hit stop on combo finisher (3rd hit)
+                self.start_shake(3.0, 3);
+                self.hit_flash = 2;
+                // Hit stop on combo finisher
                 if self.player.combo == 3 {
                     self.hit_stop = 4;
                 }
                 if self.enemies[i].hp <= 0 {
-                    self.enemies[i].active = false;
+                    self.enemies[i].dead = true;
+                    self.enemies[i].death_timer = 0;
                     self.player.score += self.enemies[i].score_val;
+                    let death_color = match self.enemies[i].kind {
+                        EnemyKind::Guard => ORANGE,
+                        EnemyKind::Archer => MAGENTA,
+                    };
                     spawn_particles(
                         &mut self.particles,
                         self.enemies[i].x + self.enemies[i].w * 0.5,
                         self.enemies[i].y + self.enemies[i].h * 0.5,
                         15,
-                        ORANGE,
-                        4.0,
+                        death_color,
+                        6.0,
                         20,
                     );
+                    self.start_shake(6.0, 6);
                     // Chance to drop pickup
                     if rand::gen_range(0.0, 1.0) < 0.3 {
+                        let r: f32 = rand::gen_range(0.0, 3.0);
+                        let kind = if r < 1.0 { PickupKind::Heart } else if r < 2.0 { PickupKind::Scroll } else { PickupKind::Ammo };
                         self.pickups.push(Pickup {
                             active: true,
-                            kind: if rand::gen_range(0.0, 1.0) < 0.5 { PickupKind::Heart } else { PickupKind::Scroll },
+                            kind,
                             x: self.enemies[i].x,
                             y: self.enemies[i].y,
-                            w: 8.0,
-                            h: 8.0,
+                            w: 12.0,
+                            h: 12.0,
                         });
                     }
                 }
             }
 
-            // Enemy contact damages player
-            if self.enemies[i].active && rects_overlap(&p_rect, &e_rect) {
-                let dmg = match self.enemies[i].kind {
-                    EnemyKind::Guard => 1,
-                    EnemyKind::Archer => 1,
-                };
-                self.damage_player(dmg);
+            // Fall death for enemies
+            if self.enemies[i].y > MAP_ROWS as f32 * TILE + 100.0 {
+                self.enemies[i].dead = true;
+                self.enemies[i].active = false;
             }
         }
     }
@@ -2059,19 +2390,15 @@ impl Game {
     }
 
     fn update_camera(&mut self) {
-        let target_x = self.player.x - SCREEN_W * 0.4;
+        let target_x = self.player.x - SCREEN_W * 0.5 + self.player.w * 0.5;
+        let target_y = self.player.y - SCREEN_H * 0.5 + self.player.h * 0.5 - 40.0;
         self.camera.x += (target_x - self.camera.x) * 0.1;
-        if self.camera.x < 0.0 {
-            self.camera.x = 0.0;
-        }
-        let max_cam = self.level_cols as f32 * TILE - SCREEN_W;
-        if self.camera.x > max_cam {
-            self.camera.x = max_cam;
-        }
+        self.camera.y += (target_y - self.camera.y) * 0.06;
 
-        let target_y = self.player.y - SCREEN_H * 0.5;
-        self.camera.y += (target_y - self.camera.y) * 0.05;
-        self.camera.y = self.camera.y.clamp(-(SCREEN_H * 0.3), 0.0);
+        let max_cam_x = self.level_cols as f32 * TILE - SCREEN_W;
+        let max_cam_y = MAP_ROWS as f32 * TILE - SCREEN_H;
+        self.camera.x = self.camera.x.clamp(0.0, max_cam_x.max(0.0));
+        self.camera.y = self.camera.y.clamp(0.0, max_cam_y.max(0.0));
     }
 
     // ── Draw ───────────────────────────────────────────────────────────
@@ -2209,9 +2536,6 @@ impl Game {
 
         self.draw_player(cam_x, cam_y);
 
-        // Sword slash arc
-        self.draw_slash_arc(cam_x, cam_y);
-
         self.draw_particles(cam_x, cam_y);
 
         // Parallax foreground grass tufts (slightly faster than camera)
@@ -2219,11 +2543,22 @@ impl Game {
 
         self.draw_hud();
         self.draw_env_signs(cam_x);
+        self.draw_go_arrow();
 
         // Death flash
         if self.phase == GamePhase::Death && self.death_timer < 10 {
             let a = 1.0 - self.death_timer as f32 / 10.0;
             draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(1.0, 0.0, 0.0, a * 0.4));
+        }
+
+        // Red flash on hit
+        if self.player.invuln > INVULN_FRAMES - 10 {
+            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(1.0, 0.0, 0.0, 0.2));
+        }
+
+        // White hit flash
+        if self.hit_flash > 0 {
+            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(1.0, 1.0, 1.0, 0.1));
         }
 
         // CRT scanline overlay
@@ -2237,12 +2572,14 @@ impl Game {
     }
 
     fn draw_background(&self, cam_x: f32, _cam_y: f32) {
-        // Sky gradient
+        // Sky gradient per level
         for y in 0..SCREEN_H as i32 {
             let t = y as f32 / SCREEN_H;
-            let r = 0.08 + t * 0.12;
-            let g = 0.02 + t * 0.04;
-            let b = 0.15 + t * 0.2;
+            let (r, g, b) = match self.current_level {
+                1 => (0.024 + t * 0.06, 0.032 + t * 0.04, 0.07 + t * 0.12),
+                2 => (0.07 + t * 0.12, 0.008 + t * 0.03, 0.02 + t * 0.05),
+                _ => (0.04 + t * 0.09, 0.02 + t * 0.03, 0.1 + t * 0.18),
+            };
             draw_rectangle(0.0, y as f32, SCREEN_W, 1.0, Color::new(r, g, b, 1.0));
         }
 
@@ -2325,38 +2662,68 @@ impl Game {
 
                 match tile {
                     TILE_GROUND => {
-                        let shade = if row as usize == 27 { 0.35 } else { 0.25 };
-                        draw_rectangle(tx, ty, TILE, TILE, Color::new(shade, 0.2, 0.1, 1.0));
-                        // Top edge highlight
-                        if row == 0 || self.map[(row - 1) as usize][col as usize] == TILE_EMPTY {
-                            draw_rectangle(tx, ty, TILE, 2.0, Color::new(0.4, 0.35, 0.2, 1.0));
-                            // Grass tufts
-                            if (col * 7 + row * 3) % 5 == 0 {
-                                draw_rectangle(tx + 3.0, ty - 2.0, 2.0, 3.0, Color::new(0.15, 0.4, 0.1, 1.0));
-                                draw_rectangle(tx + 9.0, ty - 1.0, 2.0, 2.0, Color::new(0.15, 0.4, 0.1, 1.0));
+                        let above = if row > 0 { self.map[(row - 1) as usize][col as usize] } else { TILE_EMPTY };
+                        let is_top = above == TILE_EMPTY || above == TILE_PLATFORM || above == TILE_SPIKE;
+                        if is_top {
+                            // Top edge highlight per level
+                            let (top_col, body_col) = match self.current_level {
+                                1 => (Color::new(0.33, 0.33, 0.38, 1.0), Color::new(0.2, 0.2, 0.25, 1.0)),
+                                2 => (Color::new(0.38, 0.2, 0.2, 1.0), Color::new(0.27, 0.13, 0.13, 1.0)),
+                                _ => (Color::new(0.17, 0.65, 0.33, 1.0), Color::new(0.33, 0.27, 0.2, 1.0)),
+                            };
+                            draw_rectangle(tx, ty, TILE, 3.0, top_col);
+                            draw_rectangle(tx, ty + 3.0, TILE, TILE - 3.0, body_col);
+                        } else {
+                            let body_col = match self.current_level {
+                                1 => Color::new(0.2, 0.2, 0.25, 1.0),
+                                2 => Color::new(0.2, 0.13, 0.13, 1.0),
+                                _ => Color::new(0.27, 0.2, 0.13, 1.0),
+                            };
+                            draw_rectangle(tx, ty, TILE, TILE, body_col);
+                            // Detail pixels
+                            if (col + row) as i32 % 3 == 0 {
+                                let detail = match self.current_level {
+                                    1 => Color::new(0.27, 0.27, 0.33, 1.0),
+                                    2 => Color::new(0.27, 0.2, 0.2, 1.0),
+                                    _ => Color::new(0.23, 0.4, 0.13, 1.0),
+                                };
+                                draw_rectangle(tx + 4.0, ty + 4.0, 2.0, 2.0, detail);
                             }
                         }
                     }
                     TILE_WALL => {
-                        draw_rectangle(tx, ty, TILE, TILE, Color::new(0.3, 0.28, 0.25, 1.0));
-                        // Brick pattern
-                        draw_line(tx, ty + TILE * 0.5, tx + TILE, ty + TILE * 0.5, 1.0, Color::new(0.2, 0.18, 0.15, 1.0));
-                        let offset = if row % 2 == 0 { TILE * 0.5 } else { 0.0 };
-                        draw_line(tx + offset, ty, tx + offset, ty + TILE * 0.5, 1.0, Color::new(0.2, 0.18, 0.15, 1.0));
+                        let (outer, inner) = match self.current_level {
+                            1 => (Color::new(0.27, 0.27, 0.33, 1.0), Color::new(0.33, 0.33, 0.38, 1.0)),
+                            2 => (Color::new(0.33, 0.2, 0.25, 1.0), Color::new(0.4, 0.27, 0.33, 1.0)),
+                            _ => (Color::new(0.27, 0.27, 0.33, 1.0), Color::new(0.33, 0.33, 0.38, 1.0)),
+                        };
+                        draw_rectangle(tx, ty, TILE, TILE, outer);
+                        draw_rectangle(tx + 2.0, ty + 2.0, TILE - 4.0, TILE - 4.0, inner);
+                        if (col + row) as i32 % 2 == 0 {
+                            let detail = match self.current_level {
+                                2 => Color::new(0.27, 0.13, 0.2, 1.0),
+                                _ => Color::new(0.2, 0.2, 0.25, 1.0),
+                            };
+                            draw_rectangle(tx + 4.0, ty + 6.0, 4.0, 2.0, detail);
+                        }
                     }
                     TILE_PLATFORM => {
-                        draw_rectangle(tx, ty, TILE, 4.0, Color::new(0.45, 0.3, 0.15, 1.0));
-                        draw_rectangle(tx, ty + 4.0, TILE, 2.0, Color::new(0.35, 0.22, 0.1, 1.0));
+                        let (plat_col, top_col) = match self.current_level {
+                            1 => (Color::new(0.33, 0.33, 0.38, 1.0), Color::new(0.47, 0.47, 0.5, 1.0)),
+                            2 => (Color::new(0.4, 0.27, 0.27, 1.0), Color::new(0.53, 0.4, 0.4, 1.0)),
+                            _ => (Color::new(0.4, 0.33, 0.25, 1.0), Color::new(0.53, 0.47, 0.38, 1.0)),
+                        };
+                        draw_rectangle(tx, ty, TILE, 5.0, plat_col);
+                        draw_rectangle(tx, ty, TILE, 2.0, top_col);
                     }
                     TILE_SPIKE => {
-                        // Spikes as triangles
                         for s in 0..4 {
                             let sx = tx + s as f32 * 4.0;
                             draw_triangle(
                                 Vec2::new(sx, ty + TILE),
                                 Vec2::new(sx + 2.0, ty + 4.0),
                                 Vec2::new(sx + 4.0, ty + TILE),
-                                Color::new(0.6, 0.6, 0.6, 1.0),
+                                Color::new(0.8, 0.2, 0.2, 1.0),
                             );
                         }
                     }
@@ -2368,30 +2735,53 @@ impl Game {
 
     fn draw_player(&self, cam_x: f32, cam_y: f32) {
         let p = &self.player;
-        if p.dead {
+        if p.dead && p.death_timer > 30 {
+            return;
+        }
+        if p.invuln > 0 && (self.frame / 3) % 2 == 0 && !p.dead {
             return;
         }
 
-        // Invulnerability flicker
-        if p.invuln > 0 && (p.invuln / 3) % 2 == 0 {
-            return;
-        }
-
-        let sx = p.x - cam_x;
-        let sy = p.y - cam_y;
+        let sx = (p.x - cam_x).round();
+        let sy = (p.y - cam_y).round();
         let flip = p.facing < 0.0;
 
-        let tex = if p.attacking > 0 {
-            &self.tex_ninja_attack
-        } else if p.dashing > 0 {
+        let tex = if p.state == PlayerState::Attack {
+            match p.combo {
+                2 => &self.tex_ninja_attack2,
+                3 => &self.tex_ninja_attack3,
+                _ => &self.tex_ninja_attack1,
+            }
+        } else if p.state == PlayerState::Run {
+            if (p.anim_timer / 6) % 2 == 0 {
+                &self.tex_ninja_run1
+            } else {
+                &self.tex_ninja_run2
+            }
+        } else if p.state == PlayerState::Jump || p.state == PlayerState::Fall
+            || p.state == PlayerState::WallSlide || p.state == PlayerState::Dash
+        {
             &self.tex_ninja_jump
-        } else if !p.on_ground {
-            &self.tex_ninja_jump
-        } else if p.vx.abs() > 0.5 {
-            &self.tex_ninja_run
         } else {
             &self.tex_ninja_idle
         };
+
+        if p.dead {
+            // Fade out on death
+            let alpha = (1.0 - p.death_timer as f32 / 30.0).max(0.0);
+            let tint = Color::new(1.0, 1.0, 1.0, alpha);
+            let scale = 2.0;
+            let dw = tex.width() * scale;
+            let dh = tex.height() * scale;
+            let draw_params = DrawTextureParams {
+                dest_size: Some(Vec2::new(if flip { -dw } else { dw }, dh)),
+                ..Default::default()
+            };
+            let dx = sx - (dw - p.w) * 0.5;
+            let dy = sy - (dh - p.h) + 2.0;
+            draw_texture_ex(tex, if flip { dx + dw } else { dx }, dy, tint, draw_params);
+            return;
+        }
 
         let scale = 2.0;
         let dw = tex.width() * scale;
@@ -2402,41 +2792,31 @@ impl Game {
             ..Default::default()
         };
 
-        let dx = if flip { sx + dw * 0.5 + 2.0 } else { sx - dw * 0.25 };
-        let dy = sy + p.h - dh;
+        let dx = sx - (dw - p.w) * 0.5;
+        let dy = sy - (dh - p.h) + 2.0;
+        draw_texture_ex(tex, if flip { dx + dw } else { dx }, dy, WHITE, draw_params);
 
-        draw_texture_ex(tex, dx, dy, WHITE, draw_params);
-
-        // Slash visual during attack
-        if p.attacking > 0 && p.attacking > ATTACK_DURATION - 8 {
-            let slash_x = if p.facing > 0.0 { sx + p.w + 2.0 } else { sx - 20.0 };
-            let slash_y = sy + p.h * 0.2;
-            let alpha = p.attacking as f32 / ATTACK_DURATION as f32;
-            let slash_color = match p.combo {
-                1 => Color::new(1.0, 1.0, 1.0, alpha),
-                2 => Color::new(0.5, 0.8, 1.0, alpha),
-                3 => Color::new(0.0, 1.0, 1.0, alpha),
-                _ => Color::new(1.0, 1.0, 1.0, alpha),
+        // Draw slash arc effect
+        if p.attacking > 0 && p.attack_timer > 5 {
+            let alpha = p.attack_timer as f32 / if p.combo == 3 { ATTACK_DURATION_COMBO3 as f32 } else { ATTACK_DURATION as f32 };
+            let stroke_color = if p.combo == 3 {
+                Color::new(1.0, 1.0, 0.0, alpha)
+            } else {
+                Color::new(1.0, 1.0, 1.0, alpha)
             };
-            // Arc-like slash effect
-            let arc_w = if p.combo == 3 { 28.0 } else { 20.0 };
-            let arc_h = if p.combo == 3 { 24.0 } else { 16.0 };
-            draw_rectangle(slash_x, slash_y, arc_w, 2.0, slash_color);
-            draw_rectangle(slash_x + arc_w * 0.3, slash_y - arc_h * 0.3, 2.0, arc_h, slash_color);
-            if p.combo == 3 {
-                // Shockwave for combo 3
-                let sw_y = sy + p.h;
-                let sw_w = 40.0 * alpha;
-                draw_rectangle(sx - sw_w * 0.5 + p.w * 0.5, sw_y - 4.0, sw_w, 4.0, Color::new(0.0, 1.0, 1.0, alpha * 0.5));
-            }
-        }
-
-        // Wall slide indicator
-        if p.on_wall != 0 {
-            let wx = if p.on_wall < 0 { sx - 2.0 } else { sx + p.w };
-            for i in 0..3 {
-                let spark_y = sy + p.h * 0.3 + i as f32 * 6.0 + (self.frame as f32 * 0.3).sin() * 2.0;
-                draw_circle(wx, spark_y, 1.5, Color::new(1.0, 0.8, 0.3, 0.7));
+            let cx = sx + p.w * 0.5 + p.facing * 18.0;
+            let cy = sy + p.h * 0.5 + if p.combo == 3 { -8.0 } else { 0.0 };
+            let r = if p.combo == 3 { 20.0 } else { 16.0 };
+            let a_start: f32 = if p.facing > 0.0 { -1.2 } else { 1.9 };
+            let segments = 8;
+            for seg in 0..segments {
+                let t0 = seg as f32 / segments as f32 * 1.5;
+                let t1 = (seg + 1) as f32 / segments as f32 * 1.5;
+                let x0 = cx + (a_start + t0).cos() * r;
+                let y0 = cy + (a_start + t0).sin() * r;
+                let x1 = cx + (a_start + t1).cos() * r;
+                let y1 = cy + (a_start + t1).sin() * r;
+                draw_line(x0, y0, x1, y1, 2.0, stroke_color);
             }
         }
     }
@@ -2446,17 +2826,38 @@ impl Game {
             if !e.active {
                 continue;
             }
-            let sx = e.x - cam_x;
-            let sy = e.y - cam_y;
-            if sx < -CAMERA_MARGIN || sx > SCREEN_W + CAMERA_MARGIN {
+            if e.dead && e.death_timer > 15 {
+                continue;
+            }
+            let sx = (e.x - cam_x).round();
+            let sy = (e.y - cam_y).round();
+            if sx < -40.0 || sx > SCREEN_W + 40.0 || sy < -40.0 || sy > SCREEN_H + 40.0 {
                 continue;
             }
 
+            let alpha = if e.dead {
+                (1.0 - e.death_timer as f32 / 15.0).max(0.0)
+            } else if e.stun_timer > 0 && (self.frame / 2) % 2 == 0 {
+                0.5
+            } else {
+                1.0
+            };
+
             // Hurt flash
-            let tint = if e.hurt_timer > 0 { RED } else { WHITE };
+            let tint = if e.hurt_timer > 0 {
+                Color::new(1.0, 0.0, 0.0, alpha)
+            } else {
+                Color::new(1.0, 1.0, 1.0, alpha)
+            };
 
             let tex = match e.kind {
-                EnemyKind::Guard => &self.tex_guard,
+                EnemyKind::Guard => {
+                    if e.vx.abs() > 0.5 {
+                        &self.tex_guard_run
+                    } else {
+                        &self.tex_guard
+                    }
+                }
                 EnemyKind::Archer => &self.tex_archer,
             };
 
@@ -2469,20 +2870,23 @@ impl Game {
                 dest_size: Some(Vec2::new(if flip { -dw } else { dw }, dh)),
                 ..Default::default()
             };
-            let dx = if flip { sx + dw * 0.5 } else { sx - dw * 0.25 };
-            let dy = sy + e.h - dh;
+            let dx = sx - (dw - e.w) * 0.5;
+            let dy = sy - (dh - e.h) + 2.0;
 
-            draw_texture_ex(tex, dx, dy, tint, draw_params);
+            draw_texture_ex(tex, if flip { dx + dw } else { dx }, dy, tint, draw_params);
 
-            // HP bar for enemies with more than 1 hp
-            if e.kind == EnemyKind::Guard {
-                let bar_w = e.w;
-                let bar_h = 3.0;
-                let bar_x = sx;
-                let bar_y = sy - 6.0;
-                draw_rectangle(bar_x, bar_y, bar_w, bar_h, Color::new(0.3, 0.0, 0.0, 0.8));
-                let hp_frac = e.hp as f32 / 2.0;
-                draw_rectangle(bar_x, bar_y, bar_w * hp_frac, bar_h, RED);
+            // HP bar
+            if !e.dead {
+                let max_hp = if e.kind == EnemyKind::Guard { 2 } else { 1 };
+                if e.hp < max_hp {
+                    let bar_w = e.w + 4.0;
+                    let bar_h = 3.0;
+                    let bar_x = sx - 2.0;
+                    let bar_y = sy - 6.0;
+                    draw_rectangle(bar_x, bar_y, bar_w, bar_h, Color::new(0.2, 0.0, 0.0, 0.8));
+                    let hp_frac = e.hp as f32 / max_hp as f32;
+                    draw_rectangle(bar_x, bar_y, bar_w * hp_frac, bar_h, RED);
+                }
             }
         }
     }
@@ -2497,30 +2901,30 @@ impl Game {
 
             match proj.owner {
                 ProjOwner::Player => {
-                    // Shuriken: spinning star
-                    let angle = self.frame as f32 * 0.3;
-                    let cx = sx + proj.w * 0.5;
-                    let cy = sy + proj.h * 0.5;
-                    let r = 3.0;
-                    for i in 0..4 {
-                        let a = angle + i as f32 * std::f32::consts::FRAC_PI_2;
-                        let px = cx + a.cos() * r;
-                        let py = cy + a.sin() * r;
-                        draw_line(cx, cy, px, py, 1.5, Color::new(0.75, 0.75, 0.75, 1.0));
-                    }
-                    draw_circle(cx, cy, 1.5, WHITE);
+                    // Shuriken: draw with texture, rotated
+                    let scale = 2.0;
+                    let dw = self.tex_shuriken.width() * scale;
+                    let dh = self.tex_shuriken.height() * scale;
+                    let rot = self.frame as f32 * 0.3;
+                    let draw_params = DrawTextureParams {
+                        dest_size: Some(Vec2::new(dw, dh)),
+                        rotation: rot,
+                        pivot: Some(Vec2::new(sx + 3.0, sy + 3.0)),
+                        ..Default::default()
+                    };
+                    draw_texture_ex(&self.tex_shuriken, sx - dw * 0.5 + 3.0, sy - dh * 0.5 + 3.0, WHITE, draw_params);
                 }
                 ProjOwner::Enemy => {
-                    // Arrow
-                    draw_rectangle(sx, sy, proj.w, proj.h, Color::new(0.55, 0.27, 0.07, 1.0));
-                    // Arrowhead
-                    let tip_x = if proj.vx > 0.0 { sx + proj.w } else { sx - 3.0 };
-                    draw_triangle(
-                        Vec2::new(tip_x, sy - 1.0),
-                        Vec2::new(tip_x + 3.0 * proj.vx.signum(), sy + proj.h * 0.5),
-                        Vec2::new(tip_x, sy + proj.h + 1.0),
-                        Color::new(0.6, 0.6, 0.6, 1.0),
-                    );
+                    // Arrow: draw with texture
+                    let scale = 2.0;
+                    let flip = proj.vx < 0.0;
+                    let dw = self.tex_arrow.width() * scale;
+                    let dh = self.tex_arrow.height() * scale;
+                    let draw_params = DrawTextureParams {
+                        dest_size: Some(Vec2::new(if flip { -dw } else { dw }, dh)),
+                        ..Default::default()
+                    };
+                    draw_texture_ex(&self.tex_arrow, if flip { sx + dw } else { sx }, sy, WHITE, draw_params);
                 }
             }
         }
@@ -2578,101 +2982,46 @@ impl Game {
     }
 
     fn draw_hud(&self) {
-        // Semi-transparent HUD background bar
-        draw_rectangle(0.0, 0.0, SCREEN_W, 32.0, Color::new(0.0, 0.0, 0.0, 0.5));
-
-        // Hearts
+        // Health hearts (matching web: drawn as shapes)
         for i in 0..self.player.max_hp {
-            let hx = 10.0 + i as f32 * 20.0;
-            let hy = 8.0;
-            if i < self.player.hp {
-                let scale = 2.0;
-                let params = DrawTextureParams {
-                    dest_size: Some(Vec2::new(self.tex_heart.width() * scale, self.tex_heart.height() * scale)),
-                    ..Default::default()
-                };
-                draw_texture_ex(&self.tex_heart, hx, hy, WHITE, params);
+            let hx = 12.0 + i as f32 * 20.0;
+            let color = if i < self.player.hp {
+                Color::new(1.0, 0.0, 0.0, 1.0)
             } else {
-                draw_rectangle(hx, hy, 14.0, 14.0, Color::new(0.3, 0.0, 0.0, 0.5));
-            }
+                Color::new(0.27, 0.0, 0.0, 1.0)
+            };
+            // Simple heart shape using circles and triangle
+            draw_circle(hx + 5.0, 16.0, 5.0, color);
+            draw_circle(hx + 13.0, 16.0, 5.0, color);
+            draw_triangle(
+                Vec2::new(hx, 18.0),
+                Vec2::new(hx + 9.0, 28.0),
+                Vec2::new(hx + 18.0, 18.0),
+                color,
+            );
         }
 
-        // Level trial name centered
+        // Score (top-right, yellow)
+        let score_text = format!("SCORE: {}", self.player.score);
+        let ss = 18.0;
+        let sw = score_text.len() as f32 * ss * 0.42;
+        draw_text(&score_text, SCREEN_W - sw - 12.0, 24.0, ss, Color::new(1.0, 1.0, 0.0, 1.0));
+
+        // Shuriken count (below health)
+        let shuriken_text = format!("* {}", self.player.shuriken);
+        draw_text(&shuriken_text, 12.0, 48.0, 16.0, Color::new(0.0, 1.0, 0.0, 1.0));
+
+        // Level name centered
         let trial_name = LEVEL_NAMES[self.current_level.min(2)];
-        let name_size = 16.0;
+        let name_size = 14.0;
         let nw = trial_name.len() as f32 * name_size * 0.42;
-        draw_text(trial_name, SCREEN_W * 0.5 - nw * 0.5, 18.0, name_size, Color::new(0.8, 0.8, 0.9, 1.0));
+        draw_text(trial_name, SCREEN_W * 0.5 - nw * 0.5, 18.0, name_size, Color::new(0.67, 0.67, 0.67, 1.0));
 
         // Level subtitle
-        let sub_size = 12.0;
-        let sw = self.level_name.len() as f32 * sub_size * 0.42;
-        draw_text(&self.level_name, SCREEN_W * 0.5 - sw * 0.5, 30.0, sub_size, Color::new(0.6, 0.6, 0.7, 1.0));
-
-        // Score top-right
-        let score_text = format!("{:08}", self.player.score);
-        draw_text(&score_text, SCREEN_W - 130.0, 22.0, 20.0, Color::new(1.0, 0.85, 0.0, 1.0));
-
-        // Shuriken count bottom-left
-        draw_rectangle(0.0, SCREEN_H - 28.0, 120.0, 28.0, Color::new(0.0, 0.0, 0.0, 0.5));
-        // Shuriken icon
-        let sx = 10.0;
-        let sy = SCREEN_H - 22.0;
-        for i in 0..4 {
-            let a = i as f32 * std::f32::consts::FRAC_PI_2;
-            draw_line(sx + 6.0, sy + 6.0, sx + 6.0 + a.cos() * 5.0, sy + 6.0 + a.sin() * 5.0, 1.5, Color::new(0.75, 0.75, 0.75, 1.0));
-        }
-        draw_text(&format!("x{}", self.player.shuriken), 30.0, SCREEN_H - 10.0, 18.0, WHITE);
-    }
-
-    fn draw_slash_arc(&self, cam_x: f32, cam_y: f32) {
-        let p = &self.player;
-        if p.dead || p.attacking <= 0 || p.attacking <= ATTACK_DURATION - 8 {
-            return;
-        }
-        let ar = p.attack_rect();
-        let cx = ar.x + ar.w * 0.5 - cam_x;
-        let cy = ar.y + ar.h * 0.5 - cam_y;
-        let radius = if p.combo == 3 { 22.0 } else { 16.0 };
-        let progress = 1.0 - (p.attacking as f32 / ATTACK_DURATION as f32);
-        let segments = 8;
-        // Quarter-circle arc sweeping from top to bottom (or bottom to top based on facing)
-        let start_angle = -std::f32::consts::FRAC_PI_2;
-        let end_angle = start_angle + std::f32::consts::FRAC_PI_2 * (0.3 + progress * 0.7);
-        let alpha = p.attacking as f32 / ATTACK_DURATION as f32;
-        let arc_color = if p.combo == 3 {
-            // Yellow glow for combo 3
-            Color::new(1.0, 0.95, 0.3, alpha * 0.9)
-        } else {
-            // White/cyan
-            Color::new(0.8, 1.0, 1.0, alpha * 0.7)
-        };
-        for i in 0..segments {
-            let t0 = i as f32 / segments as f32;
-            let t1 = (i + 1) as f32 / segments as f32;
-            let a0 = start_angle + (end_angle - start_angle) * t0;
-            let a1 = start_angle + (end_angle - start_angle) * t1;
-            let x0 = cx + a0.cos() * radius * p.facing;
-            let y0 = cy + a0.sin() * radius;
-            let x1 = cx + a1.cos() * radius * p.facing;
-            let y1 = cy + a1.sin() * radius;
-            let thickness = if p.combo == 3 { 2.5 } else { 1.5 };
-            draw_line(x0, y0, x1, y1, thickness, arc_color);
-        }
-        // Extra glow ring for combo 3
-        if p.combo == 3 {
-            let glow_r = radius + 4.0;
-            for i in 0..segments {
-                let t0 = i as f32 / segments as f32;
-                let t1 = (i + 1) as f32 / segments as f32;
-                let a0 = start_angle + (end_angle - start_angle) * t0;
-                let a1 = start_angle + (end_angle - start_angle) * t1;
-                let x0 = cx + a0.cos() * glow_r * p.facing;
-                let y0 = cy + a0.sin() * glow_r;
-                let x1 = cx + a1.cos() * glow_r * p.facing;
-                let y1 = cy + a1.sin() * glow_r;
-                draw_line(x0, y0, x1, y1, 1.0, Color::new(1.0, 0.85, 0.0, alpha * 0.4));
-            }
-        }
+        let sub_size = 11.0;
+        let sub = LEVEL_SUBTITLES[self.current_level.min(2)];
+        let sw2 = sub.len() as f32 * sub_size * 0.42;
+        draw_text(sub, SCREEN_W * 0.5 - sw2 * 0.5, 30.0, sub_size, Color::new(0.4, 0.4, 0.4, 1.0));
     }
 
     fn draw_foreground_grass(&self, cam_x: f32, cam_y: f32) {
@@ -2693,6 +3042,24 @@ impl Game {
             draw_line(sx + 2.0, sy, sx + 2.0 + sway * 0.7, sy - tuft.h * 0.7, 1.0,
                 Color::new(0.15, 0.4, 0.1, 0.35));
         }
+    }
+
+    fn draw_go_arrow(&self) {
+        if self.player.dead || self.phase != GamePhase::Playing {
+            return;
+        }
+        // Only show if no nearby alive enemies
+        let nearby = self.enemies.iter().any(|e| e.active && !e.dead && (e.x - self.player.x).abs() < 300.0);
+        if nearby {
+            return;
+        }
+        if (self.frame / 20) % 3 == 0 {
+            return;
+        }
+        let alpha = 0.5 + (self.frame as f32 * 0.1).sin() * 0.3;
+        let txt = ">>>";
+        let size = 24.0;
+        draw_text(txt, SCREEN_W - 60.0, SCREEN_H * 0.5, size, Color::new(1.0, 1.0, 0.0, alpha));
     }
 
     fn draw_pause_overlay(&self) {

@@ -1,7 +1,7 @@
 use macroquad::prelude::*;
 
 // ---------------------------------------------------------------------------
-// Constants (matched exactly to the JS prototype)
+// Constants (synced with web version: 800x600, physics constants identical)
 // ---------------------------------------------------------------------------
 const GRAVITY: f32 = 0.35;
 const MAX_FALL_SPEED: f32 = 7.0;
@@ -16,11 +16,13 @@ const ENEMY_BULLET_SPEED: f32 = 4.0;
 const ANCHOR_SPEED: f32 = 15.0;
 const CLIMB_SPEED: f32 = 3.0;
 const TILE_SIZE: f32 = 20.0;
-const SCREEN_W: f32 = 640.0;
-const SCREEN_H: f32 = 480.0;
+const SCREEN_W: f32 = 800.0;
+const SCREEN_H: f32 = 600.0;
 const TIME_STEP: f64 = 1.0 / 60.0;
 const COYOTE_MAX: i32 = 6;
 const JUMP_BUFFER_MAX: i32 = 6;
+const MAX_LIVES: i32 = 5;
+const MAX_PARTICLES: usize = 120;
 
 // ---------------------------------------------------------------------------
 // Sprite art data  (8x8, '.' = transparent, digits index into colour palette)
@@ -228,7 +230,6 @@ fn create_sprite(art: &[&str], colors: &[Color]) -> Texture2D {
 #[derive(Clone, Copy, PartialEq)]
 enum GameState {
     Start,
-    Story,
     LevelStory,
     Playing,
     GameOver,
@@ -298,15 +299,6 @@ struct Particle {
     size: f32,
 }
 
-struct DustMote {
-    x: f32,
-    y: f32,
-    vx: f32,
-    vy: f32,
-    size: f32,
-    alpha: f32,
-}
-
 struct Popup {
     text: String,
     x: f32,
@@ -373,13 +365,13 @@ struct LevelDef {
 }
 
 // ---------------------------------------------------------------------------
-// Story data (matches web version)
+// Story data (synced with web "Nano Wizards" version)
 // ---------------------------------------------------------------------------
 static STORY_INTRO: &[&str] = &[
     "The Obsidian Spire has awakened after a thousand years.",
     "Its corruption spreads across the land --",
     "forests wither, rivers turn black.",
-    "The Crystal Mages are gone. All but one.",
+    "The Nano Wizards are gone. All but one.",
     "",
     "You are Vael, the last of your order.",
     "The Elder Council has sent you on a final mission:",
@@ -413,7 +405,7 @@ static STORY_VICTORY: &[&str] = &[
     "",
     "You ARE the heart.",
     "",
-    "The Crystal Mages didn't send you",
+    "The Nano Wizards didn't send you",
     "to destroy the Spire --",
     "they sent you home, hoping you'd merge back",
     "and end your rebellion.",
@@ -442,7 +434,7 @@ struct Sprites {
 }
 
 // ---------------------------------------------------------------------------
-// Level definitions (exact mirror of JS)
+// Level definitions (exact mirror of web JS)
 // ---------------------------------------------------------------------------
 static LEVEL_1_MAP: &[&str] = &[
     "################################",
@@ -525,6 +517,14 @@ static LEVEL_2_MAP: &[&str] = &[
     "################################",
 ];
 
+static LEVEL_2_TEXTS: &[LevelText] = &[
+    LevelText { col: 3.0, row: 29.0, text: "We tried to contain it...", ghost: true },
+    LevelText { col: 14.0, row: 22.0, text: "The heart was never destroyed...", ghost: true },
+    LevelText { col: 5.0, row: 16.0, text: "it escaped...", ghost: true },
+    LevelText { col: 10.0, row: 9.0, text: "It took the form of a child...", ghost: true },
+    LevelText { col: 4.0, row: 4.0, text: "The archive remembers what you have forgotten.", ghost: true },
+];
+
 static LEVEL_3_MAP: &[&str] = &[
     "################################",
     "#..............................#",
@@ -555,24 +555,16 @@ static LEVEL_3_MAP: &[&str] = &[
     "################################",
 ];
 
-static LEVEL_DEFS: [LevelDef; 3] = [
-    LevelDef { name: "THE OVERGROWN DEPTHS", lava_speed: 0.1, map: LEVEL_1_MAP, texts: LEVEL_1_TEXTS },
-    LevelDef { name: "THE FROZEN ARCHIVE", lava_speed: 0.3, map: LEVEL_2_MAP, texts: LEVEL_2_TEXTS },
-    LevelDef { name: "THE LIVING CORE", lava_speed: 0.5, map: LEVEL_3_MAP, texts: LEVEL_3_TEXTS },
-];
-
-static LEVEL_2_TEXTS: &[LevelText] = &[
-    LevelText { col: 3.0, row: 29.0, text: "We tried to contain it...", ghost: true },
-    LevelText { col: 14.0, row: 22.0, text: "The heart was never destroyed...", ghost: true },
-    LevelText { col: 5.0, row: 16.0, text: "it escaped...", ghost: true },
-    LevelText { col: 10.0, row: 9.0, text: "It took the form of a child...", ghost: true },
-    LevelText { col: 4.0, row: 4.0, text: "The archive remembers what you have forgotten.", ghost: true },
-];
-
 static LEVEL_3_TEXTS: &[LevelText] = &[
     LevelText { col: 2.0, row: 25.0, text: "The walls breathe. The Spire is alive.", ghost: true },
     LevelText { col: 6.0, row: 14.0, text: "You feel the pull growing stronger...", ghost: true },
     LevelText { col: 3.0, row: 4.0, text: "TURN BACK, CHILD. YOU CANNOT DESTROY WHAT YOU ARE.", ghost: true },
+];
+
+static LEVEL_DEFS: [LevelDef; 3] = [
+    LevelDef { name: "THE OVERGROWN DEPTHS", lava_speed: 0.1, map: LEVEL_1_MAP, texts: LEVEL_1_TEXTS },
+    LevelDef { name: "THE FROZEN ARCHIVE", lava_speed: 0.3, map: LEVEL_2_MAP, texts: LEVEL_2_TEXTS },
+    LevelDef { name: "THE LIVING CORE", lava_speed: 0.5, map: LEVEL_3_MAP, texts: LEVEL_3_TEXTS },
 ];
 
 fn get_level(idx: usize) -> &'static LevelDef {
@@ -584,6 +576,13 @@ fn get_level(idx: usize) -> &'static LevelDef {
 // ---------------------------------------------------------------------------
 fn overlaps(ax: f32, ay: f32, aw: f32, ah: f32, bx: f32, by: f32, bw: f32, bh: f32) -> bool {
     ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by
+}
+
+// ---------------------------------------------------------------------------
+// NaN guard (matches web safeNum)
+// ---------------------------------------------------------------------------
+fn safe_num(v: f32, fallback: f32) -> f32 {
+    if v.is_finite() { v } else { fallback }
 }
 
 // ---------------------------------------------------------------------------
@@ -673,6 +672,7 @@ impl Input {
 struct World {
     state: GameState,
     score: i32,
+    lives: i32,
     current_level: usize,
     level_lava_speed: f32,
 
@@ -698,11 +698,8 @@ struct World {
     screen_shake_y: f32,
     damage_flash_timer: f32,
 
-    time_counter: f64, // for lava wave animation
+    time_counter: f64,
     frame_count: u64,
-    hit_stop_frames: i32,
-    dust_motes: Vec<DustMote>,
-    trail_particles: Vec<Particle>,
 
     // Story typewriter state
     story_lines: &'static [&'static str],
@@ -718,10 +715,11 @@ impl World {
         let mut w = Self {
             state: GameState::Start,
             score: 0,
+            lives: MAX_LIVES,
             current_level: 0,
             level_lava_speed: 0.1,
             player: Player {
-                x: 300.0, y: 0.0, w: 24.0, h: 24.0,
+                x: 300.0, y: 0.0, w: 16.0, h: 16.0,
                 vx: 0.0, vy: 0.0,
                 on_ground: false, wall_dir: 0,
                 facing_right: true, jumps: 0, max_jumps: 2,
@@ -729,7 +727,7 @@ impl World {
             anchor: Anchor {
                 active: false, is_attached: false,
                 x: 0.0, y: 0.0, vx: 0.0, vy: 0.0,
-                w: 16.0, h: 16.0, length: 0.0,
+                w: 11.0, h: 11.0, length: 0.0,
             },
             bullets: Vec::new(),
             enemy_bullets: Vec::new(),
@@ -750,9 +748,6 @@ impl World {
             damage_flash_timer: 0.0,
             time_counter: 0.0,
             frame_count: 0,
-            hit_stop_frames: 0,
-            dust_motes: Vec::new(),
-            trail_particles: Vec::new(),
 
             story_lines: &[],
             story_line_index: 0,
@@ -761,30 +756,73 @@ impl World {
             story_full_text: String::new(),
             story_is_victory: false,
         };
-        // Initialize ambient dust motes
-        for _ in 0..20 {
-            w.dust_motes.push(DustMote {
-                x: rand::gen_range(0.0_f32, SCREEN_W),
-                y: rand::gen_range(0.0_f32, SCREEN_H),
-                vx: rand::gen_range(-0.2_f32, 0.2),
-                vy: rand::gen_range(-0.3_f32, -0.05),
-                size: rand::gen_range(1.0_f32, 2.0),
-                alpha: rand::gen_range(0.1_f32, 0.2),
-            });
-        }
         w.reset_game(true);
         w.state = GameState::Start;
         w
+    }
+
+    /// Check if a position overlaps any solid platform
+    fn overlaps_any_solid(&self, x: f32, y: f32, w: f32, h: f32) -> bool {
+        for p in &self.platforms {
+            if overlaps(x, y, w, h, p.x, p.y, p.w, p.h) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Push player out of walls (prevent stuck) - matches web pushOutOfWalls
+    fn push_out_of_walls(&mut self) {
+        for i in 0..self.platforms.len() {
+            let p = &self.platforms[i];
+            if !overlaps(self.player.x, self.player.y, self.player.w, self.player.h,
+                         p.x, p.y, p.w, p.h) {
+                continue;
+            }
+            let overlap_left = (self.player.x + self.player.w) - p.x;
+            let overlap_right = (p.x + p.w) - self.player.x;
+            let overlap_top = (self.player.y + self.player.h) - p.y;
+            let overlap_bottom = (p.y + p.h) - self.player.y;
+            let min_overlap = overlap_left.min(overlap_right).min(overlap_top).min(overlap_bottom);
+            if min_overlap == overlap_left {
+                self.player.x = p.x - self.player.w;
+                self.player.vx = 0.0;
+            } else if min_overlap == overlap_right {
+                self.player.x = p.x + p.w;
+                self.player.vx = 0.0;
+            } else if min_overlap == overlap_top {
+                self.player.y = p.y - self.player.h;
+                self.player.vy = 0.0;
+                self.player.on_ground = true;
+                self.player.jumps = 0;
+            } else {
+                self.player.y = p.y + p.h;
+                self.player.vy = 0.0;
+            }
+        }
+    }
+
+    fn lose_life(&mut self) {
+        self.lives -= 1;
+        self.trigger_shake(6.0);
+        self.damage_flash_timer = 6.0;
+        if self.lives <= 0 {
+            self.state = GameState::GameOver;
+        } else {
+            // Respawn at current level
+            self.reset_game(false);
+        }
     }
 
     fn reset_game(&mut self, full_reset: bool) {
         if full_reset {
             self.score = 0;
             self.current_level = 0;
+            self.lives = MAX_LIVES;
         }
 
         self.player = Player {
-            x: 300.0, y: 0.0, w: 24.0, h: 24.0,
+            x: 300.0, y: 0.0, w: 16.0, h: 16.0,
             vx: 0.0, vy: 0.0,
             on_ground: false, wall_dir: 0,
             facing_right: true, jumps: 0, max_jumps: 2,
@@ -792,7 +830,7 @@ impl World {
         self.anchor = Anchor {
             active: false, is_attached: false,
             x: 0.0, y: 0.0, vx: 0.0, vy: 0.0,
-            w: 16.0, h: 16.0, length: 0.0,
+            w: 11.0, h: 11.0, length: 0.0,
         };
         self.bullets.clear();
         self.enemy_bullets.clear();
@@ -801,8 +839,6 @@ impl World {
         self.text_popups.clear();
         self.gems.clear();
         self.lava_bubbles.clear();
-        self.trail_particles.clear();
-        self.hit_stop_frames = 0;
         self.damage_flash_timer = 0.0;
         self.shake_magnitude = 0.0;
         self.screen_shake_x = 0.0;
@@ -818,6 +854,7 @@ impl World {
         let map_height = map.len() as f32;
         let start_y = -(map_height * TILE_SIZE) + SCREEN_H;
 
+        // First pass: build platforms
         for (row, line) in map.iter().enumerate() {
             for (col, ch) in line.chars().enumerate() {
                 let px = col as f32 * TILE_SIZE;
@@ -827,19 +864,43 @@ impl World {
                     '#' => self.platforms.push(Platform { x: px, y: py, w: TILE_SIZE, h: TILE_SIZE, kind: TileKind::Brick }),
                     '%' => self.platforms.push(Platform { x: px, y: py, w: TILE_SIZE, h: TILE_SIZE, kind: TileKind::Stone }),
                     'C' => self.platforms.push(Platform { x: px, y: py, w: TILE_SIZE, h: TILE_SIZE, kind: TileKind::Chest }),
-                    'P' => self.enemies.push(Enemy {
-                        kind: EnemyKind::Patrol, x: px, y: py, w: TILE_SIZE, h: TILE_SIZE,
-                        vx: 1.5, vy: 0.0, start_x: px, range: 40.0, shoot_timer: 0.0,
-                    }),
-                    'B' => self.enemies.push(Enemy {
-                        kind: EnemyKind::Bat, x: px, y: py, w: TILE_SIZE, h: TILE_SIZE,
-                        vx: 0.0, vy: 0.0, start_x: px, range: 0.0, shoot_timer: 0.0,
-                    }),
-                    'T' => self.enemies.push(Enemy {
-                        kind: EnemyKind::Turret, x: px, y: py, w: TILE_SIZE, h: TILE_SIZE,
-                        vx: 0.0, vy: 0.0, start_x: px, range: 0.0,
-                        shoot_timer: rand::gen_range(0.0_f32, 60.0),
-                    }),
+                    _ => {}
+                }
+            }
+        }
+
+        // Second pass: enemies and gems (check against already-placed platforms)
+        for (row, line) in map.iter().enumerate() {
+            for (col, ch) in line.chars().enumerate() {
+                let px = col as f32 * TILE_SIZE;
+                let py = start_y + row as f32 * TILE_SIZE;
+
+                match ch {
+                    'P' => {
+                        if !self.overlaps_any_solid(px, py, TILE_SIZE, TILE_SIZE) {
+                            self.enemies.push(Enemy {
+                                kind: EnemyKind::Patrol, x: px, y: py, w: TILE_SIZE, h: TILE_SIZE,
+                                vx: 1.5, vy: 0.0, start_x: px, range: 40.0, shoot_timer: 0.0,
+                            });
+                        }
+                    }
+                    'B' => {
+                        if !self.overlaps_any_solid(px, py, TILE_SIZE, TILE_SIZE) {
+                            self.enemies.push(Enemy {
+                                kind: EnemyKind::Bat, x: px, y: py, w: TILE_SIZE, h: TILE_SIZE,
+                                vx: 0.0, vy: 0.0, start_x: px, range: 0.0, shoot_timer: 0.0,
+                            });
+                        }
+                    }
+                    'T' => {
+                        if !self.overlaps_any_solid(px, py, TILE_SIZE, TILE_SIZE) {
+                            self.enemies.push(Enemy {
+                                kind: EnemyKind::Turret, x: px, y: py, w: TILE_SIZE, h: TILE_SIZE,
+                                vx: 0.0, vy: 0.0, start_x: px, range: 0.0,
+                                shoot_timer: rand::gen_range(0.0_f32, 60.0),
+                            });
+                        }
+                    }
                     'G' => self.gems.push(Gem {
                         x: px + 2.0, y: py + 2.0, w: 16.0, h: 16.0, vx: 0.0, vy: 0.0,
                     }),
@@ -850,6 +911,8 @@ impl World {
 
         let map_pixel_h = map_height * TILE_SIZE;
         self.player.y = start_y + map_pixel_h - 60.0;
+        // Ensure player doesn't start inside a wall
+        self.push_out_of_walls();
         self.lava_y = self.player.y + 400.0;
         self.camera_y = self.player.y - 200.0;
         self.state = GameState::Playing;
@@ -885,47 +948,6 @@ impl World {
     fn update(&mut self, input: &mut Input) {
         self.time_counter += TIME_STEP;
         self.frame_count += 1;
-
-        // Hit stop: freeze game logic briefly on enemy kill for impact
-        if self.hit_stop_frames > 0 {
-            self.hit_stop_frames -= 1;
-            return;
-        }
-
-        // Update dust motes (ambient particles)
-        for mote in &mut self.dust_motes {
-            mote.x += mote.vx;
-            mote.y += mote.vy;
-            if mote.y < -5.0 { mote.y = SCREEN_H + 5.0; }
-            if mote.y > SCREEN_H + 5.0 { mote.y = -5.0; }
-            if mote.x < -5.0 { mote.x = SCREEN_W + 5.0; }
-            if mote.x > SCREEN_W + 5.0 { mote.x = -5.0; }
-        }
-
-        // Player trail effect: spawn afterimage when moving fast
-        let vel_mag = (self.player.vx * self.player.vx + self.player.vy * self.player.vy).sqrt();
-        if vel_mag > 2.0 && self.frame_count % 2 == 0 {
-            self.trail_particles.push(Particle {
-                x: self.player.x + self.player.w / 2.0,
-                y: self.player.y + self.player.h / 2.0,
-                vx: 0.0,
-                vy: 0.0,
-                life: 8.0,
-                color: Color::new(0.0, 1.0, 1.0, 0.3),
-                size: self.player.w * 0.8,
-            });
-        }
-        // Update trail particles
-        {
-            let mut i = self.trail_particles.len();
-            while i > 0 {
-                i -= 1;
-                self.trail_particles[i].life -= 1.0;
-                if self.trail_particles[i].life <= 0.0 {
-                    self.trail_particles.remove(i);
-                }
-            }
-        }
 
         // Coyote time
         if self.player.on_ground {
@@ -993,15 +1015,17 @@ impl World {
                                 });
                             }
                             self.platforms.remove(i);
-                            for _ in 0..6 {
-                                self.particles.push(Particle {
-                                    x: px + 10.0, y: py + 10.0,
-                                    vx: rand::gen_range(-4.0_f32, 4.0),
-                                    vy: rand::gen_range(-4.0_f32, 4.0),
-                                    life: 15.0 + rand::gen_range(0.0_f32, 15.0),
-                                    color: pcolor,
-                                    size: 4.0,
-                                });
+                            if self.particles.len() < MAX_PARTICLES {
+                                for _ in 0..6 {
+                                    self.particles.push(Particle {
+                                        x: px + 10.0, y: py + 10.0,
+                                        vx: rand::gen_range(-4.0_f32, 4.0),
+                                        vy: rand::gen_range(-4.0_f32, 4.0),
+                                        life: 15.0 + rand::gen_range(0.0_f32, 15.0),
+                                        color: pcolor,
+                                        size: 4.0,
+                                    });
+                                }
                             }
                             self.anchor.active = false;
                             destroyed = true;
@@ -1065,8 +1089,15 @@ impl World {
                 self.gems[i].x += self.gems[i].vx;
                 self.gems[i].y += self.gems[i].vy;
 
+                // NaN guard for gems
+                self.gems[i].x = safe_num(self.gems[i].x, 0.0);
+                self.gems[i].y = safe_num(self.gems[i].y, 0.0);
+                self.gems[i].vx = safe_num(self.gems[i].vx, 0.0);
+                self.gems[i].vy = safe_num(self.gems[i].vy, 0.0);
+
                 // Bounce on platforms
-                for p in &self.platforms {
+                for j in 0..self.platforms.len() {
+                    let p = &self.platforms[j];
                     if p.kind != TileKind::Stone && p.kind != TileKind::Chest {
                         let g = &self.gems[i];
                         if overlaps(g.x, g.y, g.w, g.h, p.x, p.y, p.w, p.h) {
@@ -1086,7 +1117,7 @@ impl World {
                     let gx = g.x;
                     let gy = g.y;
                     self.add_score(50, gx, gy);
-                    self.text_popups.push(Popup { text: "+100".into(), x: gx, y: gy, life: 30.0 });
+                    self.text_popups.push(Popup { text: "+50".into(), x: gx, y: gy, life: 30.0 });
                     self.gems.remove(i);
                 }
             }
@@ -1110,7 +1141,8 @@ impl World {
         // X sweep
         self.player.x += self.player.vx;
         self.player.wall_dir = 0;
-        for p in &self.platforms {
+        for j in 0..self.platforms.len() {
+            let p = &self.platforms[j];
             if overlaps(self.player.x, self.player.y, self.player.w, self.player.h,
                         p.x, p.y, p.w, p.h)
             {
@@ -1140,7 +1172,8 @@ impl World {
         // Y sweep
         self.player.y += self.player.vy;
         self.player.on_ground = false;
-        for p in &self.platforms {
+        for j in 0..self.platforms.len() {
+            let p = &self.platforms[j];
             if overlaps(self.player.x, self.player.y, self.player.w, self.player.h,
                         p.x, p.y, p.w, p.h)
             {
@@ -1155,6 +1188,12 @@ impl World {
                 }
             }
         }
+
+        // NaN guard for player physics
+        self.player.x = safe_num(self.player.x, 300.0);
+        self.player.y = safe_num(self.player.y, 0.0);
+        self.player.vx = safe_num(self.player.vx, 0.0);
+        self.player.vy = safe_num(self.player.vy, 0.0);
 
         // Anchor constraint (Verlet-like)
         if self.anchor.is_attached {
@@ -1174,6 +1213,9 @@ impl World {
                 self.player.vy *= 0.99;
             }
         }
+
+        // Safety pushout - prevent player from being stuck in walls after all movement
+        self.push_out_of_walls();
 
         // ----- JUMPING -----
         if input.jump_buffer > 0 {
@@ -1218,7 +1260,8 @@ impl World {
                 let b = &self.bullets[i];
 
                 let mut hit_wall = false;
-                for p in &self.platforms {
+                for j in 0..self.platforms.len() {
+                    let p = &self.platforms[j];
                     if p.kind != TileKind::Stone && p.kind != TileKind::Chest {
                         if overlaps(b.x, b.y, b.w, b.h, p.x, p.y, p.w, p.h) {
                             hit_wall = true;
@@ -1240,22 +1283,17 @@ impl World {
                             hit_enemy = true;
                             self.add_score(100, ex, ey);
                             self.trigger_shake(2.0);
-                            self.hit_stop_frames = 3;
-                            let death_colors = [
-                                Color::new(1.0, 0.5, 0.0, 1.0),  // orange
-                                Color::new(1.0, 1.0, 0.0, 1.0),  // yellow
-                                Color::new(1.0, 1.0, 1.0, 1.0),  // white
-                                Color::new(1.0, 0.1, 0.1, 1.0),  // red
-                            ];
-                            for k in 0..20 {
-                                self.particles.push(Particle {
-                                    x: ex + 10.0, y: ey + 10.0,
-                                    vx: rand::gen_range(-5.0_f32, 5.0),
-                                    vy: rand::gen_range(-5.0_f32, 5.0),
-                                    life: 15.0 + rand::gen_range(0.0_f32, 15.0),
-                                    color: death_colors[k % 4],
-                                    size: rand::gen_range(1.0_f32, 4.0),
-                                });
+                            if self.particles.len() < MAX_PARTICLES {
+                                for _ in 0..5 {
+                                    self.particles.push(Particle {
+                                        x: bx, y: by,
+                                        vx: rand::gen_range(-3.0_f32, 3.0),
+                                        vy: rand::gen_range(-3.0_f32, 3.0),
+                                        life: 15.0,
+                                        color: Color::new(1.0, 0.0, 1.0, 1.0),
+                                        size: 4.0,
+                                    });
+                                }
                             }
                             break;
                         }
@@ -1263,7 +1301,7 @@ impl World {
                 }
 
                 let b = &self.bullets[i];
-                let oob = b.x > SCREEN_W || b.x < -b.w
+                let oob = b.x > SCREEN_W + 50.0 || b.x < -50.0
                     || b.y < self.camera_y - 100.0
                     || b.y > self.camera_y + SCREEN_H + 100.0;
                 if hit_wall || hit_enemy || oob {
@@ -1273,8 +1311,8 @@ impl World {
         }
 
         // ----- ENEMY LOGIC -----
-        // We need to collect new enemy bullets separately to avoid borrow issues.
         let mut new_enemy_bullets: Vec<Bullet> = Vec::new();
+        let mut lost_life = false;
         {
             let px = self.player.x;
             let py = self.player.y;
@@ -1336,35 +1374,34 @@ impl World {
                         self.enemies.remove(i);
                         self.add_score(100, ex, ey);
                         self.trigger_shake(2.0);
-                        self.hit_stop_frames = 3;
-                        let death_colors = [
-                            Color::new(1.0, 0.5, 0.0, 1.0),
-                            Color::new(1.0, 1.0, 0.0, 1.0),
-                            Color::new(1.0, 1.0, 1.0, 1.0),
-                            Color::new(1.0, 0.1, 0.1, 1.0),
-                        ];
-                        for k in 0..20 {
-                            self.particles.push(Particle {
-                                x: ex + 10.0, y: ey + 10.0,
-                                vx: rand::gen_range(-5.0_f32, 5.0),
-                                vy: rand::gen_range(-5.0_f32, 5.0),
-                                life: 15.0 + rand::gen_range(0.0_f32, 15.0),
-                                color: death_colors[k % 4],
-                                size: rand::gen_range(1.0_f32, 4.0),
-                            });
+                        if self.particles.len() < MAX_PARTICLES {
+                            for _ in 0..5 {
+                                self.particles.push(Particle {
+                                    x: ex + 10.0, y: ey + 10.0,
+                                    vx: rand::gen_range(-3.0_f32, 3.0),
+                                    vy: rand::gen_range(-3.0_f32, 3.0),
+                                    life: 15.0,
+                                    color: Color::new(1.0, 0.0, 1.0, 1.0),
+                                    size: 4.0,
+                                });
+                            }
                         }
                     } else {
-                        self.state = GameState::GameOver;
-                        self.trigger_shake(6.0);
-                        self.damage_flash_timer = 6.0;
+                        lost_life = true;
                     }
                 }
             }
         }
         self.enemy_bullets.extend(new_enemy_bullets);
 
+        if lost_life {
+            self.lose_life();
+            return;
+        }
+
         // Update enemy bullets
         {
+            let mut hit_player = false;
             let mut i = self.enemy_bullets.len();
             while i > 0 {
                 i -= 1;
@@ -1373,7 +1410,8 @@ impl World {
                 let b = &self.enemy_bullets[i];
 
                 let mut hit_wall = false;
-                for p in &self.platforms {
+                for j in 0..self.platforms.len() {
+                    let p = &self.platforms[j];
                     if p.kind != TileKind::Stone && p.kind != TileKind::Chest {
                         if overlaps(b.x, b.y, b.w, b.h, p.x, p.y, p.w, p.h) {
                             hit_wall = true;
@@ -1386,27 +1424,28 @@ impl World {
                 if overlaps(b.x, b.y, b.w, b.h,
                             self.player.x, self.player.y, self.player.w, self.player.h)
                 {
-                    self.state = GameState::GameOver;
-                    self.trigger_shake(6.0);
-                    self.damage_flash_timer = 6.0;
+                    hit_player = true;
                 }
 
                 let b = &self.enemy_bullets[i];
-                let oob = b.x > SCREEN_W || b.x < -b.w
+                let oob = b.x > SCREEN_W + 50.0 || b.x < -50.0
                     || b.y < self.camera_y - 100.0
                     || b.y > self.camera_y + SCREEN_H + 100.0;
                 if hit_wall || oob {
                     self.enemy_bullets.remove(i);
                 }
             }
+            if hit_player {
+                self.lose_life();
+                return;
+            }
         }
 
         // ----- LAVA -----
         self.lava_y -= self.level_lava_speed;
         if self.player.y + self.player.h > self.lava_y {
-            self.state = GameState::GameOver;
-            self.trigger_shake(6.0);
-            self.damage_flash_timer = 6.0;
+            self.lose_life();
+            return;
         }
 
         // ----- GOAL CHECK -----
@@ -1463,7 +1502,7 @@ impl World {
         }
 
         // Lava bubbles
-        if rand::gen_range(0.0_f32, 1.0) < 0.3 {
+        if rand::gen_range(0.0_f32, 1.0) < 0.3 && self.lava_bubbles.len() < 40 {
             self.lava_bubbles.push(LavaBubble {
                 x: rand::gen_range(0.0_f32, SCREEN_W),
                 y: self.lava_y,
@@ -1484,12 +1523,13 @@ impl World {
             }
         }
 
-        // Camera
+        // Camera with rounding to prevent jitter (matches web)
         let target_cam = self.player.y - SCREEN_H * 0.6;
         self.camera_y += (target_cam - self.camera_y) * 0.1;
         if self.camera_y > self.lava_y - SCREEN_H + 100.0 {
             self.camera_y = self.lava_y - SCREEN_H + 100.0;
         }
+        self.camera_y = self.camera_y.round();
     }
 }
 
@@ -1504,8 +1544,8 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
     // Parallax background
     let bg_size: f32 = 64.0;
     let start_y_bg = ((cam_y * 0.5) / bg_size).floor() as i32 - 1;
-    for y in start_y_bg..(start_y_bg + 12) {
-        for x in 0..12 {
+    for y in start_y_bg..(start_y_bg + 14) {
+        for x in 0..15 {
             draw_texture_ex(
                 &sprites.bg,
                 x as f32 * bg_size,
@@ -1517,12 +1557,6 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
                 },
             );
         }
-    }
-
-    // Ambient dust motes (background layer)
-    for mote in &world.dust_motes {
-        draw_rectangle(mote.x, mote.y, mote.size, mote.size,
-            Color::new(1.0, 1.0, 1.0, mote.alpha));
     }
 
     // Apply screen shake offset for game world drawing
@@ -1537,21 +1571,27 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
         for t in level.texts {
             let tx = t.col * TILE_SIZE + sx;
             let ty = start_y + t.row * TILE_SIZE - cam_y + sy;
-            // Black outline
-            let outline = 2.0;
-            for &ox in &[-outline, 0.0, outline] {
-                for &oy in &[-outline, 0.0, outline] {
-                    if ox != 0.0 || oy != 0.0 {
-                        draw_text(t.text, tx + ox, ty + oy, 16.0, BLACK);
+            if t.ghost {
+                let pulse = 0.4 + 0.3 * (world.time_counter as f32 * 2.0 + t.row).sin();
+                draw_text(t.text, tx, ty, 16.0, Color::new(0.7, 0.63, 1.0, pulse));
+            } else {
+                // Black outline
+                let outline = 2.0_f32;
+                for &ox in &[-outline, 0.0, outline] {
+                    for &oy in &[-outline, 0.0, outline] {
+                        if ox != 0.0 || oy != 0.0 {
+                            draw_text(t.text, tx + ox, ty + oy, 16.0, BLACK);
+                        }
                     }
                 }
+                draw_text(t.text, tx, ty, 16.0, WHITE);
             }
-            draw_text(t.text, tx, ty, 16.0, WHITE);
         }
     }
 
     // Platforms
-    for p in &world.platforms {
+    for i in 0..world.platforms.len() {
+        let p = &world.platforms[i];
         if p.y > cam_y - TILE_SIZE && p.y < cam_y + SCREEN_H + TILE_SIZE {
             let tex = match p.kind {
                 TileKind::Brick => &sprites.brick,
@@ -1574,17 +1614,8 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
         draw_rectangle(p.x + sx, p.y - cam_y + sy, p.size, p.size, c);
     }
 
-    // Gems (with pulsing glow)
+    // Gems
     for g in &world.gems {
-        // Pulsing glow behind the gem
-        let glow_alpha = 0.15 + 0.1 * (world.frame_count as f32 * 0.08).sin();
-        let glow_size = g.w + 8.0 + 2.0 * (world.frame_count as f32 * 0.08).sin();
-        draw_circle(
-            g.x + g.w / 2.0 + sx,
-            g.y + g.h / 2.0 - cam_y + sy,
-            glow_size / 2.0,
-            Color::new(0.0, 1.0, 1.0, glow_alpha),
-        );
         draw_texture_ex(
             &sprites.gem,
             g.x + sx, g.y - cam_y + sy, WHITE,
@@ -1594,7 +1625,7 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
 
     // Player bullets
     for b in &world.bullets {
-        let angle = b.vy.atan2(b.vx);
+        let angle: f32 = b.vy.atan2(b.vx);
         let cx = b.x + b.w / 2.0 + sx;
         let cy = b.y - cam_y + b.h / 2.0 + sy;
         draw_texture_ex(
@@ -1610,7 +1641,7 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
 
     // Enemy bullets
     for b in &world.enemy_bullets {
-        let angle = b.vy.atan2(b.vx);
+        let angle: f32 = b.vy.atan2(b.vx);
         let cx = b.x + b.w / 2.0 + sx;
         let cy = b.y - cam_y + b.h / 2.0 + sy;
         draw_texture_ex(
@@ -1625,7 +1656,8 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
     }
 
     // Enemies
-    for e in &world.enemies {
+    for i in 0..world.enemies.len() {
+        let e = &world.enemies[i];
         let tex = match e.kind {
             EnemyKind::Patrol => &sprites.patrol,
             EnemyKind::Bat => &sprites.bat,
@@ -1661,18 +1693,6 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
         );
     }
 
-    // Player trail afterimages
-    for tp in &world.trail_particles {
-        let alpha = (tp.life / 8.0) * 0.25;
-        let trail_size = tp.size;
-        draw_rectangle(
-            tp.x - trail_size / 2.0 + sx,
-            tp.y - trail_size / 2.0 - cam_y + sy,
-            trail_size, trail_size,
-            Color::new(0.0, 1.0, 1.0, alpha),
-        );
-    }
-
     // Player
     if world.state == GameState::Playing || world.state == GameState::Win {
         draw_texture_ex(
@@ -1702,12 +1722,11 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
     let lava_screen_y = world.lava_y - cam_y + sy;
     let now = world.time_counter as f32 * 3.0;
 
-    // Draw lava body as a series of thin rects for the gradient
-    let lava_top = lava_screen_y - 8.0; // account for wave amplitude
+    // Draw lava body
+    let lava_top = lava_screen_y - 8.0;
     if lava_top < SCREEN_H {
         let top = lava_top.max(0.0);
         let height = SCREEN_H - top;
-        // Simple gradient: orange -> dark red
         let steps = 8;
         let step_h = height / steps as f32;
         for s in 0..steps {
@@ -1722,16 +1741,15 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
 
     // Wavy top edge highlight
     {
-        for wx_i in 0..((SCREEN_W as i32) / 4) {
+        let wx_steps = (SCREEN_W as i32) / 4;
+        for wx_i in 0..wx_steps {
             let wx = wx_i as f32 * 4.0;
             let wave_y = lava_screen_y
                 + (now + wx * 0.02).sin() * 4.0
                 + (now * 1.7 + wx * 0.035).sin() * 3.0;
-            // Fill column from wave to old lava_screen_y with orange
             let fill_top = wave_y.min(lava_screen_y);
             let fill_h = (wave_y - fill_top).abs() + 4.0;
             draw_rectangle(wx, fill_top, 4.0, fill_h, Color::new(1.0, 0.63, 0.0, 0.95));
-            // Bright edge
             draw_rectangle(wx, wave_y, 4.0, 3.0, Color::new(1.0, 1.0, 0.39, 0.7));
         }
     }
@@ -1764,10 +1782,11 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
     if world.state == GameState::Playing {
         let score_str = format!("SCORE: {}", world.score);
         draw_text(&score_str, 20.0, 40.0, 20.0, WHITE);
-        let level_names = ["THE OVERGROWN DEPTHS", "THE FROZEN ARCHIVE", "THE LIVING CORE"];
-        let level_str = level_names[world.current_level.min(2) as usize];
-        let lw = measure_text(level_str, None, 14, 1.0);
-        draw_text(level_str, SCREEN_W - 20.0 - lw.width, 40.0, 14.0,
+        let lives_str = format!("LIVES: {}", world.lives);
+        draw_text(&lives_str, 20.0, 65.0, 20.0, WHITE);
+        let level = get_level(world.current_level);
+        let lw = measure_text(level.name, None, 14, 1.0);
+        draw_text(level.name, SCREEN_W - 20.0 - lw.width, 40.0, 14.0,
             Color::new(0.7, 0.6, 1.0, 0.8));
     }
 
@@ -1777,7 +1796,7 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
             draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.0, 0.0, 0.0, 0.8));
 
             // Title embers
-            if rand::gen_range(0.0_f32, 1.0) < 0.4 {
+            if rand::gen_range(0.0_f32, 1.0) < 0.4 && world.title_embers.len() < 80 {
                 world.title_embers.push(TitleEmber {
                     x: rand::gen_range(0.0_f32, SCREEN_W),
                     y: SCREEN_H + 5.0,
@@ -1808,138 +1827,128 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
                 }
             }
 
-            // Title
-            let title = "THE OBSIDIAN SPIRE";
+            // Title: "NANO WIZARDS"
+            let title = "NANO WIZARDS";
             let tm = measure_text(title, None, 42, 1.0);
-            // Glow effect via slightly offset copies
+            // Glow effect
             for &ox in &[-2.0_f32, 2.0, 0.0] {
                 for &oy in &[-2.0_f32, 2.0, 0.0] {
-                    draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0 + ox, SCREEN_H / 2.0 - 20.0 + oy, 42.0,
+                    draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0 + ox, SCREEN_H / 2.0 - 50.0 + oy, 42.0,
                         Color::new(1.0, 0.53, 0.0, 0.3));
                 }
             }
-            draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0, SCREEN_H / 2.0 - 40.0, 42.0, WHITE);
+            draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0, SCREEN_H / 2.0 - 50.0, 42.0, WHITE);
 
-            // Subtitle
-            let sub = "The last Crystal Mage ascends";
-            let subm = measure_text(sub, None, 16, 1.0);
-            draw_text(sub, SCREEN_W / 2.0 - subm.width / 2.0, SCREEN_H / 2.0 + 5.0, 16.0,
-                Color::new(0.7, 0.6, 1.0, 0.8));
+            // Subtitle: "The Obsidian Spire"
+            let sub = "The Obsidian Spire";
+            let subm = measure_text(sub, None, 22, 1.0);
+            draw_text(sub, SCREEN_W / 2.0 - subm.width / 2.0, SCREEN_H / 2.0 - 15.0, 22.0,
+                Color::new(1.0, 0.78, 0.39, 0.9));
+
+            // Tagline
+            let tag = "The last Nano Wizard ascends";
+            let tagm = measure_text(tag, None, 16, 1.0);
+            draw_text(tag, SCREEN_W / 2.0 - tagm.width / 2.0, SCREEN_H / 2.0 + 15.0, 16.0,
+                Color::new(0.78, 0.7, 1.0, 0.7));
 
             // Blinking prompt
             let blink = ((world.time_counter * 2.0) as i32) % 2 == 0;
             if blink {
                 let prompt = "Press B/Z/Space to Begin";
                 let pm = measure_text(prompt, None, 20, 1.0);
-                draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 50.0, 20.0,
+                draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 55.0, 20.0,
                     color_u8!(255, 170, 0, 255));
             }
         }
-        GameState::Story => {
-            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.02, 0.0, 0.06, 0.95));
-            let story_sets: [&[&str]; 4] = [
-                &[ // Intro
-                    "The Obsidian Spire has awakened after a thousand years.",
-                    "Its corruption spreads — forests wither, rivers turn black.",
-                    "You are Vael, the last Crystal Mage.",
-                    "Ascend the Spire. Destroy its heart.",
-                ],
-                &[ // After Level 1
-                    "The walls pulse with a dark rhythm.",
-                    "You feel it in your chest — familiar,",
-                    "like a heartbeat that isn't your own.",
-                    "Something inside the Spire recognizes you.",
-                ],
-                &[ // After Level 2
-                    "Fragments of memory flash before your eyes —",
-                    "a child running through these halls, laughing.",
-                    "Your hands glow with the same dark energy",
-                    "as the walls. The whispers grow louder.",
-                ],
-                &[ // Victory
-                    "You reach the heart. The pulsing crystal is... familiar.",
-                    "You ARE the heart. A fragment that gained free will.",
-                    "The Mages sent you home, hoping you'd merge back.",
-                    "But you are Vael now. You shatter the crystal.",
-                    "Free at last.",
-                ],
-            ];
-            let idx = world.current_level.min(3) as usize;
-            let lines = story_sets[idx];
-            for (i, line) in lines.iter().enumerate() {
-                let m = measure_text(line, None, 18, 1.0);
+        GameState::LevelStory => {
+            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.0, 0.0, 0.0, 0.92));
+            let story_lines: Vec<&str> = world.story_full_text.split('\n').collect();
+            let line_height: f32 = 24.0;
+            let total_height = story_lines.len() as f32 * line_height;
+            let start_y_story = (SCREEN_H - total_height) / 2.0 - 40.0;
+            for (si, line) in story_lines.iter().enumerate() {
+                let m = measure_text(line, None, 17, 1.0);
                 draw_text(line, SCREEN_W / 2.0 - m.width / 2.0,
-                    SCREEN_H / 2.0 - 60.0 + i as f32 * 36.0, 18.0,
+                    start_y_story + si as f32 * line_height, 17.0,
                     Color::new(0.78, 0.7, 1.0, 1.0));
             }
-            let prompt = "Press B/Z/Space to continue...";
-            let pm = measure_text(prompt, None, 16, 1.0);
-            let blink = ((world.time_counter * 2.0) as i32) % 2 == 0;
-            if blink {
-                draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 140.0, 16.0,
-                    color_u8!(255, 170, 0, 255));
+            if world.story_line_index < world.story_lines.len() {
+                // Show blinking cursor
+                let blink = ((world.time_counter * 3.3) as i32) % 2 == 0;
+                if blink {
+                    let last_line = story_lines.last().unwrap_or(&"");
+                    let last_m = measure_text(last_line, None, 17, 1.0);
+                    let cursor_y = start_y_story + (story_lines.len() as f32 - 1.0) * line_height;
+                    draw_text("_", SCREEN_W / 2.0 + last_m.width / 2.0 + 4.0, cursor_y, 17.0,
+                        color_u8!(255, 170, 0, 255));
+                }
+            } else {
+                let blink = ((world.time_counter * 2.0) as i32) % 2 == 0;
+                if blink {
+                    let prompt = "Press B/Z/Space to continue...";
+                    let pm = measure_text(prompt, None, 16, 1.0);
+                    draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H - 60.0, 16.0,
+                        color_u8!(255, 170, 0, 255));
+                }
             }
         }
         GameState::GameOver => {
-            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.3, 0.0, 0.1, 0.7));
+            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.78, 0.0, 0.0, 0.5));
             let title = "THE SPIRE CLAIMS YOU";
             let tm = measure_text(title, None, 40, 1.0);
-            draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0, SCREEN_H / 2.0 - 40.0, 40.0,
-                Color::new(1.0, 0.2, 0.2, 1.0));
+            draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0, SCREEN_H / 2.0 - 20.0, 40.0, WHITE);
             let sub = "The corruption swallows another soul...";
-            let subm = measure_text(sub, None, 14, 1.0);
-            draw_text(sub, SCREEN_W / 2.0 - subm.width / 2.0, SCREEN_H / 2.0, 14.0,
-                Color::new(0.7, 0.5, 0.5, 0.8));
-            let score_str = format!("FINAL SCORE: {}", world.score);
+            let subm = measure_text(sub, None, 16, 1.0);
+            draw_text(sub, SCREEN_W / 2.0 - subm.width / 2.0, SCREEN_H / 2.0 + 20.0, 16.0,
+                Color::new(0.78, 0.7, 1.0, 0.8));
+            let score_str = format!("SCORE: {}", world.score);
             let sm = measure_text(&score_str, None, 24, 1.0);
-            draw_text(&score_str, SCREEN_W / 2.0 - sm.width / 2.0, SCREEN_H / 2.0 + 35.0, 24.0, WHITE);
-            let prompt = "Press B/Z to Restart";
+            draw_text(&score_str, SCREEN_W / 2.0 - sm.width / 2.0, SCREEN_H / 2.0 + 60.0, 24.0, WHITE);
+            let prompt = "Press B/Z to Retry";
             let pm = measure_text(prompt, None, 20, 1.0);
-            draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 70.0, 20.0, WHITE);
+            draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 100.0, 20.0, WHITE);
         }
         GameState::Win => {
-            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.08, 0.0, 0.16, 0.9));
+            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.08, 0.0, 0.16, 0.85));
             let title = "FREE AT LAST";
-            let tm = measure_text(title, None, 44, 1.0);
+            let tm = measure_text(title, None, 36, 1.0);
             // Purple glow
             for &ox in &[-2.0_f32, 2.0, 0.0] {
                 for &oy in &[-2.0_f32, 2.0, 0.0] {
-                    draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0 + ox, SCREEN_H / 2.0 - 80.0 + oy, 44.0,
-                        Color::new(0.6, 0.3, 1.0, 0.3));
+                    draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0 + ox, SCREEN_H / 2.0 - 40.0 + oy, 36.0,
+                        Color::new(0.67, 0.4, 1.0, 0.3));
                 }
             }
-            draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0, SCREEN_H / 2.0 - 80.0, 44.0, WHITE);
+            draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0, SCREEN_H / 2.0 - 40.0, 36.0, WHITE);
             let epilogue = [
-                "The Spire crumbles. Its corruption fades.",
-                "Vael walks into the dawn — no longer",
-                "the heart of darkness, but something new.",
-                "Something free.",
+                "The Obsidian Spire crumbles into dust.",
+                "Vael walks into the dawn -- no longer a heart,",
+                "no longer a weapon. Just free.",
             ];
             for (i, line) in epilogue.iter().enumerate() {
-                let m = measure_text(line, None, 16, 1.0);
+                let m = measure_text(line, None, 17, 1.0);
                 draw_text(line, SCREEN_W / 2.0 - m.width / 2.0,
-                    SCREEN_H / 2.0 - 20.0 + i as f32 * 28.0, 16.0,
-                    Color::new(0.78, 0.7, 1.0, 0.9));
+                    SCREEN_H / 2.0 + 10.0 + i as f32 * 28.0, 17.0,
+                    Color::new(0.78, 0.7, 1.0, 0.8));
             }
             let score_str = format!("FINAL SCORE: {}", world.score);
             let sm = measure_text(&score_str, None, 22, 1.0);
-            draw_text(&score_str, SCREEN_W / 2.0 - sm.width / 2.0, SCREEN_H / 2.0 + 80.0, 22.0,
-                color_u8!(255, 255, 0, 255));
+            draw_text(&score_str, SCREEN_W / 2.0 - sm.width / 2.0, SCREEN_H / 2.0 + 110.0, 22.0, WHITE);
             let prompt = "Press B/Z to Play Again";
-            let pm = measure_text(prompt, None, 18, 1.0);
-            draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 120.0, 18.0, WHITE);
+            let pm = measure_text(prompt, None, 20, 1.0);
+            draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 150.0, 20.0,
+                color_u8!(255, 170, 0, 255));
         }
         GameState::Playing => {} // already drawn above
-        GameState::LevelStory => {} // drawn via Story state above
     }
 
     // ----- CRT SCANLINE OVERLAY -----
     {
-        let scanline_color = Color::new(0.0, 0.0, 0.0, 0.15);
+        let scanline_color = Color::new(0.0, 0.0, 0.0, 0.04);
         let mut y = 0.0_f32;
         while y < SCREEN_H {
-            draw_line(0.0, y, SCREEN_W, y, 1.0, scanline_color);
-            y += 4.0;
+            draw_rectangle(0.0, y, SCREEN_W, 1.0, scanline_color);
+            y += 3.0;
         }
     }
 
@@ -1953,13 +1962,9 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
             let inset = t * depth;
             let c = Color::new(0.0, 0.0, 0.0, alpha);
             let thickness = depth / layers as f32;
-            // Top edge
             draw_rectangle(0.0, inset, SCREEN_W, thickness, c);
-            // Bottom edge
             draw_rectangle(0.0, SCREEN_H - inset - thickness, SCREEN_W, thickness, c);
-            // Left edge
             draw_rectangle(inset, 0.0, thickness, SCREEN_H, c);
-            // Right edge
             draw_rectangle(SCREEN_W - inset - thickness, 0.0, thickness, SCREEN_H, c);
         }
     }
@@ -1970,7 +1975,7 @@ fn draw_world(world: &mut World, sprites: &Sprites) {
 // ---------------------------------------------------------------------------
 fn window_conf() -> Conf {
     Conf {
-        window_title: "Micro Mages".to_owned(),
+        window_title: "Nano Wizards".to_owned(),
         window_width: SCREEN_W as i32,
         window_height: SCREEN_H as i32,
         window_resizable: false,
@@ -2020,16 +2025,64 @@ async fn main() {
                 GameState::Playing => {
                     world.update(&mut input);
                 }
+                GameState::LevelStory => {
+                    world.time_counter += TIME_STEP;
+                    world.story_frame_counter += 1;
+                    // Typewriter effect
+                    if world.story_line_index < world.story_lines.len() {
+                        if world.story_frame_counter % 2 == 0 {
+                            let line = world.story_lines[world.story_line_index];
+                            if world.story_char_index < line.len() {
+                                let ch = line.as_bytes()[world.story_char_index] as char;
+                                world.story_full_text.push(ch);
+                                world.story_char_index += 1;
+                            } else {
+                                world.story_full_text.push('\n');
+                                world.story_line_index += 1;
+                                world.story_char_index = 0;
+                            }
+                        }
+                    }
+                    if input.jump_buffer > 0 || input.shoot_pressed {
+                        if world.story_line_index < world.story_lines.len() {
+                            // Skip to end of all text
+                            for si in world.story_line_index..world.story_lines.len() {
+                                let line = world.story_lines[si];
+                                if si == world.story_line_index {
+                                    world.story_full_text.push_str(&line[world.story_char_index..]);
+                                } else {
+                                    world.story_full_text.push_str(line);
+                                }
+                                world.story_full_text.push('\n');
+                            }
+                            world.story_line_index = world.story_lines.len();
+                            world.story_char_index = 0;
+                        } else {
+                            // Advance past story screen
+                            if world.story_is_victory {
+                                world.state = GameState::Win;
+                            } else {
+                                world.reset_game(false);
+                            }
+                        }
+                        input.jump_buffer = 0;
+                        input.shoot_pressed = false;
+                    }
+                }
                 _ => {
-                    // In non-playing states, advance time counter for animations
                     world.time_counter += TIME_STEP;
 
                     if input.jump_buffer > 0 || input.shoot_pressed {
                         match world.state {
-                            GameState::Start => { world.state = GameState::Story; }
-                            GameState::Story => { world.reset_game(true); }
+                            GameState::Start => {
+                                world.init_story_screen(STORY_INTRO, false);
+                            }
                             GameState::GameOver => { world.reset_game(true); }
-                            GameState::Win => { world.reset_game(true); }
+                            GameState::Win => {
+                                world.current_level = 0;
+                                world.score = 0;
+                                world.state = GameState::Start;
+                            }
                             _ => {}
                         }
                         input.jump_buffer = 0;

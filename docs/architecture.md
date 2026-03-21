@@ -58,7 +58,7 @@ retrogames/
 |
 +-- web/                        # Browser games (the "product")
 |   +-- index.html              # Arcade Launcher -- links to all games
-|   +-- micro/index.html        # Micro Mages (Platformer)
+|   +-- micro/index.html        # Nano Wizards (Platformer)
 |   +-- space/index.html        # Neon Defender (Shoot 'em Up)
 |   +-- shadow/index.html       # Shadow Blade (Action Platformer)
 |   +-- arena/index.html        # Arena Blitz (Twin-Stick Shooter)

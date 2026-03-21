@@ -431,7 +431,7 @@ brute-force O(n*m) collision checks take microseconds.
 
 ### Platformer Physics
 
-The platformer games (Micro Mages, Shadow Blade) implement a full platformer
+The platformer games (Nano Wizards, Shadow Blade) implement a full platformer
 physics suite:
 
 ```

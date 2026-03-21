@@ -8,7 +8,7 @@
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
         html, body { position: fixed; top: 0; left: 0; width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; touch-action: none; background-color: #0a0a18; -webkit-tap-highlight-color: transparent; }
         canvas { position: fixed; top: 0; left: 0; width: 100vw !important; height: 100vh !important; background-color: #0a0a18; image-rendering: pixelated; display: block; }
-        #joystickZone { position: fixed; bottom: 0; left: 0; width: 50vw; height: 45vh; z-index: 10; }
+        #joystickZone { position: fixed; top: 0; left: 0; width: 50vw; height: 100vh; z-index: 10; }
         #joystickBase { position: fixed; width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 3px solid rgba(255,255,255,0.25); display: none; pointer-events: none; transform: translate(-50%, -50%); }
         #joystickStick { position: absolute; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,0.45); border: 2px solid rgba(255,255,255,0.6); top: 50%; left: 50%; transform: translate(-50%, -50%); }
         .action-btns { position: fixed; bottom: 30px; right: 20px; display: flex; gap: 18px; z-index: 11; align-items: flex-end; }
@@ -34,7 +34,7 @@
     // ============================================================
     // FULLSCREEN RESPONSIVE SCALING
     // ============================================================
-    const W = 640, H = 480;
+    const W = 800, H = 600;
     let canvasScale = 1;
     let canvasOffsetX = 0, canvasOffsetY = 0;
 
@@ -59,7 +59,7 @@
     // ============================================================
     // CONSTANTS
     // ============================================================
-    const TILE = 32;
+    const TILE = 22;
     const GRAVITY = 0.42;
     const MAX_FALL = 9;
     const JUMP_FORCE = -8.2;
@@ -807,35 +807,35 @@
             for (let x = 0; x < levelW; x++) {
                 const ch = map[y][x];
                 if (ch === '@') {
-                    player.x = x * TILE + 12;
-                    player.y = y * TILE + 8;
+                    player.x = x * TILE + 8;
+                    player.y = y * TILE + 6;
                     levelTiles.push('.');
                 } else if (ch === 'C') {
-                    crystals.push({ x: x*TILE+8, y: y*TILE+8, alive: true, sparkle: Math.random()*100 });
+                    crystals.push({ x: x*TILE+6, y: y*TILE+6, alive: true, sparkle: Math.random()*100 });
                     levelTiles.push('.');
                 } else if (ch === 'S') {
-                    enemies.push({ type: 'slime', x: x*TILE, y: y*TILE, w: 16, h: 16, vx: 1, vy: 0, alive: true, frame: 0, hp: 1, startX: x*TILE });
+                    enemies.push({ type: 'slime', x: x*TILE, y: y*TILE, w: 11, h: 11, vx: 1, vy: 0, alive: true, frame: 0, hp: 1, startX: x*TILE });
                     levelTiles.push('.');
                 } else if (ch === 'B') {
-                    enemies.push({ type: 'bat', x: x*TILE, y: y*TILE, w: 16, h: 16, vx: -1.5, vy: 0, alive: true, frame: 0, hp: 1, baseY: y*TILE, t: Math.random()*100 });
+                    enemies.push({ type: 'bat', x: x*TILE, y: y*TILE, w: 11, h: 11, vx: -1.5, vy: 0, alive: true, frame: 0, hp: 1, baseY: y*TILE, t: Math.random()*100 });
                     levelTiles.push('.');
                 } else if (ch === 'P') {
-                    powerups.push({ type: 'shard', x: x*TILE+8, y: y*TILE+8, alive: true });
+                    powerups.push({ type: 'shard', x: x*TILE+6, y: y*TILE+6, alive: true });
                     levelTiles.push('.');
                 } else if (ch === 'F') {
-                    powerups.push({ type: 'fire', x: x*TILE+8, y: y*TILE+8, alive: true });
+                    powerups.push({ type: 'fire', x: x*TILE+6, y: y*TILE+6, alive: true });
                     levelTiles.push('.');
                 } else if (ch === 'G') {
-                    powerups.push({ type: 'goal', x: x*TILE+8, y: y*TILE+8, alive: true });
+                    powerups.push({ type: 'goal', x: x*TILE+6, y: y*TILE+6, alive: true });
                     levelTiles.push('.');
                 } else if (ch === 'X') {
                     boss = {
-                        x: x*TILE - 16, y: y*TILE - 16,
-                        w: 32, h: 32, hp: 12, maxHp: 12,
+                        x: x*TILE - 11, y: y*TILE - 11,
+                        w: 22, h: 22, hp: 12, maxHp: 12,
                         vx: 1.5, vy: 0,
                         alive: true, frame: 0,
                         attackTimer: 0, phase: 0,
-                        flashTimer: 0, startX: x*TILE - 16,
+                        flashTimer: 0, startX: x*TILE - 11,
                         chargeTimer: 0, charging: false,
                     };
                     levelTiles.push('.');
@@ -851,8 +851,8 @@
     function resetPlayer() {
         player.vx = 0;
         player.vy = 0;
-        player.w = 8;
-        player.h = 12;
+        player.w = 6;
+        player.h = 8;
         player.onGround = false;
         player.facing = 1;
         player.coyoteFrames = 0;
@@ -937,7 +937,7 @@
         ent.vx = safeNum(ent.vx, 0);
         ent.vy = safeNum(ent.vy, 0);
 
-        const pw = ent.w || 14, ph = ent.h || 16;
+        const pw = ent.w || 10, ph = ent.h || 11;
 
         // Horizontal movement
         ent.x += ent.vx;
@@ -1007,7 +1007,7 @@
                         triggerShake(3);
                         spawnParticles(tx*TILE+TILE/2, topTile3*TILE+TILE/2, '#aa8844', 8, 3);
                         if (Math.random() < 0.4) {
-                            crystals.push({ x: tx*TILE+TILE/2, y: topTile3*TILE - 8, alive: true, sparkle: 0 });
+                            crystals.push({ x: tx*TILE+TILE/2, y: topTile3*TILE - 6, alive: true, sparkle: 0 });
                         }
                     }
                     break;
@@ -1123,8 +1123,8 @@
                 const activeFireballs = fireballs.filter(f => f.alive).length;
                 if (activeFireballs < 3) {
                     player.attackCooldown = 15;
-                    const fbOffsetX = player.big ? (player.facing > 0 ? 28 : -8) : (player.facing > 0 ? 10 : -8);
-                    const fbOffsetY = player.big ? 12 : 4;
+                    const fbOffsetX = player.big ? (player.facing > 0 ? 19 : -6) : (player.facing > 0 ? 7 : -6);
+                    const fbOffsetY = player.big ? 8 : 3;
                     fireballs.push({
                         x: player.x + fbOffsetX,
                         y: player.y + fbOffsetY,
@@ -1136,14 +1136,14 @@
                 }
             } else {
                 player.attackCooldown = 15;
-                const slashOffsetX = player.big ? (player.facing > 0 ? 28 : -16) : (player.facing > 0 ? 10 : -16);
-                const slashOffsetY = player.big ? 8 : 0;
+                const slashOffsetX = player.big ? (player.facing > 0 ? 19 : -11) : (player.facing > 0 ? 7 : -11);
+                const slashOffsetY = player.big ? 6 : 0;
                 swordSlash = {
                     x: player.x + slashOffsetX,
                     y: player.y + slashOffsetY,
                     facing: player.facing,
                     timer: 8,
-                    w: 16, h: 14
+                    w: 11, h: 10
                 };
                 playSound('sword');
             }
@@ -1152,8 +1152,8 @@
         // Update sword slash
         if (swordSlash) {
             swordSlash.timer--;
-            const slashOffsetX = player.big ? (swordSlash.facing > 0 ? 28 : -16) : (swordSlash.facing > 0 ? 10 : -16);
-            const slashOffsetY = player.big ? 8 : 0;
+            const slashOffsetX = player.big ? (swordSlash.facing > 0 ? 19 : -11) : (swordSlash.facing > 0 ? 7 : -11);
+            const slashOffsetY = player.big ? 6 : 0;
             swordSlash.x = player.x + slashOffsetX;
             swordSlash.y = player.y + slashOffsetY;
 
@@ -1193,8 +1193,8 @@
         if (growthAnim > 0) growthAnim--;
 
         // Move player
-        const pw = player.big ? 14 : 8;
-        const ph = player.big ? 24 : 12;
+        const pw = player.big ? 10 : 6;
+        const ph = player.big ? 17 : 8;
         player.w = pw;
         player.h = ph;
         const hazard = moveEntity(player);
@@ -1218,7 +1218,7 @@
         for (let i = crystals.length - 1; i >= 0; i--) {
             const c = crystals[i];
             if (!c.alive) continue;
-            if (rectOverlap(player.x, player.y, pw, ph, c.x - 6, c.y - 6, 12, 12)) {
+            if (rectOverlap(player.x, player.y, pw, ph, c.x - 4, c.y - 4, 8, 8)) {
                 c.alive = false;
                 coins++;
                 score += 100;
@@ -1233,13 +1233,13 @@
         for (let i = powerups.length - 1; i >= 0; i--) {
             const p = powerups[i];
             if (!p.alive) continue;
-            if (rectOverlap(player.x, player.y, pw, ph, p.x - 8, p.y - 8, 16, 16)) {
+            if (rectOverlap(player.x, player.y, pw, ph, p.x - 6, p.y - 6, 11, 11)) {
                 if (p.type === 'shard') {
                     p.alive = false;
                     if (!player.big) {
                         player.big = true;
-                        player.w = 14;
-                        player.h = 24;
+                        player.w = 10;
+                        player.h = 17;
                         player.y -= 12;
                         growthAnim = 10;
                         invincibleTimer = Math.max(invincibleTimer, 30);
@@ -1370,8 +1370,8 @@
             f.x += f.vx;
             f.y += f.vy;
 
-            const fTy = Math.floor((f.y + 8) / TILE);
-            const fTx = Math.floor((f.x + 4) / TILE);
+            const fTy = Math.floor((f.y + 6) / TILE);
+            const fTx = Math.floor((f.x + 3) / TILE);
             if (isSolid(fTx, fTy) && f.vy > 0) {
                 f.vy = -4;
                 f.bounces++;
@@ -1384,7 +1384,7 @@
                 setTileAt(fTx, Math.floor(f.y/TILE), '.');
                 f.alive = false;
                 playSound('break');
-                spawnParticles(fTx*TILE+16, Math.floor(f.y/TILE)*TILE+16, '#aa8844', 6, 3);
+                spawnParticles(fTx*TILE+11, Math.floor(f.y/TILE)*TILE+11, '#aa8844', 6, 3);
             }
 
             if (f.bounces > 3 || f.y > levelH * TILE || f.x < 0 || f.x > levelW * TILE) {
@@ -1694,7 +1694,7 @@
             player.vy += GRAVITY;
             ctx.globalAlpha = 0.5;
             const sprite = player.facing > 0 ? knightSmallRight : knightSmallLeft;
-            ctx.drawImage(sprite, px, Math.round(player.y), 8, 12);
+            ctx.drawImage(sprite, px, Math.round(player.y), 6, 8);
             ctx.globalAlpha = 1;
             return;
         }
@@ -1713,10 +1713,10 @@
 
         if (player.big) {
             const sprite = player.facing > 0 ? knightBigRight : knightBigLeft;
-            const dw = 32 * drawScale;
-            const dh = 48 * drawScale;
-            const drawX = Math.round(px - 1 - (dw - 32) / 2);
-            const drawY = Math.round(py - 8 - (dh - 48));
+            const dw = 22 * drawScale;
+            const dh = 34 * drawScale;
+            const drawX = Math.round(px - 1 - (dw - 22) / 2);
+            const drawY = Math.round(py - 6 - (dh - 34));
             ctx.drawImage(sprite, drawX, drawY, dw, dh);
             if (damageFlashTimer > 0 && damageFlashTimer % 4 < 2) {
                 ctx.globalAlpha = 0.5;
@@ -1727,10 +1727,10 @@
         } else {
             const sprite = player.facing > 0 ? knightSmallRight : knightSmallLeft;
             const bob = player.onGround && Math.abs(player.vx) > 0.5 ? Math.sin(player.animTimer * 0.5) * 1 : 0;
-            const dw = 8 * drawScale;
-            const dh = 12 * drawScale;
-            const drawX = Math.round(px - (dw - 8) / 2);
-            const drawY = Math.round(py + bob - (dh - 12));
+            const dw = 6 * drawScale;
+            const dh = 8 * drawScale;
+            const drawX = Math.round(px - (dw - 6) / 2);
+            const drawY = Math.round(py + bob - (dh - 8));
             ctx.drawImage(sprite, drawX, drawY, dw, dh);
             if (damageFlashTimer > 0 && damageFlashTimer % 4 < 2) {
                 ctx.globalAlpha = 0.5;
@@ -1749,7 +1749,7 @@
             const slashAlpha = swordSlash.timer / 8;
             ctx.globalAlpha = slashAlpha;
             const slashSprite = swordSlash.facing > 0 ? swordSlashRight : swordSlashLeft;
-            ctx.drawImage(slashSprite, sx, sy, 16, 16);
+            ctx.drawImage(slashSprite, sx, sy, 11, 11);
             ctx.globalAlpha = 1;
         }
     }
@@ -1763,10 +1763,10 @@
 
             if (e.type === 'slime') {
                 const squish = 1 + Math.sin(e.frame * 0.1) * 0.1;
-                ctx.drawImage(slimeSprite, ex, ey + (1-squish)*8, 16, 16 * squish);
+                ctx.drawImage(slimeSprite, ex, ey + (1-squish)*6, 11, 11 * squish);
             } else if (e.type === 'bat') {
                 const batSpr = Math.floor(e.frame / 8) % 2 === 0 ? batSprite1 : batSprite2;
-                ctx.drawImage(batSpr, ex, ey, 16, 16);
+                ctx.drawImage(batSpr, ex, ey, 11, 11);
             }
         }
     }
@@ -1778,12 +1778,12 @@
         if (boss.flashTimer > 0 && boss.flashTimer % 2 === 0) {
             ctx.globalAlpha = 0.6;
         }
-        ctx.drawImage(bossSprite, bx, by, 32, 32);
+        ctx.drawImage(bossSprite, bx, by, 22, 22);
         ctx.globalAlpha = 1;
 
         const barW = 60;
         const barH = 5;
-        const barX = bx + 16 - barW/2;
+        const barX = bx + 11 - barW/2;
         const barY = by - 10;
         ctx.fillStyle = '#333';
         ctx.fillRect(barX, barY, barW, barH);
@@ -1800,7 +1800,7 @@
             const cx = Math.round(c.x - cameraX);
             const cy = Math.round(c.y + Math.sin(c.sparkle * 0.05) * 3);
             if (cx < -16 || cx > W + 16) continue;
-            ctx.drawImage(crystalSprite, cx - 8, cy - 8, 16, 16);
+            ctx.drawImage(crystalSprite, cx - 6, cy - 6, 11, 11);
             if (c.sparkle % 30 < 5) {
                 ctx.globalAlpha = 0.5;
                 ctx.fillStyle = '#ffffff';
@@ -1817,15 +1817,15 @@
             const py = Math.round(p.y + Math.sin(Date.now() * 0.003) * 4);
             if (px < -16 || px > W + 16) continue;
             if (p.type === 'shard') {
-                ctx.drawImage(powerupSprite, px - 8, py - 8, 16, 16);
+                ctx.drawImage(powerupSprite, px - 6, py - 6, 11, 11);
             } else if (p.type === 'fire') {
-                ctx.drawImage(fireCrystalSprite, px - 8, py - 8, 16, 16);
+                ctx.drawImage(fireCrystalSprite, px - 6, py - 6, 11, 11);
             } else if (p.type === 'goal') {
-                ctx.drawImage(powerupSprite, px - 8, py - 8, 16, 16);
+                ctx.drawImage(powerupSprite, px - 6, py - 6, 11, 11);
                 ctx.globalAlpha = 0.3 + Math.sin(Date.now() * 0.005) * 0.15;
                 ctx.fillStyle = '#ffcc00';
                 ctx.beginPath();
-                ctx.arc(px, py, 14, 0, Math.PI * 2);
+                ctx.arc(px, py, 10, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.globalAlpha = 1;
             }
@@ -1836,7 +1836,7 @@
         for (const f of fireballs) {
             if (!f.alive) continue;
             const fx = Math.round(f.x - cameraX);
-            ctx.drawImage(fireballSprite, fx - 8, Math.round(f.y) - 8, 16, 16);
+            ctx.drawImage(fireballSprite, fx - 6, Math.round(f.y) - 6, 11, 11);
             // Trail particles (only if room)
             if (particles.length < MAX_PARTICLES) {
                 particles.push({
@@ -1892,7 +1892,7 @@
 
         ctx.fillStyle = '#ff4444';
         ctx.fillText('x' + lives, 30, 18);
-        ctx.drawImage(knightSmallRight, 12, 7, 12, 14);
+        ctx.drawImage(knightSmallRight, 12, 7, 8, 10);
 
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'center';
@@ -1901,7 +1901,7 @@
         ctx.textAlign = 'right';
         ctx.fillStyle = '#44ddff';
         ctx.fillText(coins + ' ', W - 10, 18);
-        ctx.drawImage(crystalSprite, W - 60, 5, 14, 14);
+        ctx.drawImage(crystalSprite, W - 60, 5, 10, 10);
 
         if (levelData[currentLevel]) {
             ctx.font = '8px "Press Start 2P"';
@@ -1987,13 +1987,13 @@
         ctx.fillText('The Crystal Kingdom', W/2, H/2 - 50);
 
         const knightBob = Math.sin(titleFrame * 0.05) * 4;
-        ctx.drawImage(knightBigRight, W/2 - 16, H/2 - 28 + knightBob, 32, 48);
+        ctx.drawImage(knightBigRight, W/2 - 11, H/2 - 20 + knightBob, 22, 34);
 
         for (let i = 0; i < 3; i++) {
             const angle = titleFrame * 0.03 + i * (Math.PI * 2 / 3);
             const rx = W/2 + Math.cos(angle) * 40;
             const ry = H/2 - 4 + Math.sin(angle) * 20 + knightBob;
-            ctx.drawImage(crystalSprite, rx - 6, ry - 6, 12, 12);
+            ctx.drawImage(crystalSprite, rx - 4, ry - 4, 8, 8);
         }
 
         if (Math.floor(titleFrame / 30) % 2 === 0) {

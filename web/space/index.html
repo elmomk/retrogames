@@ -72,7 +72,7 @@
             padding: max(10px, env(safe-area-inset-top, 10px)) 20px 0 20px;
             color: #0ff;
             text-shadow: 0 0 5px #0ff;
-            font-size: 14px;
+            font-size: 11px;
             display: flex;
             justify-content: space-between;
             transition: opacity 0.5s;
@@ -124,26 +124,26 @@
 
         .hint { color: #aaa; margin-top: 20px; font-size: 10px; line-height: 1.6; }
 
-        /* --- Virtual Joystick (overlaid on canvas, bottom-left) --- */
+        /* --- Floating Virtual Joystick --- */
         #joy-container {
             position: fixed;
-            bottom: max(30px, env(safe-area-inset-bottom, 30px));
-            left: max(30px, env(safe-area-inset-left, 30px));
-            width: 120px;
-            height: 120px;
+            width: 100px;
+            height: 100px;
             border-radius: 50%;
             background: rgba(0, 255, 255, 0.08);
             border: 2px solid rgba(0, 255, 255, 0.35);
             z-index: 20;
             touch-action: none;
-            display: flex;
+            display: none;
             justify-content: center;
             align-items: center;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
         }
 
         #joy-stick {
-            width: 50px;
-            height: 50px;
+            width: 40px;
+            height: 40px;
             background: rgba(0, 255, 255, 0.8);
             border-radius: 50%;
             box-shadow: 0 0 15px #0ff, inset 0 0 10px rgba(255,255,255,0.8);
@@ -152,43 +152,10 @@
             transition: none;
         }
 
-        /* --- Fire Button (overlaid on canvas, bottom-right) --- */
-        #shoot-btn {
-            position: fixed;
-            bottom: max(50px, calc(env(safe-area-inset-bottom, 30px) + 20px));
-            right: max(30px, env(safe-area-inset-right, 30px));
-            width: 70px;
-            height: 70px;
-            border-radius: 50%;
-            background: rgba(255, 0, 255, 0.1);
-            border: 3px solid #f0f;
-            color: #f0f;
-            font-family: inherit;
-            font-size: 14px;
-            font-weight: bold;
-            text-shadow: 0 0 5px #f0f;
-            box-shadow: 0 0 15px #f0f inset, 0 0 20px rgba(255, 0, 255, 0.4);
-            cursor: pointer;
-            outline: none;
-            touch-action: none;
-            -webkit-tap-highlight-color: transparent;
-            z-index: 20;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        #shoot-btn.active {
-            transform: scale(0.9);
-            background: rgba(255, 0, 255, 0.6);
-            color: #fff;
-            box-shadow: 0 0 30px #f0f inset, 0 0 30px #f0f;
-        }
-
         @media (max-width: 768px) {
             h1 { font-size: 20px; }
             h2 { font-size: 14px; }
-            .hud { font-size: 9px; padding-left: 10px; padding-right: 10px; }
+            .hud { font-size: 8px; padding-left: 10px; padding-right: 10px; }
             .story-text { font-size: 11px; }
             .center-msg { width: 90%; }
         }
@@ -210,7 +177,7 @@
         <h1>NEON DEFENDER</h1>
         <h2>THE LAST SIGNAL</h2>
         <p style="color: #888; font-size: 10px; line-height: 1.8;">Colony ship EXODUS-7. 50,000 souls. One pilot.<br>A distress signal from the Cygnus Void.<br>It should not exist.</p>
-        <div class="hint">Collect drops for Shields, Speed, &amp; Weapon Upgrades.<br><br>Touch: joystick to move, FIRE to shoot.<br>Keyboard: WASD/Arrows + Space.</div>
+        <div class="hint">Collect drops for Shields, Speed, &amp; Weapon Upgrades.<br><br>Touch: drag left side to move, tap right side to shoot.<br>Keyboard: WASD/Arrows + Space.</div>
         <button class="play-btn" onclick="startStory()">LAUNCH FIGHTER</button>
     </div>
 
@@ -229,7 +196,6 @@
 <div id="joy-container">
     <div id="joy-stick"></div>
 </div>
-<button id="shoot-btn">FIRE</button>
 
 <script>
     // --- Setup & Config ---
@@ -472,144 +438,119 @@
 
     let joystick = { active: false, vectorX: 0, vectorY: 0 };
 
-    // --- Touch Control Elements ---
+    // --- Floating Joystick & Touch Fire ---
     const joyContainer = document.getElementById('joy-container');
     const joyStick = document.getElementById('joy-stick');
-    const shootBtn = document.getElementById('shoot-btn');
 
-    let isJoyDragging = false;
     let joyTouchId = null;
+    let joyOriginX = 0, joyOriginY = 0;
+    let fireTouchId = null;
     const maxJoyRadius = 45;
-    const DEADZONE = 20;
-
-    function updateJoystick(clientX, clientY) {
-        const rect = joyContainer.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-        let dx = clientX - centerX;
-        let dy = clientY - centerY;
-        let distance = Math.sqrt(dx * dx + dy * dy);
-
-        if (distance < DEADZONE) {
-            joyStick.style.transform = 'translate(0px, 0px)';
-            joystick.vectorX = 0;
-            joystick.vectorY = 0;
-            return;
-        }
-
-        if (distance > maxJoyRadius) {
-            dx = (dx / distance) * maxJoyRadius;
-            dy = (dy / distance) * maxJoyRadius;
-            distance = maxJoyRadius;
-        }
-        joyStick.style.transform = 'translate(' + dx + 'px, ' + dy + 'px)';
-        // Map from deadzone..maxRadius to 0..1
-        let effectiveDistance = (distance - DEADZONE) / (maxJoyRadius - DEADZONE);
-        effectiveDistance = Math.min(1, Math.max(0, effectiveDistance));
-        let angle = Math.atan2(dy, dx);
-        joystick.vectorX = Math.cos(angle) * effectiveDistance;
-        joystick.vectorY = Math.sin(angle) * effectiveDistance;
-    }
+    const DEADZONE = 12;
 
     function resetJoystick() {
-        isJoyDragging = false;
         joyTouchId = null;
         joystick.active = false;
         joystick.vectorX = 0;
         joystick.vectorY = 0;
+        joyContainer.style.display = 'none';
         joyStick.style.transform = 'translate(0px, 0px)';
     }
 
-    // Multi-touch safe: track touch IDs separately for joystick and fire
-    joyContainer.addEventListener('touchstart', function(e) {
+    canvas.addEventListener('touchstart', function(e) {
         e.preventDefault();
-        let touch = e.changedTouches[0];
-        isJoyDragging = true;
-        joyTouchId = touch.identifier;
-        joystick.active = true;
-        updateJoystick(touch.clientX, touch.clientY);
-    }, {passive: false});
-
-    joyContainer.addEventListener('touchmove', function(e) {
-        e.preventDefault();
-        if (!isJoyDragging) return;
-        for (let i = 0; i < e.changedTouches.length; i++) {
-            if (e.changedTouches[i].identifier === joyTouchId) {
-                updateJoystick(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
-                break;
-            }
-        }
-    }, {passive: false});
-
-    joyContainer.addEventListener('touchend', function(e) {
-        for (let i = 0; i < e.changedTouches.length; i++) {
-            if (e.changedTouches[i].identifier === joyTouchId) {
-                resetJoystick();
-                break;
-            }
-        }
-    });
-    joyContainer.addEventListener('touchcancel', function(e) {
-        for (let i = 0; i < e.changedTouches.length; i++) {
-            if (e.changedTouches[i].identifier === joyTouchId) {
-                resetJoystick();
-                break;
-            }
-        }
-    });
-
-    // Mouse fallback for joystick
-    joyContainer.addEventListener('mousedown', function(e) { isJoyDragging = true; joystick.active = true; updateJoystick(e.clientX, e.clientY); });
-    window.addEventListener('mousemove', function(e) { if (isJoyDragging) updateJoystick(e.clientX, e.clientY); });
-    window.addEventListener('mouseup', resetJoystick);
-
-    // Fire button
-    let fireTouchId = null;
-    function pressShoot(e) {
-        if (e.type === 'touchstart') {
-            e.preventDefault();
-            fireTouchId = e.changedTouches[0].identifier;
-        }
         initAudio();
-        keys.Space = true;
-        shootBtn.classList.add('active');
-    }
-    function releaseShoot(e) {
-        if (e.type === 'touchend' || e.type === 'touchcancel') {
-            e.preventDefault();
-            let found = false;
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                if (e.changedTouches[i].identifier === fireTouchId) { found = true; break; }
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            let touch = e.changedTouches[i];
+            if (touch.clientX < window.innerWidth / 2 && joyTouchId === null) {
+                // Left half: spawn floating joystick
+                joyTouchId = touch.identifier;
+                joyOriginX = touch.clientX;
+                joyOriginY = touch.clientY;
+                joystick.active = true;
+                joystick.vectorX = 0;
+                joystick.vectorY = 0;
+                joyContainer.style.display = 'flex';
+                joyContainer.style.left = touch.clientX + 'px';
+                joyContainer.style.top = touch.clientY + 'px';
+                joyStick.style.transform = 'translate(0px, 0px)';
+            } else if (touch.clientX >= window.innerWidth / 2) {
+                // Right half: fire
+                fireTouchId = touch.identifier;
+                keys.Space = true;
             }
-            if (!found) return;
-            fireTouchId = null;
         }
-        keys.Space = false;
-        shootBtn.classList.remove('active');
-    }
+    }, {passive: false});
 
-    shootBtn.addEventListener('touchstart', pressShoot, {passive: false});
-    shootBtn.addEventListener('touchend', releaseShoot, {passive: false});
-    shootBtn.addEventListener('touchcancel', releaseShoot, {passive: false});
-    shootBtn.addEventListener('mousedown', pressShoot);
-    shootBtn.addEventListener('mouseup', releaseShoot);
-    shootBtn.addEventListener('mouseleave', releaseShoot);
+    canvas.addEventListener('touchmove', function(e) {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            let touch = e.changedTouches[i];
+            if (touch.identifier === joyTouchId) {
+                let dx = touch.clientX - joyOriginX;
+                let dy = touch.clientY - joyOriginY;
+                let distance = Math.hypot(dx, dy);
+
+                if (distance < DEADZONE) {
+                    joyStick.style.transform = 'translate(0px, 0px)';
+                    joystick.vectorX = 0;
+                    joystick.vectorY = 0;
+                } else {
+                    let clampedDist = Math.min(distance, maxJoyRadius);
+                    let angle = Math.atan2(dy, dx);
+                    let clampedDx = Math.cos(angle) * clampedDist;
+                    let clampedDy = Math.sin(angle) * clampedDist;
+                    joyStick.style.transform = 'translate(' + clampedDx + 'px, ' + clampedDy + 'px)';
+                    let effectiveDistance = (clampedDist - DEADZONE) / (maxJoyRadius - DEADZONE);
+                    effectiveDistance = Math.min(1, Math.max(0, effectiveDistance));
+                    joystick.vectorX = Math.cos(angle) * effectiveDistance;
+                    joystick.vectorY = Math.sin(angle) * effectiveDistance;
+                }
+            }
+        }
+    }, {passive: false});
+
+    canvas.addEventListener('touchend', function(e) {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            let touch = e.changedTouches[i];
+            if (touch.identifier === joyTouchId) {
+                resetJoystick();
+            }
+            if (touch.identifier === fireTouchId) {
+                fireTouchId = null;
+                keys.Space = false;
+            }
+        }
+    });
+
+    canvas.addEventListener('touchcancel', function(e) {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            let touch = e.changedTouches[i];
+            if (touch.identifier === joyTouchId) {
+                resetJoystick();
+            }
+            if (touch.identifier === fireTouchId) {
+                fireTouchId = null;
+                keys.Space = false;
+            }
+        }
+    });
 
     window.addEventListener('keydown', function(e) {
         initAudio();
         if (keys.hasOwnProperty(e.key)) keys[e.key] = true;
-        if (e.code === 'Space') { keys.Space = true; shootBtn.classList.add('active'); e.preventDefault(); }
+        if (e.code === 'Space') { keys.Space = true; e.preventDefault(); }
     });
     window.addEventListener('keyup', function(e) {
         if (keys.hasOwnProperty(e.key)) keys[e.key] = false;
-        if (e.code === 'Space') { keys.Space = false; shootBtn.classList.remove('active'); }
+        if (e.code === 'Space') { keys.Space = false; }
     });
 
     // --- Classes ---
     class Player {
         constructor() {
-            this.width = 40;
-            this.height = 30;
+            this.width = 20;
+            this.height = 15;
             this.x = GAME_WIDTH / 2;
             this.y = GAME_HEIGHT - 80;
             this.speed = 7;
@@ -665,30 +606,30 @@
             this.shotCooldown = cd;
 
             if (this.weaponLevel === 1) {
-                bullets.push(new Bullet(this.x - 10, this.y - this.height / 2, baseVy, '#0ff', true));
-                bullets.push(new Bullet(this.x + 10, this.y - this.height / 2, baseVy, '#0ff', true));
+                bullets.push(new Bullet(this.x - 5, this.y - this.height / 2, baseVy, '#0ff', true));
+                bullets.push(new Bullet(this.x + 5, this.y - this.height / 2, baseVy, '#0ff', true));
             } else if (this.weaponLevel === 2) {
                 bullets.push(new Bullet(this.x, this.y - this.height / 2, baseVy, '#0ff', true));
-                let b1 = new Bullet(this.x - 12, this.y - this.height / 2, baseVy * 0.95, '#0ff', true); b1.vx = -1.5; bullets.push(b1);
-                let b2 = new Bullet(this.x + 12, this.y - this.height / 2, baseVy * 0.95, '#0ff', true); b2.vx = 1.5; bullets.push(b2);
+                let b1 = new Bullet(this.x - 6, this.y - this.height / 2, baseVy * 0.95, '#0ff', true); b1.vx = -1.5; bullets.push(b1);
+                let b2 = new Bullet(this.x + 6, this.y - this.height / 2, baseVy * 0.95, '#0ff', true); b2.vx = 1.5; bullets.push(b2);
             } else if (this.weaponLevel === 3) {
-                bullets.push(new Bullet(this.x - 6, this.y - this.height / 2, baseVy, '#0ff', true));
-                bullets.push(new Bullet(this.x + 6, this.y - this.height / 2, baseVy, '#0ff', true));
-                let b1 = new Bullet(this.x - 18, this.y - this.height / 2, baseVy * 0.95, '#0ff', true); b1.vx = -2.5; bullets.push(b1);
-                let b2 = new Bullet(this.x + 18, this.y - this.height / 2, baseVy * 0.95, '#0ff', true); b2.vx = 2.5; bullets.push(b2);
+                bullets.push(new Bullet(this.x - 3, this.y - this.height / 2, baseVy, '#0ff', true));
+                bullets.push(new Bullet(this.x + 3, this.y - this.height / 2, baseVy, '#0ff', true));
+                let b1 = new Bullet(this.x - 9, this.y - this.height / 2, baseVy * 0.95, '#0ff', true); b1.vx = -2.5; bullets.push(b1);
+                let b2 = new Bullet(this.x + 9, this.y - this.height / 2, baseVy * 0.95, '#0ff', true); b2.vx = 2.5; bullets.push(b2);
             } else {
                 bullets.push(new Bullet(this.x, this.y - this.height / 2, baseVy, '#0ff', true));
-                let b1 = new Bullet(this.x - 10, this.y - this.height / 2, baseVy * 0.9, '#0ff', true); b1.vx = -2; bullets.push(b1);
-                let b2 = new Bullet(this.x + 10, this.y - this.height / 2, baseVy * 0.9, '#0ff', true); b2.vx = 2; bullets.push(b2);
-                let b3 = new Bullet(this.x - 20, this.y - this.height / 2, baseVy * 0.8, '#0ff', true); b3.vx = -4.5; bullets.push(b3);
-                let b4 = new Bullet(this.x + 20, this.y - this.height / 2, baseVy * 0.8, '#0ff', true); b4.vx = 4.5; bullets.push(b4);
+                let b1 = new Bullet(this.x - 5, this.y - this.height / 2, baseVy * 0.9, '#0ff', true); b1.vx = -2; bullets.push(b1);
+                let b2 = new Bullet(this.x + 5, this.y - this.height / 2, baseVy * 0.9, '#0ff', true); b2.vx = 2; bullets.push(b2);
+                let b3 = new Bullet(this.x - 10, this.y - this.height / 2, baseVy * 0.8, '#0ff', true); b3.vx = -4.5; bullets.push(b3);
+                let b4 = new Bullet(this.x + 10, this.y - this.height / 2, baseVy * 0.8, '#0ff', true); b4.vx = 4.5; bullets.push(b4);
             }
 
             this.lastShot = frameCount;
             muzzleFlashTimer = 3;
             playSound('shoot');
-            createParticles(this.x - 10, this.y - this.height / 2, 2, '#0ff', 2);
-            createParticles(this.x + 10, this.y - this.height / 2, 2, '#0ff', 2);
+            createParticles(this.x - 5, this.y - this.height / 2, 2, '#0ff', 2);
+            createParticles(this.x + 5, this.y - this.height / 2, 2, '#0ff', 2);
         }
 
         draw(ctx) {
@@ -700,20 +641,20 @@
             // Shield
             if (this.shieldActive) {
                 ctx.beginPath();
-                ctx.arc(0, 0, this.width, 0, Math.PI * 2);
+                ctx.arc(0, 0, this.width * 0.9, 0, Math.PI * 2);
                 ctx.strokeStyle = 'rgba(0, 255, 0, 0.6)';
-                ctx.lineWidth = 3;
-                ctx.shadowBlur = 15;
+                ctx.lineWidth = 2;
+                ctx.shadowBlur = 12;
                 ctx.shadowColor = '#0f0';
                 ctx.stroke();
                 ctx.fillStyle = 'rgba(0, 255, 0, 0.15)';
                 ctx.fill();
             }
 
-            ctx.shadowBlur = 15;
+            ctx.shadowBlur = 12;
             ctx.shadowColor = this.color;
             ctx.strokeStyle = this.color;
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 2;
 
             ctx.beginPath();
             ctx.moveTo(0, -this.height / 2);
@@ -726,12 +667,12 @@
 
             ctx.fillStyle = '#fff';
             ctx.beginPath();
-            ctx.arc(0, this.height / 4, 4, 0, Math.PI * 2);
+            ctx.arc(0, this.height / 4, 2, 0, Math.PI * 2);
             ctx.fill();
 
             if (muzzleFlashTimer > 0) {
                 ctx.beginPath();
-                ctx.arc(0, -this.height / 2, 8 + muzzleFlashTimer * 2, 0, Math.PI * 2);
+                ctx.arc(0, -this.height / 2, 4 + muzzleFlashTimer * 1, 0, Math.PI * 2);
                 ctx.fillStyle = 'rgba(255, 255, 255, ' + (muzzleFlashTimer / 3) + ')';
                 ctx.shadowBlur = 25;
                 ctx.shadowColor = '#0ff';
@@ -746,8 +687,8 @@
         constructor(x, y) {
             this.x = x;
             this.y = y;
-            this.width = 24;
-            this.height = 24;
+            this.width = 13;
+            this.height = 13;
             this.vy = 1.5;
             this.markedForDeletion = false;
 
@@ -786,7 +727,7 @@
             ctx.fill();
 
             ctx.fillStyle = this.color;
-            ctx.font = '14px "Press Start 2P"';
+            ctx.font = '7px "Press Start 2P"';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(this.letter, 1, 2);
@@ -801,8 +742,8 @@
             this.y = y;
             this.vy = vy;
             this.vx = 0;
-            this.width = 4;
-            this.height = 15;
+            this.width = 2;
+            this.height = 7;
             this.color = color;
             this.isPlayer = !!isPlayer;
             this.markedForDeletion = false;
@@ -820,7 +761,7 @@
             let rx = Math.round(this.x);
             let ry = Math.round(this.y);
             ctx.save();
-            ctx.shadowBlur = 20;
+            ctx.shadowBlur = 14;
             ctx.shadowColor = this.color;
             ctx.fillStyle = this.color;
             ctx.globalAlpha = 0.3;
@@ -829,7 +770,7 @@
             ctx.fillStyle = '#fff';
             ctx.fillRect(rx - this.width / 2, ry - this.height / 2, this.width, this.height);
             ctx.strokeStyle = this.color;
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1;
             ctx.strokeRect(rx - this.width / 2, ry - this.height / 2, this.width, this.height);
             ctx.restore();
         }
@@ -840,8 +781,8 @@
             this.x = x;
             this.y = y;
             this.type = type;
-            this.width = type === 2 ? 40 : 30;
-            this.height = type === 2 ? 40 : 30;
+            this.width = type === 2 ? 21 : 15;
+            this.height = type === 2 ? 21 : 15;
             this.markedForDeletion = false;
 
             if (type === 0) {
@@ -898,10 +839,10 @@
         draw(ctx) {
             ctx.save();
             ctx.translate(Math.round(this.x), Math.round(this.y));
-            ctx.shadowBlur = 15;
+            ctx.shadowBlur = 10;
             ctx.shadowColor = this.color;
             ctx.strokeStyle = this.color;
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 2;
             ctx.fillStyle = 'rgba(0,0,0,0.8)';
 
             ctx.beginPath();
@@ -917,7 +858,7 @@
             ctx.stroke();
 
             ctx.fillStyle = '#fff';
-            ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(0, 0, 1.5, 0, Math.PI * 2); ctx.fill();
 
             ctx.restore();
         }
@@ -943,10 +884,10 @@
             ctx.translate(Math.round(this.x), Math.round(this.y));
             ctx.scale(t, t);
             ctx.globalAlpha = t;
-            ctx.shadowBlur = 15;
+            ctx.shadowBlur = 10;
             ctx.shadowColor = this.color;
             ctx.strokeStyle = this.color;
-            ctx.lineWidth = 3;
+            ctx.lineWidth = 2;
             ctx.fillStyle = 'rgba(0,0,0,0.8)';
             ctx.beginPath();
             if (this.type === 0) {
@@ -988,7 +929,7 @@
             ctx.shadowBlur = 8;
             ctx.shadowColor = this.color;
             ctx.fillStyle = this.color;
-            ctx.fillRect(this.x, this.y, 4, 4);
+            ctx.fillRect(this.x, this.y, 2, 2);
             ctx.restore();
         }
     }
@@ -1103,7 +1044,7 @@
         shakeMag = 0; shakeX = 0; shakeY = 0;
         resetJoystick();
         keys.Space = false;
-        shootBtn.classList.remove('active');
+        keys.Space = false;
 
         if (afterWaveText) {
             showingAfterText = true;
@@ -1431,15 +1372,15 @@
         // Combo display
         if (gameState === 'PLAYING' && comboCount >= 2) {
             ctx.save();
-            ctx.font = '20px "Press Start 2P"';
+            ctx.font = '14px "Press Start 2P"';
             ctx.fillStyle = '#ff0';
             ctx.shadowBlur = 15;
             ctx.shadowColor = '#ff0';
             ctx.textAlign = 'center';
-            ctx.fillText('COMBO x' + comboCount, GAME_WIDTH / 2, 60);
-            ctx.font = '12px "Press Start 2P"';
+            ctx.fillText('COMBO x' + comboCount, GAME_WIDTH / 2, 50);
+            ctx.font = '9px "Press Start 2P"';
             ctx.fillStyle = '#fff';
-            ctx.fillText('x' + (1 + comboCount * 0.5).toFixed(1) + ' SCORE', GAME_WIDTH / 2, 80);
+            ctx.fillText('x' + (1 + comboCount * 0.5).toFixed(1) + ' SCORE', GAME_WIDTH / 2, 66);
             ctx.restore();
         }
 
@@ -1448,7 +1389,7 @@
             let ft = floatingTexts[i];
             ctx.save();
             ctx.globalAlpha = ft.life / 40;
-            ctx.font = '12px "Press Start 2P"';
+            ctx.font = '9px "Press Start 2P"';
             ctx.fillStyle = ft.color;
             ctx.shadowBlur = 10;
             ctx.shadowColor = ft.color;

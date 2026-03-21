@@ -221,7 +221,7 @@
         const player = {
             x: 0,
             y: 0,
-            radius: 8,
+            radius: 6,
             speed: 6.5,
             color: '#00f2ff',
             trail: [],
@@ -276,11 +276,11 @@
 
                 ctx.save();
                 ctx.translate(this.x, this.y);
-                ctx.shadowBlur = 15;
+                ctx.shadowBlur = 10;
                 ctx.shadowColor = this.color;
                 ctx.fillStyle = this.color;
                 ctx.beginPath();
-                ctx.moveTo(0, -12); ctx.lineTo(10, 8); ctx.lineTo(-10, 8);
+                ctx.moveTo(0, -8); ctx.lineTo(7, 6); ctx.lineTo(-7, 6);
                 ctx.closePath();
                 ctx.fill();
                 ctx.restore();
@@ -295,7 +295,7 @@
             if (isNaN(vx) || isNaN(vy) || isNaN(x) || isNaN(y)) return;
             bullets.push({
                 x: x, y: y, vx: vx, vy: vy,
-                radius: size || 4,
+                radius: size || 3,
                 color: color || '#ff3366',
                 active: true
             });
@@ -328,7 +328,7 @@
             ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
             ctx.fillStyle = b.color;
             if (!lowEndMode) {
-                ctx.shadowBlur = 8;
+                ctx.shadowBlur = 6;
                 ctx.shadowColor = b.color;
             }
             ctx.fill();
@@ -387,6 +387,8 @@
 
         // --- Touch events (track specific touch for joystick) ---
         window.addEventListener('touchstart', (e) => {
+            // Don't prevent default on menu buttons
+            if (e.target.closest('.btn') || e.target.closest('.menu-screen')) return;
             e.preventDefault();
             const t = e.changedTouches[0];
             startJoystick(t.clientX, t.clientY, t.identifier);
@@ -469,8 +471,8 @@
                 }
                 case 3: { // Side swipe
                     const left = -20, right = canvas.width + 20;
-                    createBullet(left, Math.random() * canvas.height, 5, 0, '#ff00ff', 6);
-                    createBullet(right, Math.random() * canvas.height, -5, 0, '#ff00ff', 6);
+                    createBullet(left, Math.random() * canvas.height, 5, 0, '#ff00ff', 4);
+                    createBullet(right, Math.random() * canvas.height, -5, 0, '#ff00ff', 4);
                     break;
                 }
                 case 4: { // Spiral
@@ -616,10 +618,20 @@
         // Prevent pull-to-refresh and bounce scrolling
         document.addEventListener('touchmove', (e) => { e.preventDefault(); }, { passive: false });
 
+        function attachBtn(id, fn) {
+            const el = document.getElementById(id);
+            el.onclick = fn;
+            el.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                fn();
+            }, { passive: false });
+        }
+
         window.onload = () => {
             resize();
-            document.getElementById('start-btn').onclick = startGame;
-            document.getElementById('restart-btn').onclick = startGame;
+            attachBtn('start-btn', startGame);
+            attachBtn('restart-btn', startGame);
             lastTime = 0;
             requestAnimationFrame(tick);
         };
