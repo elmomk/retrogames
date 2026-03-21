@@ -2,8 +2,12 @@
 <html lang="en">
 <head>
     <script>if(!window.location.pathname.endsWith('/'))window.location.replace(window.location.pathname+'/');</script>
+    <script src="/sw-register.js"></script>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#ff2d78">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
     <title>Retro Arcade</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
@@ -112,6 +116,9 @@
         .game-card:nth-child(3) { animation-delay: 0.3s; }
         .game-card:nth-child(4) { animation-delay: 0.4s; }
         .game-card:nth-child(5) { animation-delay: 0.5s; }
+        .game-card:nth-child(6) { animation-delay: 0.6s; }
+        .game-card:nth-child(7) { animation-delay: 0.7s; }
+        .game-card:nth-child(8) { animation-delay: 0.8s; }
 
         .game-card:hover {
             transform: translateY(-6px) scale(1.02);
@@ -264,7 +271,7 @@
             </div>
             <div class="card-body">
                 <div class="card-genre">Platformer</div>
-                <div class="card-title">Micro Mages</div>
+                <div class="card-title">Nano Wizards</div>
                 <div class="card-desc">Wall-jump through perilous towers. Shoot, grapple, and dodge rising lava in this retro platformer.</div>
                 <div class="card-footer">
                     <span class="card-tag">3 Levels</span>
@@ -337,6 +344,70 @@
             </div>
         </a>
 
+        <a href="mariolike/index.html" class="game-card" style="--card-color:#44aaff;--card-glow:rgba(68,170,255,0.2);--card-bg:#0a1428;">
+            <div class="card-preview">
+                <canvas id="preview-mariolike"></canvas>
+                <div class="card-icon">&#x2694;</div>
+            </div>
+            <div class="card-body">
+                <div class="card-genre">Action Platformer</div>
+                <div class="card-title">Pixel Knight</div>
+                <div class="card-desc">Run, jump, and stomp through the Crystal Kingdom. Defeat the dark sorcerer and restore the light.</div>
+                <div class="card-footer">
+                    <span class="card-tag">3 Levels</span>
+                    <span class="card-play">PLAY &#9654;</span>
+                </div>
+            </div>
+        </a>
+
+        <a href="cyber/index.html" class="game-card" style="--card-color:#ff2d78;--card-glow:rgba(255,45,120,0.2);--card-bg:#0a0a1a;">
+            <div class="card-preview">
+                <canvas id="preview-cyber"></canvas>
+                <div class="card-icon">&#x1F680;</div>
+            </div>
+            <div class="card-body">
+                <div class="card-genre">Cyberpunk Shooter</div>
+                <div class="card-title">Chrome Viper</div>
+                <div class="card-desc">Pilot a stolen stealth fighter through AXIOM's orbital defenses. Hack, dodge, and destroy the Leviathan.</div>
+                <div class="card-footer">
+                    <span class="card-tag">3 Levels</span>
+                    <span class="card-play">PLAY &#9654;</span>
+                </div>
+            </div>
+        </a>
+
+        <a href="nova/index.html" class="game-card" style="--card-color:#00f2ff;--card-glow:rgba(0,242,255,0.2);--card-bg:#050a14;">
+            <div class="card-preview">
+                <canvas id="preview-nova"></canvas>
+                <div class="card-icon">&#x2604;</div>
+            </div>
+            <div class="card-body">
+                <div class="card-genre">Bullet Hell</div>
+                <div class="card-title">Nova Evader</div>
+                <div class="card-desc">Dodge deadly bullet patterns in this intense survival game. Touch anywhere to move.</div>
+                <div class="card-footer">
+                    <span class="card-tag">Endless</span>
+                    <span class="card-play">PLAY &#9654;</span>
+                </div>
+            </div>
+        </a>
+
+        <a href="neon/index.html" class="game-card" style="--card-color:#ff0080;--card-glow:rgba(255,0,128,0.2);--card-bg:#0d0d1a;">
+            <div class="card-preview">
+                <canvas id="preview-neon"></canvas>
+                <div class="card-icon">&#x1F3AE;</div>
+            </div>
+            <div class="card-body">
+                <div class="card-genre">Cyberpunk Platformer</div>
+                <div class="card-title">Neon Runner</div>
+                <div class="card-desc">Dash across neon rooftops, hack corpo systems, and fight to broadcast the truth in Neo-Kyoto.</div>
+                <div class="card-footer">
+                    <span class="card-tag">3 Levels</span>
+                    <span class="card-play">PLAY &#9654;</span>
+                </div>
+            </div>
+        </a>
+
     </div>
 
     <div class="footer">RETRO ARCADE &copy; 2026 &mdash; ALL GAMES BROWSER PLAYABLE</div>
@@ -396,6 +467,10 @@
         'preview-shadow': drawShadowPreview,
         'preview-arena': drawArenaPreview,
         'preview-dragon': drawDragonPreview,
+        'preview-mariolike': drawMariolikePreview,
+        'preview-cyber': drawCyberPreview,
+        'preview-nova': drawNovaPreview,
+        'preview-neon': drawNeonPreview,
     };
 
     for (const [id, drawFn] of Object.entries(previews)) {
@@ -580,6 +655,202 @@
         const tx = w - 20 - ((t * 15) % 60);
         ctx.fillStyle = '#993333';
         ctx.fillRect(tx, h - 52, 10, 14);
+    }
+
+    function drawMariolikePreview(ctx, w, h, t) {
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#0a1628';
+        ctx.fillRect(0, 0, w, h);
+        // Ground
+        ctx.fillStyle = '#228833';
+        ctx.fillRect(0, h - 20, w, 20);
+        ctx.fillStyle = '#55aa55';
+        for (let i = 0; i < w; i += 16) ctx.fillRect(i, h - 20, 15, 3);
+        // Platforms
+        ctx.fillStyle = '#228833';
+        ctx.fillRect(60, h - 50, 50, 8);
+        ctx.fillRect(140, h - 70, 50, 8);
+        ctx.fillRect(200, h - 45, 40, 8);
+        // Knight running and jumping
+        const kx = 40 + (t * 30) % (w - 60);
+        const ky = h - 32 + Math.abs(Math.sin(t * 3)) * -18;
+        ctx.fillStyle = '#4466cc';
+        ctx.fillRect(kx, ky, 8, 12);
+        ctx.fillStyle = '#c0c0c0';
+        ctx.fillRect(kx, ky - 3, 8, 4);
+        // Slime
+        ctx.fillStyle = '#44bb44';
+        const sx = 180 + Math.sin(t * 1.5) * 15;
+        ctx.fillRect(sx, h - 28, 10, 8);
+        // Crystals
+        ctx.fillStyle = '#44ddff';
+        for (let i = 0; i < 3; i++) {
+            const cx = 70 + i * 20;
+            const cy = h - 58 + Math.sin(t * 2 + i) * 3;
+            ctx.fillRect(cx, cy, 4, 4);
+        }
+        // Coins sparkle
+        if (Math.sin(t * 5) > 0.8) {
+            ctx.fillStyle = '#ffffff44';
+            ctx.fillRect(70, h - 60, 2, 2);
+        }
+    }
+
+    function drawCyberPreview(ctx, w, h, t) {
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#0a0a1a';
+        ctx.fillRect(0, 0, w, h);
+        // Stars
+        for (let i = 0; i < 15; i++) {
+            const sx = (i * 43 + t * 15) % w;
+            const sy = (i * 29) % h;
+            ctx.fillStyle = '#ffffff15';
+            ctx.fillRect(sx, sy, 1, 1);
+        }
+        // City silhouette
+        ctx.fillStyle = 'rgba(0,242,255,0.04)';
+        for (let i = 0; i < 10; i++) {
+            const bx = (i * 30 - t * 5) % (w + 30) - 15;
+            const bh = 20 + (i * 17) % 40;
+            ctx.fillRect(bx, h - bh, 18, bh);
+        }
+        // Player ship
+        const px = 50 + Math.sin(t * 1.5) * 15;
+        const py = h / 2 + Math.sin(t * 2) * 15;
+        ctx.fillStyle = '#00f2ff';
+        ctx.beginPath();
+        ctx.moveTo(px + 12, py); ctx.lineTo(px - 6, py - 7); ctx.lineTo(px - 4, py); ctx.lineTo(px - 6, py + 7);
+        ctx.closePath();
+        ctx.fill();
+        // Thruster
+        ctx.fillStyle = '#ff660088';
+        ctx.fillRect(px - 10, py - 2, 5 + Math.sin(t * 15) * 2, 4);
+        // Lasers
+        ctx.fillStyle = '#00f2ff';
+        for (let i = 0; i < 3; i++) {
+            const bx = px + 15 + ((t * 100 + i * 40) % 80);
+            if (bx < w) ctx.fillRect(bx, py - 1 + (i - 1) * 4, 8, 2);
+        }
+        // Enemies
+        ctx.fillStyle = '#ff2d78';
+        for (let i = 0; i < 4; i++) {
+            const ex = 160 + i * 30 + Math.sin(t + i * 2) * 8;
+            const ey = 30 + i * 25 + Math.sin(t * 1.5 + i) * 10;
+            ctx.fillRect(ex - 5, ey - 4, 10, 8);
+        }
+        // Enemy bullets
+        ctx.fillStyle = '#ff440088';
+        for (let i = 0; i < 3; i++) {
+            const bx = 150 - ((t * 60 + i * 50) % 120);
+            const by = 40 + i * 30 + Math.sin(t * 2 + i) * 5;
+            if (bx > 0) { ctx.beginPath(); ctx.arc(bx, by, 2, 0, Math.PI * 2); ctx.fill(); }
+        }
+        // Explosion
+        if (Math.sin(t * 4) > 0.9) {
+            ctx.fillStyle = '#ff2d7844';
+            ctx.beginPath();
+            ctx.arc(180, 60, 8 + Math.random() * 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    function drawNeonPreview(ctx, w, h, t) {
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#0d0d1a';
+        ctx.fillRect(0, 0, w, h);
+        // Buildings
+        for (let i = 0; i < 8; i++) {
+            const bw = 20 + (i * 17) % 25;
+            const bh = 30 + (i * 31) % 60;
+            const bx = i * 35 + 5;
+            ctx.fillStyle = '#111130';
+            ctx.fillRect(bx, h - bh, bw, bh);
+            // Neon edge
+            ctx.strokeStyle = i % 2 === 0 ? '#ff0080' : '#00d4ff';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(bx, h - bh); ctx.lineTo(bx + bw, h - bh); ctx.stroke();
+            // Windows
+            for (let wy = h - bh + 5; wy < h - 5; wy += 8) {
+                for (let wx = bx + 3; wx < bx + bw - 3; wx += 6) {
+                    if ((wx + wy + Math.floor(t)) % 4 !== 0) {
+                        ctx.fillStyle = Math.random() > 0.5 ? '#ff008015' : '#00d4ff15';
+                        ctx.fillRect(wx, wy, 3, 3);
+                    }
+                }
+            }
+        }
+        // Rain
+        ctx.strokeStyle = 'rgba(100,140,200,0.15)';
+        for (let i = 0; i < 15; i++) {
+            const rx = (i * 19 + t * 20) % w;
+            const ry = (i * 31 + t * 40) % h;
+            ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx - 0.5, ry + 6); ctx.stroke();
+        }
+        // Runner
+        const px = (t * 35) % (w + 30) - 15;
+        const py = h - 35 + (Math.floor(t * 6) % 2) * -2;
+        ctx.fillStyle = '#ff0080';
+        ctx.fillRect(px, py, 6, 10);
+        ctx.fillStyle = '#00d4ff';
+        ctx.fillRect(px, py + 10, 6, 4);
+        // Dash trail
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = '#ff0080';
+        ctx.fillRect(px - 8, py, 5, 10);
+        ctx.globalAlpha = 0.15;
+        ctx.fillRect(px - 15, py, 5, 10);
+        ctx.globalAlpha = 1;
+        // Neon sign
+        if (Math.sin(t * 3) > 0) {
+            ctx.fillStyle = '#ffb80044';
+            ctx.font = '6px monospace';
+            ctx.fillText('NEO', 180, 30);
+        }
+    }
+
+    function drawNovaPreview(ctx, w, h, t) {
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = '#050a14';
+        ctx.fillRect(0, 0, w, h);
+        // Stars
+        for (let i = 0; i < 15; i++) {
+            const sx = (i * 41) % w;
+            const sy = (i * 29 + t * 5) % h;
+            ctx.fillStyle = '#ffffff15';
+            ctx.fillRect(sx, sy, 1, 1);
+        }
+        // Player triangle moving in a circle
+        const px = w / 2 + Math.cos(t * 1.2) * 35;
+        const py = h / 2 + Math.sin(t * 1.2) * 20;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.fillStyle = '#00f2ff';
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#00f2ff';
+        ctx.beginPath();
+        ctx.moveTo(0, -8); ctx.lineTo(6, 5); ctx.lineTo(-6, 5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+        // Falling bullets
+        ctx.fillStyle = '#ff3366';
+        for (let i = 0; i < 8; i++) {
+            const bx = 20 + (i * 37) % (w - 40);
+            const by = ((t * 50 + i * 43) % (h + 20)) - 10;
+            ctx.beginPath();
+            ctx.arc(bx, by, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        // A couple orange bullets
+        ctx.fillStyle = '#ffaa00';
+        for (let i = 0; i < 3; i++) {
+            const bx = 50 + (i * 67) % (w - 60);
+            const by = ((t * 35 + i * 61 + 100) % (h + 20)) - 10;
+            ctx.beginPath();
+            ctx.arc(bx, by, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 })();
 </script>

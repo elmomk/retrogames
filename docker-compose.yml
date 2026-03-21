@@ -1,0 +1,32 @@
+services:
+  tailscale:
+    image: tailscale/tailscale:v1.82.5
+    hostname: retrogames
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SERVE_CONFIG=/config/serve.json
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - ./ts-serve.json:/config/serve.json:ro
+    ports:
+      - "8090:8080"
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
+
+  app:
+    build: .
+    network_mode: service:tailscale
+    depends_on:
+      - tailscale
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  tailscale-state:

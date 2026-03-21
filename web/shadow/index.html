@@ -2,74 +2,84 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Shadow Blade</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
-        body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            background-color: #000;
-            overflow: hidden;
-            font-family: 'Press Start 2P', 'Courier New', Courier, monospace;
-            touch-action: none;
-            user-select: none;
-            -webkit-user-select: none;
-        }
+        *, *::before, *::after { box-sizing: border-box; }
 
-        #app-wrapper {
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-            height: 100%;
-        }
-
-        #game-container {
-            flex-grow: 1;
-            position: relative;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background-color: #050510;
-            overflow: hidden;
-        }
-
-        canvas {
-            box-shadow: 0 0 30px rgba(0, 200, 255, 0.15);
-            background-color: #000;
-        }
-
-        .scanlines {
-            position: absolute;
+        html, body {
+            position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Press Start 2P', 'Courier New', Courier, monospace;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: block;
+            background-color: #000;
+            z-index: 1;
+        }
+
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
             background: linear-gradient(
                 to bottom,
                 rgba(255, 255, 255, 0),
                 rgba(255, 255, 255, 0) 50%,
-                rgba(0, 0, 0, 0.2) 50%,
-                rgba(0, 0, 0, 0.2)
+                rgba(0, 0, 0, 0.15) 50%,
+                rgba(0, 0, 0, 0.15)
             );
             background-size: 100% 4px;
             pointer-events: none;
-            z-index: 10;
+            z-index: 100;
         }
 
-        #control-panel {
-            height: 160px;
-            background: #020208;
-            border-top: 2px solid #c00;
-            box-shadow: 0 -5px 20px rgba(255, 0, 0, 0.15);
+        /* Touch overlay - covers full screen */
+        #touch-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 50;
+            pointer-events: none;
             display: none;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 30px;
-            z-index: 30;
+        }
+
+        #touch-overlay.active {
+            display: block;
+        }
+
+        /* Joystick */
+        #joy-zone {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 140px;
+            height: 140px;
+            pointer-events: auto;
+            touch-action: none;
         }
 
         #joy-container {
@@ -77,40 +87,51 @@
             width: 120px;
             height: 120px;
             border-radius: 50%;
-            background: rgba(255, 50, 50, 0.05);
-            border: 2px solid rgba(255, 50, 50, 0.3);
+            background: rgba(255, 50, 50, 0.08);
+            border: 2px solid rgba(255, 50, 50, 0.35);
             display: flex;
             justify-content: center;
             align-items: center;
             touch-action: none;
+            margin: 10px;
         }
 
         #joy-stick {
             width: 55px;
             height: 55px;
-            background: rgba(255, 50, 50, 0.7);
+            background: rgba(255, 50, 50, 0.6);
             border-radius: 50%;
-            box-shadow: 0 0 12px #c00, inset 0 0 8px rgba(255,255,255,0.5);
+            box-shadow: 0 0 12px rgba(204, 0, 0, 0.6), inset 0 0 8px rgba(255,255,255,0.3);
             position: absolute;
             pointer-events: none;
+            transition: background 0.1s;
+        }
+
+        /* Button group - bottom right */
+        #btn-zone {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            pointer-events: auto;
+            touch-action: none;
         }
 
         .btn-group {
             display: grid;
             grid-template-columns: 1fr 1fr;
             grid-template-rows: 1fr 1fr;
-            gap: 8px;
-            width: 140px;
-            height: 120px;
+            gap: 10px;
+            width: 150px;
+            height: 140px;
         }
 
         .action-btn {
-            width: 62px;
-            height: 52px;
-            border-radius: 10px;
-            border: 2px solid;
+            width: 66px;
+            height: 60px;
+            border-radius: 14px;
+            border: 2.5px solid;
             font-family: inherit;
-            font-size: 9px;
+            font-size: 10px;
             font-weight: bold;
             cursor: pointer;
             outline: none;
@@ -119,7 +140,8 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            background: rgba(0,0,0,0.6);
+            background: rgba(0,0,0,0.5);
+            transition: transform 0.08s, box-shadow 0.08s;
         }
 
         #btn-jump { border-color: #0cf; color: #0cf; text-shadow: 0 0 4px #0cf; }
@@ -128,35 +150,31 @@
         #btn-shuriken { border-color: #0f0; color: #0f0; text-shadow: 0 0 4px #0f0; }
 
         .action-btn.active {
-            transform: scale(0.92);
-            filter: brightness(1.5);
+            transform: scale(0.90);
         }
+        #btn-jump.active { box-shadow: 0 0 18px #0cf, inset 0 0 10px rgba(0,204,255,0.3); background: rgba(0,100,150,0.3); }
+        #btn-attack.active { box-shadow: 0 0 18px #f44, inset 0 0 10px rgba(255,68,68,0.3); background: rgba(150,30,30,0.3); }
+        #btn-dash.active { box-shadow: 0 0 18px #ff0, inset 0 0 10px rgba(255,255,0,0.3); background: rgba(150,150,0,0.3); }
+        #btn-shuriken.active { box-shadow: 0 0 18px #0f0, inset 0 0 10px rgba(0,255,0,0.3); background: rgba(0,150,0,0.3); }
 
-        @media (max-width: 900px), (pointer: coarse) {
-            #control-panel { display: flex; }
-        }
-
-        @media (max-width: 500px) {
-            #control-panel { padding: 0 15px; height: 130px; }
-            #joy-container { width: 100px; height: 100px; }
-            #joy-stick { width: 45px; height: 45px; }
-            .btn-group { width: 120px; height: 100px; gap: 6px; }
-            .action-btn { width: 54px; height: 44px; font-size: 8px; }
+        @media (pointer: coarse), (max-width: 900px) {
+            #touch-overlay { display: block; }
+            #touch-overlay.active { display: block; }
         }
     </style>
 </head>
 <body>
 
-<div id="app-wrapper">
-    <div id="game-container">
-        <canvas id="gameCanvas"></canvas>
-        <div class="scanlines"></div>
-    </div>
+<canvas id="gameCanvas"></canvas>
+<div class="scanlines"></div>
 
-    <div id="control-panel">
+<div id="touch-overlay" class="active">
+    <div id="joy-zone">
         <div id="joy-container">
             <div id="joy-stick"></div>
         </div>
+    </div>
+    <div id="btn-zone">
         <div class="btn-group">
             <button class="action-btn" id="btn-jump">JUMP</button>
             <button class="action-btn" id="btn-attack">ATK</button>
@@ -173,22 +191,56 @@
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const gameContainer = document.getElementById('game-container');
 
 const GW = 640, GH = 480;
 const TILE = 16;
 const GRAVITY = 0.55;
 const MAX_FALL = 9;
 
+// Scale factor for proportional rendering
+let scaleFactor = 1;
+let offsetX = 0, offsetY = 0;
+
 function resizeCanvas() {
-    const cw = gameContainer.clientWidth, ch = gameContainer.clientHeight;
-    const r = GW / GH, cr = cw / ch;
-    if (cr < r) { canvas.style.width = cw+'px'; canvas.style.height = (cw/r)+'px'; }
-    else { canvas.style.width = (ch*r)+'px'; canvas.style.height = ch+'px'; }
-    canvas.width = GW; canvas.height = GH;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    canvas.width = GW;
+    canvas.height = GH;
+    // Let CSS handle display sizing (100vw x 100vh) - do not override with px values
+    // Compute scale for touch coordinate mapping
+    scaleFactor = Math.min(w / GW, h / GH);
+    offsetX = (w - GW * scaleFactor) / 2;
+    offsetY = (h - GH * scaleFactor) / 2;
+    window.scrollTo(0, 0);
 }
 window.addEventListener('resize', resizeCanvas);
+window.addEventListener('orientationchange', function() {
+    setTimeout(function() {
+        resizeCanvas();
+        window.scrollTo(0, 0);
+    }, 150);
+});
+document.addEventListener('touchmove', function(e) { e.preventDefault(); }, { passive: false });
 resizeCanvas();
+
+// Low-end detection for particle cap
+let isLowEnd = false;
+(function detectLowEnd() {
+    try {
+        const c = document.createElement('canvas');
+        const gl = c.getContext('webgl');
+        if (gl) {
+            const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+            if (dbg) {
+                const renderer = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '';
+                isLowEnd = /mali|adreno\s?[1-4]|powervr|sgx|apple gpu/i.test(renderer);
+            }
+        }
+    } catch(e) {}
+    // Also flag as low-end on small screens (likely mobile)
+    if (window.innerWidth < 500) isLowEnd = true;
+})();
+const MAX_PARTICLES = isLowEnd ? 80 : 200;
 
 // ============================================================
 // COLOR PALETTE & SPRITE SYSTEM
@@ -221,7 +273,7 @@ function drawSprite(spr, x, y, scale, flipX) {
         }
         spriteCache[key] = oc;
     }
-    ctx.drawImage(spriteCache[key], Math.floor(x), Math.floor(y));
+    ctx.drawImage(spriteCache[key], Math.round(x), Math.round(y));
 }
 
 // ============================================================
@@ -480,10 +532,18 @@ const SPR_AMMO = [
 // WEB AUDIO API SOUND ENGINE
 // ============================================================
 let audioCtx = null;
-function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+function initAudio() {
+    if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+}
 
 function playSound(type) {
     if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
     const t = audioCtx.currentTime;
     const g = audioCtx.createGain();
     g.connect(audioCtx.destination);
@@ -584,6 +644,7 @@ const keys = {};
 window.addEventListener('keydown', e => {
     keys[e.code] = true;
     if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+    initAudio();
     if (gameState === 'TITLE' && (e.code === 'Enter' || e.code === 'KeyZ' || e.code === 'KeyX')) { startGame(); }
     if (gameState === 'GAMEOVER' && (e.code === 'Enter' || e.code === 'KeyZ' || e.code === 'KeyX')) { resetToTitle(); }
     if (gameState === 'VICTORY' && (e.code === 'Enter' || e.code === 'KeyZ' || e.code === 'KeyX')) { resetToTitle(); }
@@ -609,7 +670,6 @@ function pollInput() {
     const pShur = shurikenPressed;
     shurikenPressed = keys['KeyV'] || touchBtns.shuriken;
 
-    // return edge-triggered
     return {
         left: keys['ArrowLeft'] || keys['KeyA'] || (joystick.active && joystick.vx < -0.3),
         right: keys['ArrowRight'] || keys['KeyD'] || (joystick.active && joystick.vx > 0.3),
@@ -630,38 +690,137 @@ const touchBtns = { jump: false, attack: false, dash: false, shuriken: false };
 
 const joyContainer = document.getElementById('joy-container');
 const joyStick = document.getElementById('joy-stick');
+const joyZone = document.getElementById('joy-zone');
 let joyDragging = false;
-const maxJoyR = 40;
+let joyTouchId = null;
+const DEADZONE = 20;
+const maxJoyR = 45;
 
 function updateJoy(cx, cy) {
     const r = joyContainer.getBoundingClientRect();
     let dx = cx - (r.left + r.width/2), dy = cy - (r.top + r.height/2);
     let d = Math.sqrt(dx*dx+dy*dy);
     if (d > maxJoyR) { dx = dx/d*maxJoyR; dy = dy/d*maxJoyR; }
-    joyStick.style.transform = `translate(${dx}px,${dy}px)`;
-    joystick.vx = dx/maxJoyR; joystick.vy = dy/maxJoyR;
+    joyStick.style.transform = 'translate('+dx+'px,'+dy+'px)';
+    // Apply deadzone
+    if (d < DEADZONE) {
+        joystick.vx = 0;
+        joystick.vy = 0;
+    } else {
+        joystick.vx = dx/maxJoyR;
+        joystick.vy = dy/maxJoyR;
+    }
 }
-function resetJoy() { joyDragging=false; joystick.active=false; joystick.vx=0; joystick.vy=0; joyStick.style.transform='translate(0,0)'; }
+function resetJoy() {
+    joyDragging = false;
+    joyTouchId = null;
+    joystick.active = false;
+    joystick.vx = 0;
+    joystick.vy = 0;
+    joyStick.style.transform = 'translate(0,0)';
+}
 
-joyContainer.addEventListener('touchstart', e => { e.preventDefault(); joyDragging=true; joystick.active=true; updateJoy(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
-joyContainer.addEventListener('touchmove', e => { e.preventDefault(); if(joyDragging) updateJoy(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
-joyContainer.addEventListener('touchend', resetJoy);
-joyContainer.addEventListener('touchcancel', resetJoy);
-joyContainer.addEventListener('mousedown', e => { joyDragging=true; joystick.active=true; updateJoy(e.clientX, e.clientY); });
-window.addEventListener('mousemove', e => { if(joyDragging) updateJoy(e.clientX, e.clientY); });
-window.addEventListener('mouseup', resetJoy);
+joyZone.addEventListener('touchstart', function(e) {
+    e.preventDefault();
+    initAudio();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        if (joyTouchId === null) {
+            joyTouchId = e.changedTouches[i].identifier;
+            joyDragging = true;
+            joystick.active = true;
+            updateJoy(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+        }
+    }
+}, {passive:false});
 
-['jump','attack','dash','shuriken'].forEach(name => {
-    const el = document.getElementById('btn-'+name);
-    const press = e => { e.preventDefault(); touchBtns[name]=true; el.classList.add('active'); if(gameState==='TITLE') startGame(); if(gameState==='GAMEOVER'||gameState==='VICTORY') resetToTitle(); if(gameState==='STORY') advanceStory(); };
-    const release = e => { if(e.type!=='mouseup'&&e.type!=='mouseleave') e.preventDefault(); touchBtns[name]=false; el.classList.remove('active'); };
-    el.addEventListener('touchstart', press, {passive:false});
-    el.addEventListener('touchend', release, {passive:false});
-    el.addEventListener('touchcancel', release, {passive:false});
-    el.addEventListener('mousedown', press);
-    el.addEventListener('mouseup', release);
-    el.addEventListener('mouseleave', release);
+joyZone.addEventListener('touchmove', function(e) {
+    e.preventDefault();
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joyTouchId) {
+            updateJoy(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+        }
+    }
+}, {passive:false});
+
+joyZone.addEventListener('touchend', function(e) {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joyTouchId) {
+            resetJoy();
+        }
+    }
 });
+joyZone.addEventListener('touchcancel', function(e) {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+        if (e.changedTouches[i].identifier === joyTouchId) {
+            resetJoy();
+        }
+    }
+});
+
+// Mouse fallback for joystick
+joyZone.addEventListener('mousedown', function(e) { joyDragging = true; joystick.active = true; updateJoy(e.clientX, e.clientY); });
+window.addEventListener('mousemove', function(e) { if (joyDragging) updateJoy(e.clientX, e.clientY); });
+window.addEventListener('mouseup', function() { if (joyDragging) resetJoy(); });
+
+// Button touch tracking with identifier
+const btnTouchIds = { jump: null, attack: null, dash: null, shuriken: null };
+
+['jump','attack','dash','shuriken'].forEach(function(name) {
+    const el = document.getElementById('btn-'+name);
+
+    el.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        initAudio();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            btnTouchIds[name] = e.changedTouches[i].identifier;
+        }
+        touchBtns[name] = true;
+        el.classList.add('active');
+        if (gameState === 'TITLE') startGame();
+        if (gameState === 'GAMEOVER' || gameState === 'VICTORY') resetToTitle();
+        if (gameState === 'STORY') advanceStory();
+    }, {passive:false});
+
+    el.addEventListener('touchend', function(e) {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === btnTouchIds[name]) {
+                touchBtns[name] = false;
+                el.classList.remove('active');
+                btnTouchIds[name] = null;
+            }
+        }
+    }, {passive:false});
+
+    el.addEventListener('touchcancel', function(e) {
+        touchBtns[name] = false;
+        el.classList.remove('active');
+        btnTouchIds[name] = null;
+    }, {passive:false});
+
+    el.addEventListener('mousedown', function(e) {
+        touchBtns[name] = true;
+        el.classList.add('active');
+        if (gameState === 'TITLE') startGame();
+        if (gameState === 'GAMEOVER' || gameState === 'VICTORY') resetToTitle();
+        if (gameState === 'STORY') advanceStory();
+    });
+    el.addEventListener('mouseup', function() {
+        touchBtns[name] = false;
+        el.classList.remove('active');
+    });
+    el.addEventListener('mouseleave', function() {
+        touchBtns[name] = false;
+        el.classList.remove('active');
+    });
+});
+
+// ============================================================
+// NaN GUARD HELPERS
+// ============================================================
+function safeNum(v, fallback) {
+    if (typeof v !== 'number' || !isFinite(v)) return fallback || 0;
+    return v;
+}
 
 // ============================================================
 // GAME STATE
@@ -700,9 +859,8 @@ const LEVEL_SUBTITLES = [
     'Demon Shrine'
 ];
 
-// Story text arrays — each entry is one screen of text
+// Story text arrays
 const STORY_PRE = [
-    // Level 0 intro
     [
         "You are Kaede, a ninja of the Shadow Lotus clan.",
         "",
@@ -730,7 +888,6 @@ const STORY_PRE = [
         "The forest itself will try to stop you --",
         "its guardians see all intruders as threats.",
     ],
-    // Level 1 intro
     [
         "--- THE SECOND TRIAL: COURAGE ---",
         "",
@@ -742,7 +899,6 @@ const STORY_PRE = [
         "who refuse to leave their posts,",
         "even in death.",
     ],
-    // Level 2 intro
     [
         "--- THE FINAL TRIAL: TRUTH ---",
         "",
@@ -755,7 +911,6 @@ const STORY_PRE = [
 ];
 
 const STORY_POST = [
-    // After level 0
     [
         "You emerge from the forest as the first",
         "light breaks. In the clearing ahead,",
@@ -766,7 +921,6 @@ const STORY_POST = [
         " Shadow Lotus possess such speed --",
         " you, and your master.'",
     ],
-    // After level 1
     [
         "Deep in the castle archives, you find",
         "the assassination report.",
@@ -781,7 +935,6 @@ const STORY_POST = [
         "private chambers: the head of security...",
         "and Sensei Takeshi.",
     ],
-    // After level 2 (victory)
     [
         "TAKESHI:",
         "'You were always my finest student, Kaede.",
@@ -804,21 +957,18 @@ const STORY_POST = [
     ],
 ];
 
-// Environmental signs per level: [{tileX, text}]
+// Environmental signs per level
 const ENV_SIGNS = [
-    // Level 0
     [
         { tx: 20, text: "The forest remembers..." },
         { tx: 45, text: "Speed is the shadow's first weapon" },
         { tx: 65, text: "Run, Kaede. Do not look back." },
     ],
-    // Level 1
     [
         { tx: 15, text: "The Shogun's blood still stains these stones" },
         { tx: 50, text: "Who benefits from the Shogun's death?" },
         { tx: 75, text: "The guards see only enemies now" },
     ],
-    // Level 2
     [
         { tx: 20, text: "Your master's blade hangs here..." },
         { tx: 50, text: "Truth cuts deeper than any sword" },
@@ -833,9 +983,9 @@ let storyLineIndex = 0;
 let storyFullText = '';
 let storyDisplayed = '';
 let storyTypeTimer = 0;
-let storyCallback = null; // function to call when story dismissed
+let storyCallback = null;
 let storySkipReady = false;
-const STORY_CHAR_DELAY = 2; // frames per character
+const STORY_CHAR_DELAY = 2;
 
 function showStory(lines, callback) {
     gameState = 'STORY';
@@ -862,21 +1012,18 @@ function updateStory() {
 }
 
 function drawStoryScreen() {
-    // Dark background
     const grad = ctx.createLinearGradient(0, 0, 0, GH);
     grad.addColorStop(0, '#050008');
     grad.addColorStop(1, '#100020');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, GW, GH);
 
-    // Decorative border
     ctx.strokeStyle = '#800';
     ctx.lineWidth = 2;
     ctx.strokeRect(30, 30, GW - 60, GH - 60);
     ctx.strokeStyle = '#400';
     ctx.strokeRect(34, 34, GW - 68, GH - 68);
 
-    // Draw text
     ctx.font = '10px "Press Start 2P"';
     ctx.textAlign = 'left';
     const lines = storyDisplayed.split('\n');
@@ -899,28 +1046,25 @@ function drawStoryScreen() {
     }
     ctx.shadowBlur = 0;
 
-    // Prompt
     if (storySkipReady && Math.floor(frameCount / 30) % 2 === 0) {
         ctx.fillStyle = '#ff0';
         ctx.font = '9px "Press Start 2P"';
         ctx.textAlign = 'center';
-        ctx.fillText('PRESS Z / ENTER TO CONTINUE', GW / 2, GH - 50);
+        ctx.fillText('PRESS Z / ENTER / TAP TO CONTINUE', GW / 2, GH - 50);
     } else if (!storySkipReady) {
         ctx.fillStyle = '#666';
         ctx.font = '8px "Press Start 2P"';
         ctx.textAlign = 'center';
-        ctx.fillText('PRESS Z / ENTER TO SKIP', GW / 2, GH - 50);
+        ctx.fillText('PRESS Z / ENTER / TAP TO SKIP', GW / 2, GH - 50);
     }
 }
 
 function advanceStory() {
     if (!storySkipReady) {
-        // Skip to end of text
         storyCharIndex = storyFullText.length;
         storyDisplayed = storyFullText;
         storySkipReady = true;
     } else {
-        // Advance
         if (storyCallback) storyCallback();
     }
 }
@@ -928,10 +1072,8 @@ function advanceStory() {
 // ============================================================
 // LEVEL DATA
 // ============================================================
-// Tile types: 0=air, 1=ground, 2=wall, 3=platform(passthrough top), 4=spikes, 5=bamboo(bg)
 function buildLevel(lvl) {
     if (lvl === undefined) lvl = currentLevel;
-    // Each level is self-contained with its own tile map
     const H = 30;
     let W;
 
@@ -945,7 +1087,6 @@ function buildLevel(lvl) {
         for (let x = 0; x < W; x++) tiles[y][x] = 0;
     }
 
-    // Ground floor
     function addGround(gapList) {
         for (let x = 0; x < W; x++) {
             tiles[H-1][x] = 1;
@@ -969,22 +1110,15 @@ function buildLevel(lvl) {
     }
 
     if (lvl === 0) {
-        // LEVEL 1: TRIAL OF SPEED - Bamboo Forest (tiles 0-85 from original)
         addGround([[30, 34], [70, 74]]);
-
-        // Section 1: Tutorial area (0-40)
         addPlatform(8, 24, 5);
         addPlatform(15, 21, 4);
         addPlatform(21, 18, 5);
         addPlatform(10, 17, 3);
-
-        // Wall jump section
         addWall(28, 15, 27);
         addWall(32, 12, 27);
         addPlatform(29, 14, 3);
         addPlatform(33, 11, 4);
-
-        // Section 2: Forest platforms (40-85)
         addPlatform(42, 24, 6);
         addPlatform(50, 22, 4);
         addPlatform(46, 19, 5);
@@ -992,23 +1126,17 @@ function buildLevel(lvl) {
         addPlatform(60, 17, 6);
         addPlatform(52, 15, 3);
         addPlatform(58, 13, 4);
-
         addWall(68, 10, 27);
         addWall(72, 8, 27);
         addPlatform(69, 14, 3);
         addPlatform(64, 22, 4);
         addPlatform(73, 10, 5);
-
-        // End platform
         addPlatform(80, 24, 10, 1);
         addPlatform(80, 23, 10, 1);
         for (let y = 0; y < H-2; y++) { tiles[y][W-1] = 2; tiles[y][W-2] = 2; }
 
     } else if (lvl === 1) {
-        // LEVEL 2: TRIAL OF COURAGE - Castle Rooftops (denser combat, castle theme)
         addGround([[30, 34], [55, 59], [80, 84]]);
-
-        // Dense combat platforms
         addPlatform(8, 24, 8);
         addPlatform(18, 22, 6);
         addPlatform(12, 19, 5);
@@ -1018,13 +1146,10 @@ function buildLevel(lvl) {
         addPlatform(28, 14, 4);
         addPlatform(38, 22, 5);
         addPlatform(36, 16, 3);
-
         addWall(44, 10, 27);
         addWall(48, 8, 27);
         addPlatform(45, 12, 3);
         addPlatform(49, 9, 4);
-
-        // Vertical challenge section
         addPlatform(54, 25, 4);
         addPlatform(60, 23, 3);
         addPlatform(56, 20, 4);
@@ -1034,35 +1159,26 @@ function buildLevel(lvl) {
         addPlatform(72, 16, 5);
         addPlatform(76, 13, 4);
         addPlatform(70, 11, 3);
-
         addWall(82, 8, 27);
         addWall(86, 6, 27);
         addPlatform(83, 10, 3);
         addPlatform(87, 7, 4);
-
-        // End platform
         addPlatform(90, 24, 10, 1);
         addPlatform(90, 23, 10, 1);
         for (let y = 0; y < H-2; y++) { tiles[y][W-1] = 2; tiles[y][W-2] = 2; }
 
     } else {
-        // LEVEL 3: TRIAL OF TRUTH - Demon Shrine (final level)
         addGround([[25, 29], [50, 54], [75, 79]]);
-
-        // Shrine approach
         addPlatform(8, 24, 5);
         addPlatform(15, 22, 4);
         addPlatform(11, 18, 5);
         addPlatform(21, 20, 6);
         addPlatform(28, 17, 4);
         addPlatform(24, 14, 3);
-
         addWall(34, 8, 27);
         addWall(38, 6, 27);
         addPlatform(35, 10, 3);
         addPlatform(39, 8, 4);
-
-        // Inner shrine - more platforms
         addPlatform(42, 24, 6);
         addPlatform(44, 18, 4);
         addPlatform(50, 20, 3);
@@ -1070,17 +1186,13 @@ function buildLevel(lvl) {
         addPlatform(53, 16, 5);
         addPlatform(60, 18, 4);
         addPlatform(58, 13, 3);
-
         addWall(66, 8, 27);
         addWall(70, 6, 27);
         addPlatform(67, 10, 3);
         addPlatform(71, 7, 4);
-
         addPlatform(74, 22, 4);
         addPlatform(76, 16, 4);
         addPlatform(80, 20, 3);
-
-        // End platform - Takeshi's arena
         addPlatform(84, 24, 11, 1);
         addPlatform(84, 23, 11, 1);
         for (let y = 0; y < H-2; y++) { tiles[y][W-1] = 2; tiles[y][W-2] = 2; }
@@ -1102,12 +1214,15 @@ function isSolid(tx, ty) { const t = tileAt(tx,ty); return t === 1 || t === 2; }
 class Camera {
     constructor() { this.x = 0; this.y = 0; }
     follow(target) {
+        if (!level) return;
         const tx = target.x - GW/2 + target.w/2;
         const ty = target.y - GH/2 + target.h/2 - 40;
         this.x += (tx - this.x) * 0.1;
         this.y += (ty - this.y) * 0.06;
         this.x = Math.max(0, Math.min(level.pw - GW, this.x));
         this.y = Math.max(0, Math.min(level.ph - GH, this.y));
+        this.x = safeNum(this.x, 0);
+        this.y = safeNum(this.y, 0);
     }
 }
 
@@ -1115,7 +1230,10 @@ class Camera {
 // PARTICLES
 // ============================================================
 function spawnParticles(x, y, count, color, spread, life) {
+    // Cap particle count on low-end
+    if (isLowEnd) count = Math.min(count, 5);
     for (let i = 0; i < count; i++) {
+        if (particles.length >= MAX_PARTICLES) break;
         particles.push({
             x, y, vx: (Math.random()-0.5)*spread, vy: (Math.random()-0.5)*spread - 1,
             life: life || 20+Math.random()*15, maxLife: life || 30, color, size: 1+Math.random()*2
@@ -1125,7 +1243,9 @@ function spawnParticles(x, y, count, color, spread, life) {
 
 function spawnSlashParticle(x, y, dir, combo) {
     const colors = ['#fff','#cef','#0ff'];
-    for (let i = 0; i < 8; i++) {
+    const count = isLowEnd ? 4 : 8;
+    for (let i = 0; i < count; i++) {
+        if (particles.length >= MAX_PARTICLES) break;
         const angle = (dir > 0 ? -0.5 : 2.6) + Math.random() * 1.2;
         const speed = 2 + Math.random() * 3;
         particles.push({
@@ -1136,6 +1256,7 @@ function spawnSlashParticle(x, y, dir, combo) {
 }
 
 function spawnDashTrail(x, y, w, h) {
+    if (particles.length >= MAX_PARTICLES) return;
     particles.push({
         x, y, vx: 0, vy: 0, life: 10, maxLife: 10,
         color: '#a0f', size: 0, isGhost: true, gw: w, gh: h
@@ -1153,16 +1274,18 @@ function updateParticles() {
 }
 
 function drawParticles() {
-    for (const p of particles) {
+    for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
         const a = p.life / p.maxLife;
+        if (a <= 0) continue;
         ctx.globalAlpha = a;
         if (p.isGhost) {
             ctx.fillStyle = p.color;
             ctx.globalAlpha = a * 0.4;
-            ctx.fillRect(p.x - camera.x, p.y - camera.y, p.gw, p.gh);
+            ctx.fillRect(Math.round(p.x - camera.x), Math.round(p.y - camera.y), p.gw, p.gh);
         } else {
             ctx.fillStyle = p.color;
-            ctx.fillRect(p.x - camera.x, p.y - camera.y, p.size, p.size);
+            ctx.fillRect(Math.round(p.x - camera.x), Math.round(p.y - camera.y), p.size, p.size);
         }
     }
     ctx.globalAlpha = 1;
@@ -1173,36 +1296,31 @@ function drawParticles() {
 // ============================================================
 class Player {
     constructor(x, y) {
-        this.x = x; this.y = y;
+        this.x = safeNum(x, 48); this.y = safeNum(y, 384);
         this.w = 14; this.h = 28;
         this.vx = 0; this.vy = 0;
-        this.facing = 1; // 1=right, -1=left
+        this.facing = 1;
         this.onGround = false;
         this.hp = 5; this.maxHp = 5;
         this.shurikens = 15;
         this.invuln = 0;
 
-        // Jump
         this.jumpHoldTime = 0;
         this.maxJumpHold = 10;
         this.coyoteTime = 0;
         this.jumpBuffered = 0;
 
-        // Wall
-        this.wallDir = 0; // -1 left wall, 1 right wall, 0 none
+        this.wallDir = 0;
         this.wallSliding = false;
 
-        // Dash
         this.canDash = true;
         this.dashing = false;
         this.dashTimer = 0;
         this.dashDir = 0;
 
-        // Slide
         this.sliding = false;
         this.slideTimer = 0;
 
-        // Combat
         this.attacking = false;
         this.combo = 0;
         this.attackTimer = 0;
@@ -1210,7 +1328,6 @@ class Player {
         this.shurikenCooldown = 0;
         this.attackHitbox = null;
 
-        // Animation
         this.animFrame = 0;
         this.animTimer = 0;
         this.state = 'idle';
@@ -1258,7 +1375,6 @@ class Player {
             this.attackTimer = dur;
             this.animFrame = 0;
 
-            // Hitbox
             const hbw = this.combo === 3 ? 30 : 24;
             const hbh = this.combo === 3 ? 24 : 18;
             const hbx = this.facing > 0 ? this.x + this.w : this.x - hbw;
@@ -1308,7 +1424,6 @@ class Player {
         }
 
         if (!this.dashing && !this.sliding && !this.attacking) {
-            // Horizontal movement
             const speed = 3.5;
             const accel = this.onGround ? 0.8 : 0.5;
             let targetVx = 0;
@@ -1340,7 +1455,7 @@ class Player {
             if ((this.wallDir === -1 && input.left) || (this.wallDir === 1 && input.right)) {
                 this.wallSliding = true;
                 this.vy = Math.min(this.vy, 1.5);
-                this.canDash = true; // Reset dash on wall
+                this.canDash = true;
             }
         }
 
@@ -1349,20 +1464,21 @@ class Player {
             const dustX = this.wallDir === -1 ? this.x - 1 : this.x + this.w + 1;
             const dustY = this.y + this.h * 0.3 + Math.random() * this.h * 0.4;
             const colors = ['#ccc', '#aaa', '#fff', '#999'];
-            particles.push({
-                x: dustX, y: dustY,
-                vx: -this.wallDir * (0.3 + Math.random() * 0.5),
-                vy: -0.5 - Math.random() * 0.5,
-                life: 10 + Math.random() * 8, maxLife: 18,
-                color: colors[Math.floor(Math.random() * colors.length)],
-                size: 1 + Math.random() * 1.5
-            });
+            if (particles.length < MAX_PARTICLES) {
+                particles.push({
+                    x: dustX, y: dustY,
+                    vx: -this.wallDir * (0.3 + Math.random() * 0.5),
+                    vy: -0.5 - Math.random() * 0.5,
+                    life: 10 + Math.random() * 8, maxLife: 18,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    size: 1 + Math.random() * 1.5
+                });
+            }
         }
 
         // Gravity
         if (!this.dashing) {
             this.vy += GRAVITY;
-            // Variable jump
             if (this.jumpHoldTime > 0 && input.jumpHeld) {
                 this.vy -= 0.35;
                 this.jumpHoldTime--;
@@ -1383,7 +1499,6 @@ class Player {
 
         if (this.jumpBuffered > 0) {
             if (this.coyoteTime > 0 && !this.dashing) {
-                // Normal jump
                 this.vy = -9.5;
                 this.jumpHoldTime = this.maxJumpHold;
                 this.onGround = false;
@@ -1391,7 +1506,6 @@ class Player {
                 this.jumpBuffered = 0;
                 playSound('jump');
             } else if (this.wallSliding && !this.dashing) {
-                // Wall jump
                 this.vy = -9;
                 this.vx = -this.wallDir * 5;
                 this.facing = -this.wallDir;
@@ -1406,12 +1520,18 @@ class Player {
         // Move & collide
         this.moveAndCollide();
 
+        // NaN guard after physics
+        this.x = safeNum(this.x, 48);
+        this.y = safeNum(this.y, 384);
+        this.vx = safeNum(this.vx, 0);
+        this.vy = safeNum(this.vy, 0);
+
         // Spike death
         const feetTile = tileAt(Math.floor((this.x+this.w/2)/TILE), Math.floor((this.y+this.h+2)/TILE));
         if (feetTile === 4) this.takeDamage(5);
 
         // Fall death
-        if (this.y > level.ph + 50) this.takeDamage(5);
+        if (level && this.y > level.ph + 50) this.takeDamage(5);
 
         // Animation state
         if (this.attacking) {
@@ -1434,13 +1554,13 @@ class Player {
     }
 
     moveAndCollide() {
+        if (!level) return;
         // Horizontal
         this.x += this.vx;
         const hSlide = this.sliding ? this.h * 0.5 : 0;
         const effY = this.y + hSlide;
         const effH = this.h - hSlide;
 
-        // Left/right collision
         if (this.vx < 0) {
             const tx = Math.floor(this.x / TILE);
             for (let ty = Math.floor(effY/TILE); ty <= Math.floor((effY+effH-1)/TILE); ty++) {
@@ -1459,12 +1579,10 @@ class Player {
         this.onGround = false;
 
         if (this.vy >= 0) {
-            // Falling - check below
             const by = Math.floor((this.y+this.h)/TILE);
             for (let tx = Math.floor(this.x/TILE); tx <= Math.floor((this.x+this.w-1)/TILE); tx++) {
                 const t = tileAt(tx, by);
                 if (t === 1 || t === 2 || t === 3) {
-                    // For platforms (3), only collide from above
                     if (t === 3 && this.y + this.h - this.vy > by * TILE + 2) continue;
                     this.y = by * TILE - this.h;
                     this.vy = 0;
@@ -1482,7 +1600,9 @@ class Player {
         }
 
         // Clamp to level
-        this.x = Math.max(0, Math.min(level.pw - this.w, this.x));
+        if (level) {
+            this.x = Math.max(0, Math.min(level.pw - this.w, this.x));
+        }
     }
 
     takeDamage(dmg) {
@@ -1491,6 +1611,7 @@ class Player {
         this.invuln = 45;
         spawnParticles(this.x+this.w/2, this.y+this.h/2, 10, '#f00', 5, 15);
         if (this.hp <= 0) {
+            this.hp = 0;
             this.dead = true;
             this.deathTimer = 0;
             playSound('death');
@@ -1504,9 +1625,9 @@ class Player {
         if (this.dead && this.deathTimer > 30) return;
         if (this.invuln > 0 && Math.floor(frameCount/3)%2===0 && !this.dead) return;
 
-        const sx = this.x - camera.x, sy = this.y - camera.y;
+        const sx = Math.round(this.x - camera.x);
+        const sy = Math.round(this.y - camera.y);
 
-        // Select sprite
         let spr;
         const flip = this.facing < 0;
         if (this.state.startsWith('attack')) {
@@ -1521,7 +1642,6 @@ class Player {
             spr = SPR_NINJA_IDLE;
         }
 
-        // Death fade
         if (this.dead) {
             ctx.globalAlpha = Math.max(0, 1 - this.deathTimer / 30);
         }
@@ -1557,8 +1677,8 @@ class Player {
 // ============================================================
 class Enemy {
     constructor(x, y, type) {
-        this.x = x; this.y = y;
-        this.type = type; // 'guard' or 'archer'
+        this.x = safeNum(x, 0); this.y = safeNum(y, 0);
+        this.type = type;
         this.w = 14; this.h = 26;
         this.vx = 0; this.vy = 0;
         this.facing = -1;
@@ -1584,41 +1704,46 @@ class Enemy {
         if (this.stunTimer > 0) { this.stunTimer--; return; }
 
         this.animTimer++;
-        const px = player.x, py = player.y;
-        const dx = px - this.x, dy = py - this.y;
-        const dist = Math.sqrt(dx*dx + dy*dy);
-
-        if (this.type === 'guard') {
-            // Face player if close
-            if (dist < 200) {
-                this.facing = dx > 0 ? 1 : -1;
-                this.chasing = dist < 130;
-            }
-
-            if (this.chasing && !player.dead) {
-                this.vx = this.facing * this.chargeSpeed;
-            } else {
-                // Patrol
+        if (!player || player.dead) {
+            // Patrol if player dead
+            if (this.type === 'guard') {
                 this.vx = this.facing * this.speed;
                 if (this.x <= this.patrolLeft) this.facing = 1;
                 if (this.x >= this.patrolRight) this.facing = -1;
-
-                // Don't walk off edges
-                const aheadX = this.facing > 0 ? this.x + this.w + 2 : this.x - 2;
-                const belowTile = tileAt(Math.floor(aheadX/TILE), Math.floor((this.y+this.h+2)/TILE));
-                if (belowTile === 0 || belowTile === 4) this.facing *= -1;
             }
-        } else if (this.type === 'archer') {
-            this.facing = dx > 0 ? 1 : -1;
-            this.shootTimer--;
-            if (this.shootTimer <= 0 && dist < 250 && !player.dead) {
-                // Shoot arrow
-                projectiles.push({
-                    x: this.x + (this.facing > 0 ? this.w : -8), y: this.y + 10,
-                    vx: this.facing * 4, vy: 0, w: 8, h: 3,
-                    damage: 1, fromPlayer: false, life: 150, type: 'arrow'
-                });
-                this.shootTimer = this.shootCooldown;
+        } else {
+            const px = player.x, py = player.y;
+            const dx = px - this.x, dy = py - this.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+
+            if (this.type === 'guard') {
+                if (dist < 200) {
+                    this.facing = dx > 0 ? 1 : -1;
+                    this.chasing = dist < 130;
+                }
+
+                if (this.chasing && !player.dead) {
+                    this.vx = this.facing * this.chargeSpeed;
+                } else {
+                    this.vx = this.facing * this.speed;
+                    if (this.x <= this.patrolLeft) this.facing = 1;
+                    if (this.x >= this.patrolRight) this.facing = -1;
+
+                    const aheadX = this.facing > 0 ? this.x + this.w + 2 : this.x - 2;
+                    const belowTile = tileAt(Math.floor(aheadX/TILE), Math.floor((this.y+this.h+2)/TILE));
+                    if (belowTile === 0 || belowTile === 4) this.facing *= -1;
+                }
+            } else if (this.type === 'archer') {
+                this.facing = dx > 0 ? 1 : -1;
+                this.shootTimer--;
+                if (this.shootTimer <= 0 && dist < 250 && !player.dead) {
+                    projectiles.push({
+                        x: this.x + (this.facing > 0 ? this.w : -8), y: this.y + 10,
+                        vx: this.facing * 4, vy: 0, w: 8, h: 3,
+                        damage: 1, fromPlayer: false, life: 150, type: 'arrow'
+                    });
+                    this.shootTimer = this.shootCooldown;
+                }
             }
         }
 
@@ -1629,6 +1754,12 @@ class Enemy {
         // Move
         this.x += this.vx;
         this.y += this.vy;
+
+        // NaN guard
+        this.x = safeNum(this.x, 0);
+        this.y = safeNum(this.y, 0);
+        this.vx = safeNum(this.vx, 0);
+        this.vy = safeNum(this.vy, 0);
 
         // Simple collision
         this.onGround = false;
@@ -1658,14 +1789,14 @@ class Enemy {
         }
 
         // Contact damage to player
-        if (!player.dead && this.overlaps(player) && player.invuln <= 0) {
+        if (player && !player.dead && this.overlaps(player) && player.invuln <= 0) {
             player.takeDamage(this.damage);
             player.vx = (player.x < this.x ? -1 : 1) * 4;
             player.vy = -3;
         }
 
         // Fall death
-        if (this.y > level.ph + 100) this.dead = true;
+        if (level && this.y > level.ph + 100) this.dead = true;
     }
 
     overlaps(other) {
@@ -1687,7 +1818,6 @@ class Enemy {
             playSound('enemydeath');
             screenShake = Math.max(screenShake, 6);
 
-            // Random drops
             if (Math.random() < 0.3) {
                 const types = ['health','scroll','ammo'];
                 const t = types[Math.floor(Math.random()*types.length)];
@@ -1698,7 +1828,8 @@ class Enemy {
 
     draw() {
         if (this.dead && this.deathTimer > 15) return;
-        const sx = this.x - camera.x, sy = this.y - camera.y;
+        const sx = Math.round(this.x - camera.x);
+        const sy = Math.round(this.y - camera.y);
         if (sx < -40 || sx > GW+40 || sy < -40 || sy > GH+40) return;
 
         if (this.dead) ctx.globalAlpha = Math.max(0, 1 - this.deathTimer/15);
@@ -1738,17 +1869,18 @@ function updateProjectiles() {
         if (p.life <= 0) { projectiles.splice(i,1); continue; }
 
         if (p.fromPlayer) {
-            // Hit enemies
-            for (const e of entities) {
+            let hit = false;
+            for (let j = 0; j < entities.length; j++) {
+                const e = entities[j];
                 if (!e.dead && p.x < e.x+e.w && p.x+p.w > e.x && p.y < e.y+e.h && p.y+p.h > e.y) {
                     e.takeDamage(p.damage);
-                    projectiles.splice(i,1);
+                    hit = true;
                     break;
                 }
             }
+            if (hit) { projectiles.splice(i,1); continue; }
         } else {
-            // Hit player
-            if (!player.dead && player.invuln <= 0 &&
+            if (player && !player.dead && player.invuln <= 0 &&
                 p.x < player.x+player.w && p.x+p.w > player.x &&
                 p.y < player.y+player.h && p.y+p.h > player.y) {
                 player.takeDamage(p.damage);
@@ -1759,8 +1891,10 @@ function updateProjectiles() {
 }
 
 function drawProjectiles() {
-    for (const p of projectiles) {
-        const sx = p.x - camera.x, sy = p.y - camera.y;
+    for (let i = 0; i < projectiles.length; i++) {
+        const p = projectiles[i];
+        const sx = Math.round(p.x - camera.x);
+        const sy = Math.round(p.y - camera.y);
         if (sx < -20 || sx > GW+20) continue;
         if (p.type === 'shuriken') {
             ctx.save();
@@ -1780,9 +1914,11 @@ function drawProjectiles() {
 function updatePickups() {
     for (let i = pickups.length-1; i >= 0; i--) {
         const p = pickups[i];
-        p.vy += 0.3;
-        p.y += p.vy;
-        p.life--;
+        if (p.vy !== 0) {
+            p.vy += 0.3;
+            p.y += p.vy;
+        }
+        if (p.life < 999999) p.life--;
 
         // Ground collision
         const by = Math.floor((p.y+p.h)/TILE);
@@ -1792,7 +1928,7 @@ function updatePickups() {
         }
 
         // Player pickup
-        if (!player.dead && p.x < player.x+player.w && p.x+p.w > player.x &&
+        if (player && !player.dead && p.x < player.x+player.w && p.x+p.w > player.x &&
             p.y < player.y+player.h && p.y+p.h > player.y) {
             if (p.type === 'health') { player.hp = Math.min(player.maxHp, player.hp+1); }
             else if (p.type === 'scroll') { score += 200; }
@@ -1808,8 +1944,10 @@ function updatePickups() {
 }
 
 function drawPickups() {
-    for (const p of pickups) {
-        const sx = p.x - camera.x, sy = p.y - camera.y;
+    for (let i = 0; i < pickups.length; i++) {
+        const p = pickups[i];
+        const sx = Math.round(p.x - camera.x);
+        const sy = Math.round(p.y - camera.y);
         if (sx < -20 || sx > GW+20) continue;
         const bob = Math.sin(frameCount * 0.08) * 2;
         const spr = p.type === 'health' ? SPR_HEART : p.type === 'scroll' ? SPR_SCROLL : SPR_AMMO;
@@ -1821,31 +1959,33 @@ function drawPickups() {
 // LEVEL RENDERING
 // ============================================================
 function drawLevel() {
+    if (!level) return;
     const startTx = Math.max(0, Math.floor(camera.x / TILE));
     const endTx = Math.min(level.W-1, Math.floor((camera.x + GW) / TILE) + 1);
     const startTy = Math.max(0, Math.floor(camera.y / TILE));
     const endTy = Math.min(level.H-1, Math.floor((camera.y + GH) / TILE) + 1);
 
+    // Batch by tile type/color for fewer state changes
     for (let ty = startTy; ty <= endTy; ty++) {
         for (let tx = startTx; tx <= endTx; tx++) {
             const t = level.tiles[ty][tx];
             if (t === 0) continue;
-            const sx = tx * TILE - camera.x, sy = ty * TILE - camera.y;
+            const sx = Math.round(tx * TILE - camera.x);
+            const sy = Math.round(ty * TILE - camera.y);
 
             if (t === 1) {
-                // Ground - themed by level
                 const above = tileAt(tx, ty-1);
                 if (above === 0 || above === 3 || above === 4) {
                     if (currentLevel === 1) {
-                        ctx.fillStyle = '#556'; // stone top
+                        ctx.fillStyle = '#556';
                         ctx.fillRect(sx, sy, TILE, 3);
                         ctx.fillStyle = '#334';
                     } else if (currentLevel === 2) {
-                        ctx.fillStyle = '#633'; // crimson stone top
+                        ctx.fillStyle = '#633';
                         ctx.fillRect(sx, sy, TILE, 3);
                         ctx.fillStyle = '#422';
                     } else {
-                        ctx.fillStyle = '#2a5'; // grass top
+                        ctx.fillStyle = '#2a5';
                         ctx.fillRect(sx, sy, TILE, 3);
                         ctx.fillStyle = '#543';
                     }
@@ -1857,23 +1997,20 @@ function drawLevel() {
                     if ((tx+ty)%3===0) ctx.fillRect(sx+4, sy+4, 2, 2);
                 }
             } else if (t === 2) {
-                // Wall - themed
                 ctx.fillStyle = currentLevel === 1 ? '#445' : currentLevel === 2 ? '#534' : '#445';
                 ctx.fillRect(sx, sy, TILE, TILE);
                 ctx.fillStyle = currentLevel === 1 ? '#556' : currentLevel === 2 ? '#645' : '#556';
                 ctx.fillRect(sx+2, sy+2, TILE-4, TILE-4);
                 if ((tx+ty)%2===0) { ctx.fillStyle = currentLevel === 2 ? '#423' : '#334'; ctx.fillRect(sx+4,sy+6,4,2); }
             } else if (t === 3) {
-                // Platform - themed
                 ctx.fillStyle = currentLevel === 1 ? '#556' : currentLevel === 2 ? '#644' : '#654';
                 ctx.fillRect(sx, sy, TILE, 5);
                 ctx.fillStyle = currentLevel === 1 ? '#778' : currentLevel === 2 ? '#866' : '#876';
                 ctx.fillRect(sx, sy, TILE, 2);
             } else if (t === 4) {
-                // Spikes
                 ctx.fillStyle = '#c33';
-                for (let i = 0; i < 4; i++) {
-                    const bx = sx + i*4;
+                for (let k = 0; k < 4; k++) {
+                    const bx = sx + k*4;
                     ctx.beginPath();
                     ctx.moveTo(bx, sy+TILE);
                     ctx.lineTo(bx+2, sy+4);
@@ -1889,22 +2026,18 @@ function drawLevel() {
 // BACKGROUND / PARALLAX
 // ============================================================
 function drawBackground() {
-    // Sky gradient - varies by level
     const grad = ctx.createLinearGradient(0, 0, 0, GH);
     if (currentLevel === 1) {
-        // Castle Rooftops - dark blue/grey
         grad.addColorStop(0, '#060812');
         grad.addColorStop(0.4, '#0c1020');
         grad.addColorStop(0.7, '#151a30');
         grad.addColorStop(1, '#0a0d1a');
     } else if (currentLevel === 2) {
-        // Demon Shrine - crimson tint
         grad.addColorStop(0, '#120205');
         grad.addColorStop(0.4, '#200810');
         grad.addColorStop(0.7, '#30101a');
         grad.addColorStop(1, '#1a060d');
     } else {
-        // Bamboo Forest - purple night
         grad.addColorStop(0, '#0a0618');
         grad.addColorStop(0.4, '#1a0830');
         grad.addColorStop(0.7, '#2d1045');
@@ -1934,7 +2067,7 @@ function drawBackground() {
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // Far mountains (parallax layer 1)
+    // Far mountains
     ctx.fillStyle = '#150a20';
     for (let i = 0; i < 20; i++) {
         const mx = i * 120 - (camera.x * 0.05) % (120*20);
@@ -1946,18 +2079,17 @@ function drawBackground() {
         ctx.fill();
     }
 
-    // Mid bamboo silhouettes (parallax layer 2)
+    // Mid bamboo silhouettes
     ctx.fillStyle = '#1a0d28';
     for (let i = 0; i < 40; i++) {
         const bx = i * 45 - (camera.x * 0.15) % (45*40);
         const bh = 80 + Math.sin(i*2.3)*40;
         ctx.fillRect(bx, GH - 80 - bh, 4, bh + 80);
-        // Leaves
         ctx.fillRect(bx-6, GH - 80 - bh + 10, 16, 3);
         ctx.fillRect(bx-4, GH - 80 - bh + 20, 12, 2);
     }
 
-    // Near tree trunks (parallax layer 3)
+    // Near tree trunks
     ctx.fillStyle = '#0d0818';
     for (let i = 0; i < 15; i++) {
         const tx = i * 150 - (camera.x * 0.3) % (150*15);
@@ -1978,7 +2110,6 @@ function drawHUD() {
         const hx = 12 + i * 20;
         if (i < player.hp) {
             ctx.fillStyle = '#f00';
-            // Heart shape
             ctx.beginPath();
             ctx.arc(hx+5, 16, 5, 0, Math.PI*2);
             ctx.arc(hx+13, 16, 5, 0, Math.PI*2);
@@ -2014,7 +2145,7 @@ function drawHUD() {
     ctx.fillStyle = '#0f0';
     ctx.textAlign = 'left';
     ctx.shadowBlur = 4; ctx.shadowColor = '#0f0';
-    ctx.fillText('★ ' + player.shurikens, 12, 48);
+    ctx.fillText('\u2605 ' + player.shurikens, 12, 48);
     ctx.shadowBlur = 0;
 
     // Level name
@@ -2035,7 +2166,6 @@ function drawHUD() {
 // TITLE SCREEN
 // ============================================================
 function drawTitleScreen() {
-    // Background
     const grad = ctx.createLinearGradient(0, 0, 0, GH);
     grad.addColorStop(0, '#050008');
     grad.addColorStop(1, '#1a0030');
@@ -2084,7 +2214,6 @@ function drawTitleScreen() {
     ctx.fillText('THE CRIMSON OATH', GW/2, 195);
     ctx.shadowBlur = 0;
 
-    // Tagline
     ctx.fillStyle = '#777';
     ctx.font = '8px "Press Start 2P"';
     ctx.fillText('A tale of honor and betrayal', GW/2, 215);
@@ -2094,7 +2223,7 @@ function drawTitleScreen() {
         ctx.fillStyle = '#ff0';
         ctx.font = '14px "Press Start 2P"';
         ctx.shadowBlur = 10; ctx.shadowColor = '#ff0';
-        ctx.fillText('PRESS START', GW/2, 340);
+        ctx.fillText('PRESS START / TAP', GW/2, 340);
         ctx.shadowBlur = 0;
     }
 
@@ -2104,7 +2233,6 @@ function drawTitleScreen() {
     ctx.fillText('Z:ATTACK  X:JUMP  C:DASH  V:SHURIKEN', GW/2, 410);
     ctx.fillText('ARROWS/WASD: MOVE', GW/2, 430);
 
-    // Hi score
     if (hiScore > 0) {
         ctx.fillStyle = '#c80';
         ctx.font = '10px "Press Start 2P"';
@@ -2172,46 +2300,35 @@ function spawnLevelEntities() {
     }
 
     if (currentLevel === 0) {
-        // Level 1: Bamboo Forest - moderate enemies
         spawnGuard(200); spawnGuard(400); spawnGuard(600); spawnGuard(900);
         spawnArcher(15*TILE, 20*TILE);
         spawnArcher(60*TILE, 16*TILE);
-
-        // Pickups
         pickups.push({ x: 12*TILE, y: 22*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
         pickups.push({ x: 22*TILE, y: 16*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
         pickups.push({ x: 50*TILE, y: 20*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
         pickups.push({ x: 73*TILE, y: 8*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
         pickups.push({ x: 35*TILE, y: 24*TILE, w: 12, h: 12, type: 'health', vy: 0, life: 999999 });
         pickups.push({ x: 55*TILE, y: 18*TILE, w: 12, h: 12, type: 'ammo', vy: 0, life: 999999 });
-
     } else if (currentLevel === 1) {
-        // Level 2: Castle Rooftops - higher enemy density
         spawnGuard(150); spawnGuard(300); spawnGuard(450); spawnGuard(600);
         spawnGuard(800); spawnGuard(950); spawnGuard(1100); spawnGuard(1300);
         spawnArcher(21*TILE, 15*TILE);
         spawnArcher(36*TILE, 15*TILE);
         spawnArcher(62*TILE, 14*TILE);
         spawnArcher(76*TILE, 12*TILE);
-
-        // Pickups
         pickups.push({ x: 10*TILE, y: 22*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
         pickups.push({ x: 49*TILE, y: 8*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
         pickups.push({ x: 70*TILE, y: 10*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
         pickups.push({ x: 30*TILE, y: 18*TILE, w: 12, h: 12, type: 'health', vy: 0, life: 999999 });
         pickups.push({ x: 65*TILE, y: 20*TILE, w: 12, h: 12, type: 'health', vy: 0, life: 999999 });
         pickups.push({ x: 45*TILE, y: 10*TILE, w: 12, h: 12, type: 'ammo', vy: 0, life: 999999 });
-
     } else {
-        // Level 3: Demon Shrine - tough enemies
         spawnGuard(150); spawnGuard(350); spawnGuard(500); spawnGuard(700);
         spawnGuard(900); spawnGuard(1050); spawnGuard(1200);
         spawnArcher(15*TILE, 16*TILE);
         spawnArcher(28*TILE, 16*TILE);
         spawnArcher(53*TILE, 15*TILE);
         spawnArcher(76*TILE, 15*TILE);
-
-        // Pickups
         pickups.push({ x: 20*TILE, y: 18*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
         pickups.push({ x: 39*TILE, y: 6*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
         pickups.push({ x: 67*TILE, y: 8*TILE, w: 12, h: 12, type: 'scroll', vy: 0, life: 999999 });
@@ -2228,7 +2345,14 @@ function startGame() {
     initAudio();
     currentLevel = 0;
     score = 0;
-    // Show the first story intro (main backstory), then level 1 intro, then play
+    entities = [];
+    projectiles = [];
+    particles = [];
+    pickups = [];
+    screenShake = 0;
+    screenShakeX = 0;
+    screenShakeY = 0;
+    hitFlashFrames = 0;
     showStory(STORY_PRE[0], function() {
         showStory(STORY_PRE[1], function() {
             beginLevel();
@@ -2243,25 +2367,27 @@ function beginLevel() {
     camera = new Camera();
     camera.x = 0;
     camera.y = level.ph - GH;
+    entities = [];
+    projectiles = [];
+    particles = [];
+    pickups = [];
+    screenShake = 0;
+    hitFlashFrames = 0;
     spawnLevelEntities();
 }
 
 function advanceLevel() {
-    // Show post-level story
     const postIndex = currentLevel;
     showStory(STORY_POST[postIndex], function() {
         currentLevel++;
         if (currentLevel > 2) {
-            // Game complete!
             gameState = 'VICTORY';
             if (score > hiScore) {
                 hiScore = score;
                 localStorage.setItem('shadowBlade_hi', hiScore);
             }
         } else {
-            // Show pre-level story for next level then begin it
-            // STORY_PRE indices: 0=backstory, 1=level0 intro, 2=level1 intro, 3=level2 intro
-            const preIndex = currentLevel + 1; // +1 because index 0 is the backstory
+            const preIndex = currentLevel + 1;
             showStory(STORY_PRE[preIndex], function() {
                 beginLevel();
             });
@@ -2275,6 +2401,19 @@ function resetToTitle() {
         localStorage.setItem('shadowBlade_hi', hiScore);
     }
     gameState = 'TITLE';
+    // Full state reset
+    entities = [];
+    projectiles = [];
+    particles = [];
+    pickups = [];
+    player = null;
+    camera = null;
+    level = null;
+    screenShake = 0;
+    screenShakeX = 0;
+    screenShakeY = 0;
+    hitFlashFrames = 0;
+    score = 0;
 }
 
 // ============================================================
@@ -2294,46 +2433,48 @@ function update() {
         screenShakeY = 0;
     }
 
-    // Update hit flash
     if (hitFlashFrames > 0) hitFlashFrames--;
 
     if (gameState === 'PLAYING') {
         const input = pollInput();
 
-        if (!player.dead) {
+        if (player && !player.dead) {
             player.update(input);
 
-            // Level end check: player reached end platform area
-            const endZone = (level.W - 12) * TILE;
-            if (player.x > endZone) {
-                advanceLevel();
+            // Level end check
+            if (level) {
+                const endZone = (level.W - 12) * TILE;
+                if (player.x > endZone) {
+                    advanceLevel();
+                }
             }
-        } else {
+        } else if (player) {
             player.update(input);
             if (player.deathTimer > 90) {
                 gameState = 'GAMEOVER';
             }
         }
 
-        camera.follow(player);
+        if (camera && player) camera.follow(player);
 
         // Update entities (only near camera)
-        for (const e of entities) {
-            if (Math.abs(e.x - camera.x - GW/2) < GW) {
+        for (let i = 0; i < entities.length; i++) {
+            const e = entities[i];
+            if (camera && Math.abs(e.x - camera.x - GW/2) < GW) {
                 e.update();
             }
         }
 
         // Player attack hitbox vs enemies
-        if (player.attackHitbox) {
+        if (player && player.attackHitbox) {
             const hb = player.attackHitbox;
-            for (const e of entities) {
+            for (let i = 0; i < entities.length; i++) {
+                const e = entities[i];
                 if (!e.dead && !hb.hit.has(e) &&
                     hb.x < e.x+e.w && hb.x+hb.w > e.x &&
                     hb.y < e.y+e.h && hb.y+hb.h > e.y) {
                     e.takeDamage(hb.damage);
                     hb.hit.add(e);
-                    // Knockback
                     e.vx = player.facing * 3;
                     e.vy = -2;
                 }
@@ -2345,17 +2486,20 @@ function update() {
         updateParticles();
 
         // Clean dead entities after a while
-        entities = entities.filter(e => !e.dead || e.deathTimer < 60);
+        for (let i = entities.length - 1; i >= 0; i--) {
+            if (entities[i].dead && entities[i].deathTimer >= 60) {
+                entities.splice(i, 1);
+            }
+        }
     } else if (gameState === 'VICTORY') {
-        const input = pollInput();
-        if (player) {
+        pollInput();
+        if (player && camera) {
             camera.follow(player);
             updateParticles();
         }
     } else if (gameState === 'STORY') {
         updateStory();
     } else {
-        // Title animations
         pollInput();
     }
 }
@@ -2364,14 +2508,12 @@ function update() {
 // MAIN DRAW
 // ============================================================
 function drawVictoryScreen() {
-    // Full dark background for final victory
     const grad = ctx.createLinearGradient(0, 0, 0, GH);
     grad.addColorStop(0, 'rgba(5,0,0,0.95)');
     grad.addColorStop(1, 'rgba(30,0,0,0.95)');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, GW, GH);
 
-    // Title
     ctx.fillStyle = '#e44';
     ctx.font = '22px "Press Start 2P"';
     ctx.textAlign = 'center';
@@ -2383,7 +2525,6 @@ function drawVictoryScreen() {
     ctx.font = '14px "Press Start 2P"';
     ctx.fillText('COMPLETE', GW/2, 90);
 
-    // Ending text
     ctx.font = '8px "Press Start 2P"';
     ctx.fillStyle = '#ccc';
     ctx.textAlign = 'center';
@@ -2407,7 +2548,6 @@ function drawVictoryScreen() {
         ctx.fillText(endLines[i], GW/2, 130 + i * 16);
     }
 
-    // Score
     ctx.fillStyle = '#ff0';
     ctx.font = '12px "Press Start 2P"';
     ctx.fillText('FINAL SCORE: ' + score, GW/2, GH - 100);
@@ -2430,12 +2570,10 @@ function drawVictoryScreen() {
 }
 
 function drawGoArrow() {
-    // Show ">>>" arrow when nearby enemies are all dead or far away
-    if (player.dead) return;
-    const nearbyAlive = entities.filter(e => !e.dead && Math.abs(e.x - player.x) < 300);
+    if (!player || player.dead) return;
+    const nearbyAlive = entities.filter(function(e) { return !e.dead && Math.abs(e.x - player.x) < 300; });
     if (nearbyAlive.length > 0) return;
 
-    // Blink the arrow
     if (Math.floor(frameCount / 20) % 3 === 0) return;
 
     ctx.save();
@@ -2457,6 +2595,8 @@ function draw() {
     } else if (gameState === 'STORY') {
         drawStoryScreen();
     } else if (gameState === 'PLAYING' || gameState === 'GAMEOVER' || gameState === 'VICTORY') {
+        if (!player || !camera || !level) return;
+
         // Apply screen shake
         ctx.save();
         ctx.translate(Math.round(screenShakeX), Math.round(screenShakeY));
@@ -2465,16 +2605,13 @@ function draw() {
         drawLevel();
         drawPickups();
 
-        // Draw entities
-        for (const e of entities) e.draw();
+        for (let i = 0; i < entities.length; i++) entities[i].draw();
 
-        // Draw player
         player.draw();
 
         drawProjectiles();
         drawParticles();
 
-        // Restore from screen shake before HUD so HUD stays stable
         ctx.restore();
 
         drawHUD();
@@ -2484,7 +2621,8 @@ function draw() {
             ctx.save();
             ctx.font = '8px "Press Start 2P"';
             ctx.textAlign = 'center';
-            for (const sign of ENV_SIGNS[currentLevel]) {
+            for (let s = 0; s < ENV_SIGNS[currentLevel].length; s++) {
+                const sign = ENV_SIGNS[currentLevel][s];
                 const signWorldX = sign.tx * TILE;
                 const dist = Math.abs(player.x - signWorldX);
                 if (dist < 120) {
@@ -2503,7 +2641,6 @@ function draw() {
             ctx.restore();
         }
 
-        // "GO" arrow indicator
         if (gameState === 'PLAYING') {
             drawGoArrow();
         }
@@ -2517,12 +2654,12 @@ function draw() {
         }
 
         // Red flash on hit
-        if (player.invuln > 35) {
+        if (player && player.invuln > 35) {
             ctx.fillStyle = 'rgba(255,0,0,0.2)';
             ctx.fillRect(0, 0, GW, GH);
         }
 
-        // White hit flash when attacking enemies
+        // White hit flash
         if (hitFlashFrames > 0) {
             ctx.fillStyle = 'rgba(255,255,255,0.1)';
             ctx.fillRect(0, 0, GW, GH);
@@ -2544,16 +2681,20 @@ function gameLoop(timestamp) {
     if (delta > 200) delta = 200; // cap for tab-away
 
     accumulator += delta;
-    while (accumulator >= TIMESTEP) {
+    // Death spiral prevention: max 3 updates per frame
+    let updates = 0;
+    while (accumulator >= TIMESTEP && updates < 3) {
         update();
         accumulator -= TIMESTEP;
+        updates++;
     }
+    if (updates >= 3) accumulator = 0; // drop remaining time
     draw();
     requestAnimationFrame(gameLoop);
 }
 
-// Also handle clicks on canvas for starting
-canvas.addEventListener('click', () => {
+// Handle clicks on canvas for starting/advancing
+canvas.addEventListener('click', function() {
     initAudio();
     if (gameState === 'TITLE') startGame();
     else if (gameState === 'GAMEOVER' || gameState === 'VICTORY') resetToTitle();

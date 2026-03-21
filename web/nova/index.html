@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Nova Evader - Bullet Hell</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #050505;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            width: 100%;
+            height: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+        canvas {
+            display: block;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+        #ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            padding-top: max(20px, env(safe-area-inset-top, 0px));
+            padding-bottom: max(20px, env(safe-area-inset-bottom, 0px));
+            padding-left: max(20px, env(safe-area-inset-left, 0px));
+            padding-right: max(20px, env(safe-area-inset-right, 0px));
+            box-sizing: border-box;
+            color: #00f2ff;
+            text-shadow: 0 0 10px rgba(0, 242, 255, 0.5);
+            z-index: 10;
+        }
+        .hud-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            width: 100%;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        .menu-screen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(10, 10, 20, 0.95);
+            border: 2px solid #00f2ff;
+            padding: 2rem;
+            border-radius: 1rem;
+            text-align: center;
+            pointer-events: auto;
+            min-width: 280px;
+            max-width: 90vw;
+            box-shadow: 0 0 30px rgba(0, 242, 255, 0.3);
+        }
+        .menu-screen h1 {
+            font-size: 2rem;
+            font-weight: 900;
+            font-style: italic;
+            margin: 0 0 1rem 0;
+            color: #00f2ff;
+        }
+        .menu-screen h2 {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin: 0 0 0.5rem 0;
+            color: #ff3366;
+        }
+        .menu-screen p {
+            margin: 0 0 1rem 0;
+            opacity: 0.8;
+            font-size: 1rem;
+            color: #00f2ff;
+        }
+        .menu-screen .info {
+            font-size: 0.85rem;
+            margin-bottom: 1.5rem;
+            text-align: left;
+            background: rgba(0,0,0,0.4);
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            color: #00f2ff;
+        }
+        .btn {
+            background: #00f2ff;
+            color: #050505;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 1rem;
+            display: inline-block;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border: none;
+            font-size: 1rem;
+        }
+        .btn:hover {
+            background: #fff;
+            box-shadow: 0 0 15px #00f2ff;
+        }
+
+        #joystick-container {
+            position: fixed;
+            width: 120px;
+            height: 120px;
+            background: rgba(0, 242, 255, 0.1);
+            border: 2px solid rgba(0, 242, 255, 0.3);
+            border-radius: 50%;
+            pointer-events: none;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            transform: translate(-50%, -50%);
+            z-index: 15;
+        }
+        #joystick-knob {
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 242, 255, 0.7);
+            border-radius: 50%;
+            box-shadow: 0 0 15px #00f2ff;
+            position: relative;
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui-overlay">
+        <div class="hud-bar">
+            <div>SCORE: <span id="score-val">0</span></div>
+            <div>LVL: <span id="level-val">1</span></div>
+        </div>
+
+        <div id="start-menu" class="menu-screen">
+            <h1>NOVA EVADER</h1>
+            <p>Floating Control System Online.</p>
+            <div class="info">
+                &bull; <b>Touch Anywhere</b> to spawn the joystick<br>
+                &bull; <b>WASD / Arrows</b> also work on Desktop<br>
+                &bull; Dodge patterns to survive
+            </div>
+            <div id="start-btn" class="btn">Launch Mission</div>
+        </div>
+
+        <div id="game-over-menu" class="menu-screen hidden">
+            <h2>SYSTEM CRITICAL</h2>
+            <p style="font-size:1.2rem;">Final Score: <span id="final-score">0</span></p>
+            <div id="restart-btn" class="btn">Reboot Ship</div>
+        </div>
+    </div>
+
+    <div id="joystick-container">
+        <div id="joystick-knob"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score-val');
+        const levelEl = document.getElementById('level-val');
+        const startMenu = document.getElementById('start-menu');
+        const gameOverMenu = document.getElementById('game-over-menu');
+        const finalScoreEl = document.getElementById('final-score');
+
+        const joyContainer = document.getElementById('joystick-container');
+        const joyKnob = document.getElementById('joystick-knob');
+
+        // --- Constants ---
+        const MAX_BULLETS = 500;
+        const BULLET_OOB_MARGIN = 80;
+        const JOYSTICK_DEADZONE = 20;
+        const JOYSTICK_MAX_RADIUS = 60;
+        const MAX_PARTICLES = 200;
+        const FIXED_DT = 1000 / 60; // 16.67ms
+
+        let gameActive = false;
+        let score = 0;
+        let level = 1;
+        let lastTime = 0;
+        let spawnTimer = 0;
+        let difficultyTimer = 0;
+        let bullets = [];
+        let particles = [];
+        let pendingTimeouts = [];
+        let lowEndMode = false;
+
+        const keys = {};
+        const joystick = {
+            active: false,
+            originX: 0,
+            originY: 0,
+            vectorX: 0,
+            vectorY: 0,
+            touchId: null
+        };
+
+        const player = {
+            x: 0,
+            y: 0,
+            radius: 8,
+            speed: 6.5,
+            color: '#00f2ff',
+            trail: [],
+            update() {
+                let dx = 0;
+                let dy = 0;
+
+                if (keys['ArrowUp'] || keys['w'] || keys['W']) dy -= 1;
+                if (keys['ArrowDown'] || keys['s'] || keys['S']) dy += 1;
+                if (keys['ArrowLeft'] || keys['a'] || keys['A']) dx -= 1;
+                if (keys['ArrowRight'] || keys['d'] || keys['D']) dx += 1;
+
+                if (joystick.active) {
+                    dx = joystick.vectorX;
+                    dy = joystick.vectorY;
+                }
+
+                const mag = Math.hypot(dx, dy);
+                if (mag > 0.001) {
+                    const norm = 1 / mag;
+                    const moveScale = joystick.active ? Math.min(mag, 1) : 1;
+                    this.x += dx * norm * this.speed * moveScale;
+                    this.y += dy * norm * this.speed * moveScale;
+                }
+
+                // Guard against NaN
+                if (isNaN(this.x) || isNaN(this.y)) {
+                    this.x = canvas.width / 2;
+                    this.y = canvas.height * 0.7;
+                }
+
+                this.x = Math.max(this.radius, Math.min(canvas.width - this.radius, this.x));
+                this.y = Math.max(this.radius, Math.min(canvas.height - this.radius, this.y));
+
+                if (!lowEndMode) {
+                    this.trail.unshift({x: this.x, y: this.y});
+                    if (this.trail.length > 10) this.trail.pop();
+                }
+            },
+            draw() {
+                if (!lowEndMode && this.trail.length > 1) {
+                    ctx.beginPath();
+                    ctx.lineWidth = 2;
+                    ctx.strokeStyle = 'rgba(0, 242, 255, 0.15)';
+                    for (let i = 0; i < this.trail.length; i++) {
+                        const t = this.trail[i];
+                        if (i === 0) ctx.moveTo(t.x, t.y);
+                        else ctx.lineTo(t.x, t.y);
+                    }
+                    ctx.stroke();
+                }
+
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = this.color;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.moveTo(0, -12); ctx.lineTo(10, 8); ctx.lineTo(-10, 8);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+        };
+
+        // --- Bullet pool (flat arrays for perf) ---
+        // Using object array but with hard cap and efficient cleanup
+        function createBullet(x, y, vx, vy, color, size) {
+            if (bullets.length >= MAX_BULLETS) return;
+            // Guard against NaN velocities
+            if (isNaN(vx) || isNaN(vy) || isNaN(x) || isNaN(y)) return;
+            bullets.push({
+                x: x, y: y, vx: vx, vy: vy,
+                radius: size || 4,
+                color: color || '#ff3366',
+                active: true
+            });
+        }
+
+        function updateBullet(b) {
+            b.x += b.vx;
+            b.y += b.vy;
+
+            // Guard NaN
+            if (isNaN(b.x) || isNaN(b.y)) { b.active = false; return; }
+
+            // Off-screen check
+            if (b.x < -BULLET_OOB_MARGIN || b.x > canvas.width + BULLET_OOB_MARGIN ||
+                b.y < -BULLET_OOB_MARGIN || b.y > canvas.height + BULLET_OOB_MARGIN) {
+                b.active = false;
+                return;
+            }
+
+            // Collision with player
+            const dx = b.x - player.x;
+            const dy = b.y - player.y;
+            if (dx * dx + dy * dy < (b.radius + player.radius) * (b.radius + player.radius)) {
+                endGame();
+            }
+        }
+
+        function drawBullet(b) {
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+            ctx.fillStyle = b.color;
+            if (!lowEndMode) {
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = b.color;
+            }
+            ctx.fill();
+        }
+
+        // --- Joystick ---
+        function startJoystick(clientX, clientY, touchId) {
+            if (!gameActive) return;
+            joystick.active = true;
+            joystick.originX = clientX;
+            joystick.originY = clientY;
+            joystick.touchId = touchId !== undefined ? touchId : null;
+
+            joyContainer.style.display = 'flex';
+            joyContainer.style.left = clientX + 'px';
+            joyContainer.style.top = clientY + 'px';
+            joyKnob.style.transform = 'translate(0px, 0px)';
+        }
+
+        function moveJoystick(clientX, clientY) {
+            if (!joystick.active) return;
+
+            const deltaX = clientX - joystick.originX;
+            const deltaY = clientY - joystick.originY;
+            const distance = Math.hypot(deltaX, deltaY);
+
+            // Deadzone
+            if (distance < JOYSTICK_DEADZONE) {
+                joyKnob.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+                joystick.vectorX = 0;
+                joystick.vectorY = 0;
+                return;
+            }
+
+            const limitedDist = Math.min(distance, JOYSTICK_MAX_RADIUS);
+            const angle = Math.atan2(deltaY, deltaX);
+
+            const knobX = Math.cos(angle) * limitedDist;
+            const knobY = Math.sin(angle) * limitedDist;
+
+            joyKnob.style.transform = `translate(${knobX}px, ${knobY}px)`;
+
+            // Remap: deadzone..maxRadius -> 0..1
+            const effectiveDist = (limitedDist - JOYSTICK_DEADZONE) / (JOYSTICK_MAX_RADIUS - JOYSTICK_DEADZONE);
+            joystick.vectorX = Math.cos(angle) * effectiveDist;
+            joystick.vectorY = Math.sin(angle) * effectiveDist;
+        }
+
+        function endJoystick() {
+            joystick.active = false;
+            joystick.vectorX = 0;
+            joystick.vectorY = 0;
+            joystick.touchId = null;
+            joyContainer.style.display = 'none';
+        }
+
+        // --- Touch events (track specific touch for joystick) ---
+        window.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const t = e.changedTouches[0];
+            startJoystick(t.clientX, t.clientY, t.identifier);
+        }, { passive: false });
+
+        window.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!joystick.active) return;
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const t = e.changedTouches[i];
+                if (t.identifier === joystick.touchId) {
+                    moveJoystick(t.clientX, t.clientY);
+                    break;
+                }
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchend', (e) => {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === joystick.touchId) {
+                    endJoystick();
+                    break;
+                }
+            }
+        });
+        window.addEventListener('touchcancel', (e) => {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === joystick.touchId) {
+                    endJoystick();
+                    break;
+                }
+            }
+        });
+
+        // Mouse fallback for desktop
+        window.addEventListener('mousedown', (e) => startJoystick(e.clientX, e.clientY));
+        window.addEventListener('mousemove', (e) => moveJoystick(e.clientX, e.clientY));
+        window.addEventListener('mouseup', endJoystick);
+
+        window.addEventListener('keydown', e => { keys[e.key] = true; });
+        window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+        // --- Spawning patterns ---
+        function spawnPattern() {
+            if (!gameActive) return;
+            const type = Math.floor(Math.random() * Math.min(level, 5));
+            switch (type) {
+                case 0: { // Rain
+                    const count = Math.min(5 + level, 20);
+                    for (let i = 0; i < count; i++) {
+                        createBullet(
+                            Math.random() * canvas.width, -20,
+                            (Math.random() - 0.5) * 2, 3 + Math.random() * 3
+                        );
+                    }
+                    break;
+                }
+                case 1: { // Radial burst
+                    const cx = Math.random() * canvas.width;
+                    const count = Math.min(8 + level, 24);
+                    for (let i = 0; i < count; i++) {
+                        const a = (i / count) * Math.PI * 2;
+                        createBullet(cx, -20, Math.cos(a) * 4, Math.sin(a) * 4 + 2, '#ffaa00');
+                    }
+                    break;
+                }
+                case 2: { // Aimed triple
+                    const tx = Math.random() * canvas.width;
+                    const angle = Math.atan2(player.y - 0, player.x - tx);
+                    const cosA = Math.cos(angle);
+                    const sinA = Math.sin(angle);
+                    for (let i = 0; i < 3; i++) {
+                        const tid = setTimeout(() => {
+                            if (!gameActive) return;
+                            createBullet(tx, -20, cosA * 7, sinA * 7, '#00ffaa');
+                        }, i * 200);
+                        pendingTimeouts.push(tid);
+                    }
+                    break;
+                }
+                case 3: { // Side swipe
+                    const left = -20, right = canvas.width + 20;
+                    createBullet(left, Math.random() * canvas.height, 5, 0, '#ff00ff', 6);
+                    createBullet(right, Math.random() * canvas.height, -5, 0, '#ff00ff', 6);
+                    break;
+                }
+                case 4: { // Spiral
+                    const sx = canvas.width / 2;
+                    const spiralCount = Math.min(15, 15);
+                    for (let i = 0; i < spiralCount; i++) {
+                        const tid = setTimeout(() => {
+                            if (!gameActive) return;
+                            const a = i * 0.4;
+                            createBullet(sx, -20, Math.cos(a) * 6, Math.sin(a) * 2 + 4, '#ffffff');
+                        }, i * 100);
+                        pendingTimeouts.push(tid);
+                    }
+                    break;
+                }
+            }
+        }
+
+        function clearPendingTimeouts() {
+            for (let i = 0; i < pendingTimeouts.length; i++) {
+                clearTimeout(pendingTimeouts[i]);
+            }
+            pendingTimeouts.length = 0;
+        }
+
+        function startGame() {
+            // Clear all state
+            clearPendingTimeouts();
+            score = 0;
+            level = 1;
+            spawnTimer = 0;
+            difficultyTimer = 0;
+            bullets.length = 0;
+            particles.length = 0;
+            player.trail.length = 0;
+            player.x = canvas.width / 2;
+            player.y = canvas.height * 0.7;
+            gameActive = true;
+            lastTime = performance.now();
+
+            // Clear all keys
+            for (const k in keys) keys[k] = false;
+
+            startMenu.classList.add('hidden');
+            gameOverMenu.classList.add('hidden');
+
+            // Detect low-end: if we have less than ~4 logical cores or small screen
+            lowEndMode = (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2);
+        }
+
+        function endGame() {
+            if (!gameActive) return;
+            gameActive = false;
+            clearPendingTimeouts();
+            finalScoreEl.innerText = Math.floor(score);
+            gameOverMenu.classList.remove('hidden');
+            endJoystick();
+        }
+
+        // --- Main loop with fixed timestep and death spiral prevention ---
+        let accumulator = 0;
+        function tick(timestamp) {
+            if (lastTime === 0) lastTime = timestamp;
+            let frameDt = timestamp - lastTime;
+            lastTime = timestamp;
+
+            // Death spiral prevention: cap to 100ms
+            if (frameDt > 100) frameDt = 100;
+            // Guard NaN
+            if (isNaN(frameDt) || frameDt < 0) frameDt = FIXED_DT;
+
+            accumulator += frameDt;
+
+            // Fixed timestep updates
+            while (accumulator >= FIXED_DT) {
+                accumulator -= FIXED_DT;
+
+                if (gameActive) {
+                    score += FIXED_DT * 0.01;
+                    difficultyTimer += FIXED_DT;
+                    spawnTimer += FIXED_DT;
+                    if (difficultyTimer > 10000) { level++; difficultyTimer = 0; }
+                    if (spawnTimer > Math.max(1800 - level * 150, 400)) { spawnPattern(); spawnTimer = 0; }
+
+                    player.update();
+                }
+
+                // Update bullets
+                for (let i = 0; i < bullets.length; i++) {
+                    updateBullet(bullets[i]);
+                }
+
+                // Efficient cleanup: swap-remove dead bullets
+                let writeIdx = 0;
+                for (let i = 0; i < bullets.length; i++) {
+                    if (bullets[i].active) {
+                        if (writeIdx !== i) bullets[writeIdx] = bullets[i];
+                        writeIdx++;
+                    }
+                }
+                bullets.length = writeIdx;
+            }
+
+            // --- Render ---
+            // Full clear with trail effect
+            ctx.fillStyle = 'rgba(5, 5, 12, 0.2)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (gameActive) {
+                scoreEl.innerText = Math.floor(score);
+                levelEl.innerText = level;
+                player.draw();
+            }
+
+            // Draw bullets - reset shadow once
+            ctx.shadowBlur = 0;
+            ctx.shadowColor = 'transparent';
+            for (let i = 0; i < bullets.length; i++) {
+                drawBullet(bullets[i]);
+            }
+            ctx.shadowBlur = 0;
+            ctx.shadowColor = 'transparent';
+
+            requestAnimationFrame(tick);
+        }
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            // Full clear on resize to avoid artifacts
+            ctx.fillStyle = '#05050c';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        window.addEventListener('resize', resize);
+        window.addEventListener('orientationchange', () => {
+            setTimeout(() => {
+                window.scrollTo(0, 0);
+                resize();
+            }, 100);
+        });
+
+        // Prevent pull-to-refresh and bounce scrolling
+        document.addEventListener('touchmove', (e) => { e.preventDefault(); }, { passive: false });
+
+        window.onload = () => {
+            resize();
+            document.getElementById('start-btn').onclick = startGame;
+            document.getElementById('restart-btn').onclick = startGame;
+            lastTime = 0;
+            requestAnimationFrame(tick);
+        };
+    </script>
+</body>
+</html>

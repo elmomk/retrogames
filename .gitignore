@@ -1,0 +1,12 @@
+.env
+.env.local
+.env.*.local
+target/
+miyoo/*/target/
+miyoo/*/Cargo.lock
+node_modules/
+/tmp/
+*.swp
+*.swo
+*~
+.DS_Store

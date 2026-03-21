@@ -1,0 +1,14 @@
+.git
+.github
+.claude
+.env
+.env.*
+.gitignore
+.dockerignore
+*.md
+miyoo/
+target/
+node_modules/
+scripts/
+docs/
+.DS_Store
