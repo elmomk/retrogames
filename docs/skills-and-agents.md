@@ -1,577 +1,597 @@
-# Skills & Agents Guide
+# Claude Code: Skills, Agents, Commands, and Scripts
 
-*A guide to the Claude Code automations that power the retrogames development*
-*workflow.*
-
----
-
-## What Are Claude Code Skills and Agents?
-
-Claude Code supports two types of automation that extend its capabilities within
-a project:
-
-**Skills** are slash-commands that a developer invokes directly. They are
-procedural recipes: "when I say `/deploy`, run this script and report the
-results." Skills live in `.claude/skills/<name>/SKILL.md`.
-
-**Agents** are specialized sub-agents that Claude Code can delegate to. They
-have focused expertise and limited tool access. When Claude Code encounters a
-task that matches an agent's specialty, it can hand the task off entirely.
-Agents live in `.claude/agents/<name>.md`.
-
-The distinction: you invoke a skill explicitly with a slash command. An agent is
-invoked by Claude Code itself when it determines delegation would be more
-effective.
+*A comprehensive guide to extending Claude Code with custom automations.*
 
 ---
 
-## Available Skills
+## The Mental Model
 
-### /deploy -- Build and Deploy
+Claude Code is an AI coding assistant that runs in your terminal. Out of the
+box, it can read files, edit code, run commands, and search your codebase. But
+every project has its own workflows — deploying, testing, building, reviewing.
+Claude Code provides three extension mechanisms to encode those workflows:
 
-**Purpose:** Build the Docker image and deploy the full stack (Tailscale +
-busybox httpd).
-
-**Usage:**
 ```
-/deploy              # Full build and deploy
-/deploy --restart    # Restart containers without rebuilding
-/deploy --down       # Tear down all containers
+┌─────────────────────────────────────────────┐
+│                  You (the human)            │
+│                                             │
+│   "deploy the app"    "/check-rust"         │
+│         │                   │               │
+│         ▼                   ▼               │
+│   ┌───────────┐    ┌──────────────┐         │
+│   │   Agent   │    │    Skill     │         │
+│   │ (Claude   │    │ (slash cmd   │         │
+│   │  decides) │    │  you invoke) │         │
+│   └─────┬─────┘    └──────┬───────┘         │
+│         │                 │                 │
+│         ▼                 ▼                 │
+│   ┌──────────────────────────────┐          │
+│   │       Shell Scripts          │          │
+│   │   (the actual work)         │          │
+│   └──────────────────────────────┘          │
+└─────────────────────────────────────────────┘
 ```
 
-**What it does:**
-1. Runs `./scripts/deploy.sh` with the provided arguments
-2. Reports container status and Tailscale connectivity
-
-**When to use:** After modifying any files in `web/`, after updating
-`docker-compose.yml` or `ts-serve.json`, or when containers need restarting.
+**Skills** = slash commands you invoke explicitly (`/deploy`, `/check-rust`)
+**Agents** = specialists Claude delegates to automatically
+**Commands** = simpler precursors to skills (legacy, but still work)
+**Scripts** = shell scripts that do the actual work
 
 ---
 
-### /status -- Check Deployment Health
+## Skills
 
-**Purpose:** Get a complete health report of the running deployment.
+### What they are
 
-**Usage:**
-```
-/status
-```
+A skill is a slash command. When you type `/deploy` in Claude Code, it reads
+the skill file and follows the instructions. Skills are the primary way to
+encode repeatable workflows.
 
-**What it does:**
-1. Runs `./scripts/status.sh`
-2. Reports container status, Tailscale connectivity, HTTP health check, and
-   recent errors
-
-**When to use:** To verify the deployment is healthy, or as a first step when
-debugging issues.
-
----
-
-### /logs -- View Container Logs
-
-**Purpose:** View Docker container logs for troubleshooting.
-
-**Usage:**
-```
-/logs                    # All containers, last 50 lines
-/logs app 100            # App container, last 100 lines
-/logs tailscale 20       # Tailscale container, last 20 lines
-```
-
-**What it does:**
-1. Runs `./scripts/logs.sh` with the provided arguments
-2. Summarizes any errors or warnings found in the output
-
-**When to use:** When something is not working and you need to see what the
-containers are doing.
-
----
-
-### /test-site -- Run Playwright Smoke Tests
-
-**Purpose:** Verify all game pages load correctly in a browser.
-
-**Usage:**
-```
-/test-site                       # Test against localhost:8080
-/test-site http://localhost:8000 # Test against dev server
-```
-
-**What it does:**
-1. Runs `./scripts/test.sh` with Playwright
-2. Loads every game page and the launcher
-3. Checks for JavaScript errors
-4. Takes screenshots to `/tmp/retrogames-test/`
-5. Reports pass/fail per page
-
-**When to use:** After modifying any game's `index.html`, after adding a new
-game, or after deployment to verify everything is working.
-
----
-
-### /check-rust -- Verify Miyoo Ports Compile
-
-**Purpose:** Run `cargo check` on all Miyoo Rust ports and report results.
-
-**Usage:**
-```
-/check-rust
-```
-
-**What it does:**
-1. Runs `./scripts/check-rust.sh`
-2. Reports pass/fail for each game
-3. If any game fails, reads the error output, diagnoses the issue, and applies
-   fixes automatically
-4. Re-runs until all games compile clean
-
-**Common fixes applied automatically:**
-- E0499 (borrow checker): Converts `iter_mut()` loops to index-based loops
-- E0689 (float ambiguity): Adds `: f32` type annotations
-- E0004 (non-exhaustive match): Adds missing enum variants to match blocks
-
-**When to use:** After modifying any `miyoo/*/src/main.rs` file, or after
-adding a new Miyoo port.
-
----
-
-### /build-miyoo -- Build Miyoo Binaries
-
-**Purpose:** Compile Miyoo Rust ports as native desktop binaries or
-cross-compile for ARM.
-
-**Usage:**
-```
-/build-miyoo                    # Build all, native
-/build-miyoo micro              # Build one game, native
-/build-miyoo all --arm          # Cross-compile all for Miyoo hardware
-/build-miyoo dragon --arm       # Cross-compile one game
-```
-
-**What it does:**
-1. Runs `./scripts/build-miyoo.sh` with the provided arguments
-2. Reports build status and binary locations
-
-**When to use:** After `cargo check` passes and you want actual binaries for
-testing or deployment.
-
----
-
-### /new-game -- Scaffold a New Game
-
-**Purpose:** Create a complete new game with both web and Miyoo versions from
-a concept description.
-
-**Usage:**
-```
-/new-game <name> <genre> <description>
-/new-game runner "Endless Runner" "Auto-running character dodging obstacles"
-```
-
-**What it does:**
-1. Creates `web/<name>/spec.md` with a technical specification
-2. Creates `web/<name>/index.html` with a complete, playable game including:
-   - Press Start 2P font, 640x480 canvas, 60fps fixed timestep
-   - Procedural pixel-art sprites
-   - Touch controls + keyboard input
-   - Web Audio API sound effects
-   - Story with typewriter text
-   - Title, gameplay, game over, and victory screens
-3. Adds a game card to `web/index.html` launcher
-4. Creates `miyoo/<name>/Cargo.toml` and `src/main.rs`
-5. Runs `cargo check` and fixes any compilation errors
-6. Updates `CLAUDE.md` game table if needed
-
-**When to use:** When you want to add a new game to the collection.
-
----
-
-### /polish -- Add Visual Effects
-
-**Purpose:** Add "game juice" and visual polish to an existing game.
-
-**Usage:**
-```
-/polish micro              # Polish web + Miyoo versions
-/polish dragon web         # Polish only the web version
-/polish shadow miyoo       # Polish only the Miyoo port
-```
-
-**What it does:**
-Analyzes the game and adds missing visual effects:
-- Screen shake on hits/deaths
-- Hit stop/freeze frames on impacts
-- CRT scanline overlay and vignette
-- Particle explosions with varied colors
-- Dash/movement afterimage trails
-- Floating damage/score popups
-- Combo/kill streak text
-- Ambient dust/ember particles
-- Background weather effects
-
-**When to use:** After a game is functionally complete but feels "flat" or
-lacks visual feedback.
-
----
-
-### /serve -- Start Local Dev Server
-
-**Purpose:** Start or restart the Python HTTP server for testing web games
-locally.
-
-**Usage:**
-```
-/serve
-```
-
-**What it does:**
-1. Checks if a server is already running
-2. Kills any existing server
-3. Starts `python3 -m http.server 8000` in the `web/` directory
-4. Confirms the server is accessible
-
-**When to use:** Before testing web games in a browser during development.
-
----
-
-### /ts-debug -- Debug Tailscale Issues
-
-**Purpose:** Diagnose and fix Tailscale connectivity issues.
-
-**Usage:**
-```
-/ts-debug
-```
-
-**What it does:**
-1. Checks container health
-2. Examines Tailscale logs for auth/connection errors
-3. Verifies Tailscale status and serve configuration
-4. Tests internal proxy path
-5. Checks auth key validity
-6. Reports findings with specific fix recommendations
-
-**Common issues diagnosed:**
-- Expired auth key (with link to admin console)
-- Serve proxy misconfiguration
-- Missing network capabilities (NET_ADMIN)
-- App not reachable internally
-
-**When to use:** When the deployment is running but not accessible via
-Tailscale hostname.
-
----
-
-## Available Agents
-
-### game-builder
-
-**Specialty:** Creating complete retro games from a concept description.
-
-**Tools:** Read, Write, Edit, Glob, Grep, Bash
-
-**What it does:** Given a game concept, creates:
-1. Web version (`web/<game>/index.html`) with all required patterns
-2. Technical spec (`web/<game>/spec.md`)
-3. Miyoo port (`miyoo/<game>/Cargo.toml` + `src/main.rs`)
-4. Launcher card in `web/index.html`
-5. Verifies compilation with `cargo check`
-
-**Invoked by:** Claude Code when asked to "create a new game" or "build a game
-about X."
-
----
-
-### rust-fixer
-
-**Specialty:** Fixing Rust compilation errors in Miyoo game ports.
-
-**Tools:** Read, Edit, Bash, Grep
-
-**Workflow:**
-1. Run `cargo check` to get errors
-2. Read the relevant code sections
-3. Apply fixes using Edit
-4. Re-run `cargo check`
-5. Repeat until clean
-
-**Known patterns:**
-- E0499 (borrow checker): Converts to index-based loops or deferred side effects
-- E0689 (float ambiguity): Adds `: f32` type annotations
-- E0004 (non-exhaustive match): Adds missing variants to all match blocks
-- Unclosed delimiters: Checks indentation around reported line
-
-**Invoked by:** Claude Code when `cargo check` fails and the error is in a
-Miyoo game port.
-
----
-
-### story-writer
-
-**Specialty:** Creating narratives for retro games and implementing them in
-code.
-
-**Tools:** Read, Edit, Write, Grep
-
-**Design principles:**
-- Every game needs a twist that recontextualizes the gameplay
-- Environmental storytelling through floating text in levels
-- Intercepted transmissions, memos, or dialogue for world-building
-- Character development through brief, punchy lines
-- Endings should be emotionally resonant
-
-**Implementations:**
-- Web: Story text arrays, typewriter effect, STORY game state, color-coded text
-- Miyoo: Story/BossIntro enum variants, static string slices, typewriter
-  rendering
-
-**Invoked by:** Claude Code when asked to "add a story" or "write narrative"
-for a game.
-
----
-
-### docker-ops
-
-**Specialty:** Managing the Docker deployment stack.
-
-**Tools:** Read, Bash, Grep, Edit
-
-**Knowledge:**
-- Stack architecture: Tailscale sidecar + busybox httpd app
-- Key files: Dockerfile, docker-compose.yml, ts-serve.json, .env
-- All operational scripts in `scripts/`
-- Troubleshooting patterns: logs first, then status, then config
-
-**Invoked by:** Claude Code when asked about deployment issues, container
-problems, or Docker configuration.
-
----
-
-### tailscale-debug
-
-**Specialty:** Debugging Tailscale networking issues.
-
-**Tools:** Read, Bash, Grep
-
-**Debug workflow:**
-1. Container health check
-2. Tailscale logs examination
-3. Tailscale status verification
-4. Serve config validation
-5. Internal connectivity test
-6. Auth key verification
-7. DNS and certificate checks
-
-**Common fixes:**
-- Expired auth key: Regenerate and update .env
-- Serve not working: Verify ts-serve.json format and mount
-- App not reachable: Check network_mode configuration
-
-**Invoked by:** Claude Code when Tailscale-specific networking issues are
-suspected.
-
----
-
-### playwright-test
-
-**Specialty:** Running browser tests against the deployment.
-
-**Tools:** Read, Write, Edit, Bash, Grep, Glob
-
-**Environment notes:**
-- Requires `NODE_PATH=/home/mo/.npm/_npx/e41f203b7505f1fb/node_modules`
-- Uses trailing-slash URLs (required by launcher redirect)
-- Tests against `http://localhost:8080/` (Docker) or `:8000` (dev server)
-
-**Test coverage:**
-- Page loads without JavaScript errors
-- Canvas element exists and has dimensions
-- Title/start screen renders
-- Screenshots captured for visual verification
-
-**Invoked by:** Claude Code when asked to test the site, verify a game works,
-or check for JavaScript errors.
-
----
-
-## The Scripts Directory
-
-All operational scripts live in `scripts/` and are invoked by skills:
+### Where they live
 
 ```
-scripts/
-+-- deploy.sh        Runs: docker compose build + up
-|                    Args: [--restart|--down]
-|                    Used by: /deploy skill, docker-ops agent
-|
-+-- status.sh        Runs: docker compose ps, tailscale status,
-|                           health check, error scan
-|                    Used by: /status skill
-|
-+-- logs.sh          Runs: docker compose logs
-|                    Args: [service] [line-count]
-|                    Used by: /logs skill, docker-ops agent
-|
-+-- test.sh          Runs: Playwright browser smoke tests
-|                    Args: [base-url]
-|                    Used by: /test-site skill, playwright-test agent
-|
-+-- check-rust.sh    Runs: cargo check on all miyoo/* ports
-|                    Reports: pass/fail per game
-|                    Used by: /check-rust skill, rust-fixer agent
-|
-+-- build-miyoo.sh   Runs: cargo build (native or ARM cross-compile)
-|                    Args: [game|all] [--native|--arm]
-|                    Used by: /build-miyoo skill
+.claude/skills/<name>/SKILL.md     # Project-level (checked into git)
+~/.claude/skills/<name>/SKILL.md   # User-level (available everywhere)
 ```
 
-### Script Design Principles
+User-level skills take priority over project-level skills with the same name.
 
-1. **All scripts `cd` to the project root first:**
-   ```bash
-   cd "$(dirname "$0")/.."
-   ```
-   This means they work regardless of where you invoke them from.
-
-2. **Scripts are idempotent.** Running them twice produces the same result.
-
-3. **Scripts report their own results.** No parsing required -- the output is
-   human-readable.
-
-4. **Scripts exit non-zero on failure.** This makes them safe to chain with
-   `&&` or use in CI/CD.
-
----
-
-## Creating New Skills
-
-### Skill File Structure
-
-Create a new skill at `.claude/skills/<name>/SKILL.md`:
+### Anatomy of a skill
 
 ```markdown
 ---
-name: my-skill
-description: One-line description of what this skill does
-user_invocable: true
-args: "[optional-args-description]"
+name: deploy
+description: Build and deploy the app via Docker Compose
+args: "[--rebuild|--restart|--down]"
 ---
 
-Instructions for Claude Code to follow when this skill is invoked.
+Deploy the app. Action: $ARGUMENTS (default: full build).
 
-Include:
-1. What to check first
-2. What commands to run
-3. How to interpret the output
-4. What to do if something goes wrong
+Run: `./scripts/deploy.sh $ARGUMENTS`
+
+If the deploy fails, show error logs and suggest a fix.
 ```
 
-### Skill Design Guidelines
+The frontmatter defines metadata:
+- **name**: the slash command name (you'll type `/deploy`)
+- **description**: shown in skill listings and used for routing
+- **args** or **argument-hint**: documents expected arguments
 
-- **One skill, one task.** A skill should do one thing well.
-- **Wrap scripts.** If the skill runs a shell command, put it in `scripts/` and
-  have the skill call the script. This lets the script be used independently.
-- **Report results.** The skill should always end with a summary for the user.
-- **Handle errors.** Include fallback instructions for common failure modes.
+The body is instructions for Claude Code to follow when the skill is invoked.
+`$ARGUMENTS` is replaced with whatever the user typed after the slash command.
+
+### Writing effective skills
+
+**Good skill — wraps a script:**
+```markdown
+Run: `./scripts/deploy.sh $ARGUMENTS`
+Report the result. If it fails, show logs and suggest a fix.
+```
+
+**Bad skill — inline logic:**
+```markdown
+1. Run `docker compose build app`
+2. Run `docker compose up -d`
+3. Run `docker compose exec tailscale tailscale status`
+4. Run `curl -s -o /dev/null -w "%{http_code}" https://myapp.ts.net/`
+5. If the status code is not 200, run `docker compose logs app --tail 50`
+6. ...
+```
+
+The bad version has the deploy logic scattered across the skill file. If you
+want to deploy from your terminal without Claude Code, you can't — the
+knowledge is trapped in the skill. The good version wraps a script that works
+anywhere.
+
+**Delegation over duplication:**
+
+If a skill's job is to invoke an agent, say so directly:
+
+```markdown
+# BAD — copies the entire agent prompt into the skill
+Launch a general-purpose agent with this prompt:
+> You are a UI/UX reviewer... [65 lines of duplicated instructions]
+
+# GOOD — delegates to the existing agent
+Use the `uiux-designer` agent to review the page at $ARGUMENTS.
+```
 
 ---
 
-## Creating New Agents
+## Agents
 
-### Agent File Structure
+### What they are
 
-Create a new agent at `.claude/agents/<name>.md`:
+Agents are specialized sub-processes that Claude Code delegates to. When you
+ask Claude Code to "fix the Rust compile errors," it can spawn a `rust-fixer`
+agent with focused expertise and limited tools. The agent works autonomously
+and reports back.
+
+The key difference from skills: you don't invoke agents with a slash command.
+Claude Code decides when to use them based on the task and the agent's
+description.
+
+### Where they live
+
+```
+.claude/agents/<name>.md              # Project-level
+.claude/agents/<name>/AGENT.md        # Project-level (directory format)
+~/.claude/agents/<name>.md            # User-level (available everywhere)
+```
+
+Project-level agents take priority over user-level agents with the same name.
+This means you can have a generic `docker-ops` agent at user-level and override
+it with a project-specific version if needed.
+
+### Anatomy of an agent
 
 ```markdown
 ---
-name: my-agent
-description: Multi-sentence description of the agent's specialty
+name: rust-fixer
+description: Fixes Rust compile errors in Miyoo game ports.
 tools:
   - Read
   - Edit
   - Bash
   - Grep
+model: haiku
 ---
 
-You are a [specialty] expert for the retrogames project.
+You fix Rust compilation errors under `miyoo/*/src/main.rs`.
 
-## Your Knowledge
-- What you know about
-- Relevant files and patterns
-- Common issues and fixes
+## Workflow
+1. Run `cargo check` to get errors
+2. Read the relevant code
+3. Fix using Edit
+4. Re-run `cargo check`
+5. Repeat until clean
 
-## Your Workflow
-1. First, do this
-2. Then, check this
-3. Finally, verify that
-
-## Common Patterns
-Detailed guidance for specific scenarios.
+## Common patterns
+- E0499 (borrow checker): use index-based loops
+- E0689 (float ambiguity): add `: f32` annotation
+- E0004 (non-exhaustive match): add missing variants
 ```
 
-### Agent Design Guidelines
+The frontmatter defines:
+- **name**: identifier, also used for delegation
+- **description**: Claude Code reads this to decide when to use the agent
+- **tools**: which tools the agent can access (principle of least privilege)
+- **model**: which Claude model to use (haiku/sonnet/opus)
 
-- **Limit tools.** Only grant the tools the agent actually needs. A debugging
-  agent does not need Write. A writer does not need Bash.
-- **Be specific.** The description should make it obvious when this agent is
-  the right one to delegate to.
-- **Include domain knowledge.** The agent markdown should contain enough
-  context that the agent can work without reading CLAUDE.md.
-- **Document workflows.** Step-by-step procedures prevent the agent from going
-  off-track.
+### Writing effective agents
+
+**1. Constrain, don't teach**
+
+The model already knows how to write Rust, JavaScript, SQL, and Playwright
+scripts. Your agent prompt should contain what the model *can't derive on its
+own*:
+
+- Project-specific file paths and conventions
+- Constraints that would be surprising ("never use `iter_mut()` here")
+- Environment details (where Firefox is installed, what port the app uses)
+
+```markdown
+# BAD — teaching the model to write Rust
+fn create_sprite(art: &[&str], colors: &[Color]) -> Texture2D {
+    let width = art[0].len() as u16;
+    // ... 20 lines of code the model could write itself
+}
+
+# GOOD — stating the constraint
+- Sprites: character array → Image → Texture2D with FilterMode::Nearest
+```
+
+**2. Rules over examples**
+
+State the rule, not a specific instance. Rules are compact and generalize.
+Examples are long and cover one case.
+
+```markdown
+# BAD — 8-line example of index-based loops
+for i in 0..self.enemies.len() {
+    let ex = self.enemies[i].x;
+    let ey = self.enemies[i].y;
+    // ...
+}
+
+# GOOD — the rule in one line
+- Index-based loops: `for i in 0..self.vec.len()` when body calls self methods
+```
+
+Exception: include a brief example when the pattern is genuinely
+counterintuitive and the model would get it wrong without seeing it.
+
+**3. Match the model to the task**
+
+| Model | Cost | Speed | Use for |
+|-------|------|-------|---------|
+| haiku | $ | Fast | Mechanical tasks: run commands, report results, apply known patterns |
+| sonnet | $$ | Medium | Reasoning tasks: code review, porting, refactoring |
+| opus | $$$$ | Slow | Deep analysis: security review, architecture decisions |
+
+A build-checker that runs `cargo check` and reports pass/fail doesn't need
+Opus. A security reviewer where missing a vulnerability has real consequences
+does.
+
+**4. Minimize tools**
+
+Only grant tools the agent actually needs:
+- Debugging agent: Read, Bash, Grep (no Write/Edit — it shouldn't change code)
+- Fixer agent: Read, Edit, Bash, Grep (needs to change code)
+- Builder agent: Read, Write, Edit, Bash, Grep, Glob (creates new files)
+
+Fewer tools = less risk of unintended actions.
 
 ---
 
-## Skill-Agent Relationship
+## Commands
+
+Commands are the predecessor to skills. They're simpler — just a markdown file
+with instructions, no frontmatter metadata.
 
 ```
-User invokes /check-rust
-        |
-        v
-    check-rust SKILL
-    (runs check-rust.sh)
-        |
-        +-- All pass --> Report "all clean"
-        |
-        +-- Some fail --> Delegate to rust-fixer AGENT
-                          |
-                          v
-                      Read errors
-                      Read source code
-                      Apply fixes
-                      Re-run cargo check
-                      Report results
+.claude/commands/<name>.md
 ```
 
-Skills are the entry point. Agents are the specialists. The skill handles the
-happy path (everything works) and delegates the unhappy path (something broke)
-to the relevant agent.
+```markdown
+Build the app for production.
+
+Run: `./scripts/build.sh`
+
+If the build fails, analyze the errors and suggest fixes.
+```
+
+Commands work but skills are preferred because:
+- Skills have structured metadata (description, arguments, tool restrictions)
+- Skills support argument hints shown in autocomplete
+- Skills have a richer feature set (allowed-tools, disable-model-invocation)
+
+If you have both a command and a skill with the same name, you'll get
+duplication. Pick one — prefer skills.
+
+---
+
+## User-Level vs Project-Level
+
+Claude Code supports two scopes for agents and skills:
+
+### Project-level (`.claude/`)
+
+```
+your-repo/.claude/agents/    # Agents specific to this project
+your-repo/.claude/skills/    # Skills specific to this project
+```
+
+- Checked into git, shared with your team
+- Contains project-specific knowledge (your file structure, conventions, URLs)
+- **Agents override user-level** agents with the same name
+- **Skills are overridden by user-level** skills with the same name
+
+### User-level (`~/.claude/`)
+
+```
+~/.claude/agents/    # Agents available in ALL projects
+~/.claude/skills/    # Skills available in ALL projects
+```
+
+- Not checked into any repo, personal to you
+- Contains generic knowledge that works across projects
+- Good candidates: docker-ops, tailscale-debug, build-checker, code reviewer
+
+### What goes where?
+
+| Agent/Skill | Scope | Why |
+|------------|-------|-----|
+| docker-ops | User-level | Same Docker+Tailscale pattern across all repos |
+| build-checker | User-level | `cargo check && clippy && test` is universal |
+| security-reviewer | User-level | Security checklist applies everywhere |
+| /review | User-level | Code review is project-agnostic |
+| game-builder | Project-level | Only makes sense for retrogames |
+| rust-fixer | Project-level | Knows retrogames-specific Rust patterns |
+| migration-writer | Project-level | Knows this project's PostgreSQL schema |
+| /deploy | Project-level | Each project deploys differently |
+| uiux-designer | Project-level | Each project has its own design language |
+
+The principle: **if it mentions project-specific files, URLs, or conventions,
+it's project-level. If it would work in any Rust/Docker/web project, it's
+user-level.**
+
+---
+
+## Why Scripts Beat Inline Commands
+
+The single most important pattern: **skills should wrap scripts, not contain
+inline command sequences.**
+
+### The anti-pattern
+
+```markdown
+# deploy skill
+1. Run `docker compose build app`
+2. Run `docker compose up -d`
+3. Wait 5 seconds
+4. Run `docker compose exec tailscale tailscale status`
+5. Run `curl -s https://myapp.ts.net/`
+6. If status is not 200, run `docker compose logs app --tail 50`
+```
+
+### The pattern
+
+```bash
+# scripts/deploy.sh
+#!/bin/bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+docker compose build app
+docker compose up -d
+sleep 5
+
+echo "=== Tailscale Status ==="
+docker compose exec tailscale tailscale status
+
+echo "=== Health Check ==="
+status=$(curl -s -o /dev/null -w "%{http_code}" https://myapp.ts.net/)
+if [ "$status" != "200" ]; then
+    echo "UNHEALTHY (HTTP $status)"
+    docker compose logs app --tail 50
+    exit 1
+fi
+echo "HEALTHY (HTTP 200)"
+```
+
+```markdown
+# deploy skill
+Run: `./scripts/deploy.sh $ARGUMENTS`
+Report the result. If it fails, show logs and suggest a fix.
+```
+
+### Why this is better — seven reasons
+
+**1. Scripts work without Claude Code**
+
+Your deploy script works from a plain terminal, in CI/CD, from SSH, from a
+cron job. The inline version only works inside Claude Code. You're not locked
+into one tool.
+
+**2. Scripts are testable**
+
+You can run `./scripts/deploy.sh` manually and see if it works. You can't
+"test" a skill prompt without invoking Claude Code. When something breaks at
+2am, you want `bash scripts/deploy.sh`, not an AI conversation.
+
+**3. Scripts are versionable**
+
+`git diff scripts/deploy.sh` shows exactly what changed in your deploy
+process. `git diff .claude/skills/deploy/SKILL.md` shows a prompt changed,
+but the actual behavioral change is buried in natural language.
+
+**4. Scripts are debuggable**
+
+```bash
+bash -x scripts/deploy.sh    # trace every command
+```
+
+You can't `bash -x` a skill prompt.
+
+**5. Scripts don't consume context**
+
+Every line in a skill file is loaded into Claude Code's context window when
+the skill is invoked. A 50-line inline command sequence wastes 50 lines of
+context on commands the model could have read from a script. A 2-line skill
+that calls a script wastes 2 lines.
+
+**6. Scripts compose**
+
+```bash
+./scripts/build.sh && ./scripts/deploy.sh && ./scripts/test.sh
+```
+
+You can chain scripts. You can call one script from another. Skills can't
+call other skills.
+
+**7. Scripts have proper error handling**
+
+```bash
+set -euo pipefail    # exit on error, undefined vars, pipe failures
+```
+
+Inline commands in a skill prompt rely on Claude Code to handle errors, which
+is best-effort. A script with `set -e` will stop immediately on failure.
+
+### Script design principles
+
+1. **Start with `cd "$(dirname "$0")/.."`.** Scripts work from any directory.
+2. **Use `set -euo pipefail`.** Fail loudly on errors.
+3. **Accept arguments.** `$1`, `$2`, etc. for flexibility.
+4. **Print clear output.** Section headers, pass/fail, actionable messages.
+5. **Exit non-zero on failure.** Makes chaining and CI/CD work.
+6. **Be idempotent.** Running twice produces the same result.
+
+---
+
+## Prompt Engineering for Agents
+
+Writing agent prompts is different from writing documentation. The audience is
+an LLM, not a human. Here are the principles:
+
+### Every line must earn its place
+
+Ask: "Would the agent get this wrong without this line?" If no, cut it.
+
+The model knows how to write Playwright scripts. It doesn't know where your
+Firefox binary is installed. Include the path, skip the tutorial.
+
+### Descriptions are routing signals
+
+The description's job is to help Claude Code decide *when to use this agent*.
+It's not a user manual.
+
+```markdown
+# BAD — 200 characters of examples and trigger phrases
+description: "Use this agent when the user wants to refactor Rust code
+for better quality... Examples:\n- User: 'This code feels outdated'..."
+
+# GOOD — 80 characters that cover the key verbs
+description: Refactor Rust code for quality, update deps, modernize idioms.
+```
+
+### Don't duplicate the codebase
+
+The agent can read files. Don't copy function implementations into the prompt.
+State the rules and constraints; let the agent read the actual code.
+
+```markdown
+# BAD — copying a 20-line function into the prompt
+fn create_sprite(art: &[&str], colors: &[Color]) -> Texture2D { ... }
+
+# GOOD — stating the pattern name so the agent can find it
+- Sprites use the `create_sprite()` pattern in existing ports — read one first
+```
+
+### Reference, don't repeat
+
+If information exists in CLAUDE.md, don't repeat it in every agent. Say
+"Read CLAUDE.md for project conventions" and move on.
+
+### Structure for scanning, not reading
+
+Agents don't read prompts linearly like humans. Use:
+- **Headers** for categories (`## Workflow`, `## Rules`, `## Common errors`)
+- **Tables** for lookup data (symptom → fix)
+- **Bullet lists** for rules (not paragraphs)
+- **Bold** for the key term in each bullet
+
+---
+
+## Patterns and Anti-Patterns
+
+### Pattern: Skill → Agent escalation
+
+```
+/check-rust
+    │
+    ├── All pass → Report "all clean"
+    │
+    └── Some fail → Delegate to rust-fixer agent
+                         │
+                         └── Fix → Re-check → Report
+```
+
+The skill handles the happy path. The agent handles the unhappy path. This
+keeps the skill simple and the agent focused.
+
+### Pattern: User-level generic + project-level override
+
+```
+~/.claude/agents/docker-ops.md          # Generic Docker troubleshooting
+my-project/.claude/agents/docker-ops.md # Project-specific overrides
+```
+
+The project-level agent overrides the user-level one (for agents, project
+wins). This lets you have a generic baseline with project-specific knowledge.
+
+### Anti-pattern: Skill that duplicates an agent
+
+```markdown
+# The skill
+Launch an agent with this prompt:
+> You are a UI/UX reviewer...
+> [entire agent prompt copy-pasted, 65 lines]
+```
+
+If the agent already exists, the skill should just say "use the agent." The
+duplicated prompt doubles context usage and will drift out of sync.
+
+### Anti-pattern: Agent that teaches the model to code
+
+```markdown
+# 40 lines of "how to write Rust"
+Use the `?` operator for error propagation. Here's an example:
+fn read_file(path: &str) -> Result<String, io::Error> {
+    let contents = fs::read_to_string(path)?;
+    Ok(contents)
+}
+```
+
+The model knows Rust. Tell it your project's conventions, not the language.
+
+### Anti-pattern: Inline commands instead of scripts
+
+```markdown
+# 15 separate bash blocks doing deployment
+1. Run `docker compose build`
+2. Run `docker compose up -d`
+3. Run `sleep 5`
+...
+```
+
+Wrap it in a script. The skill becomes two lines. The script works everywhere.
 
 ---
 
 ## Quick Reference
 
-| Command | Skill | Script | Agent |
-|---|---|---|---|
-| Deploy | `/deploy` | `deploy.sh` | docker-ops |
-| Status check | `/status` | `status.sh` | docker-ops |
-| View logs | `/logs` | `logs.sh` | docker-ops |
-| Browser test | `/test-site` | `test.sh` | playwright-test |
-| Rust check | `/check-rust` | `check-rust.sh` | rust-fixer |
-| Build binaries | `/build-miyoo` | `build-miyoo.sh` | -- |
-| New game | `/new-game` | -- | game-builder |
-| Add polish | `/polish` | -- | -- |
-| Dev server | `/serve` | -- | -- |
-| Tailscale debug | `/ts-debug` | -- | tailscale-debug |
-| Write story | -- | -- | story-writer |
+### File locations
+
+| Type | Project-level | User-level |
+|------|--------------|------------|
+| Agent | `.claude/agents/<name>.md` | `~/.claude/agents/<name>.md` |
+| Skill | `.claude/skills/<name>/SKILL.md` | `~/.claude/skills/<name>/SKILL.md` |
+| Command | `.claude/commands/<name>.md` | — |
+| Script | `scripts/<name>.sh` | — |
+
+### Priority (same name)
+
+| Type | Winner |
+|------|--------|
+| Agents | Project-level overrides user-level |
+| Skills | User-level overrides project-level |
+
+### Frontmatter fields
+
+**Skills:**
+```yaml
+name: skill-name
+description: What it does (one line)
+args: "[arguments]"              # Optional
+allowed-tools: Bash, Read        # Optional tool restrictions
+disable-model-invocation: true   # Optional, prevents auto-invocation
+```
+
+**Agents:**
+```yaml
+name: agent-name
+description: What it does and when to use it
+tools: Read, Edit, Bash, Grep    # Only grant what's needed
+model: haiku | sonnet | opus     # Match cognitive demand to cost
+```
 
 ---
 
 ## Cross-References
 
-- [Architecture](architecture.md) -- How skills and agents fit in the project
-- [Deployment Guide](deployment-guide.md) -- What the `/deploy`, `/status`,
-  and `/logs` skills automate
-- [Adding New Games](adding-games.md) -- The `/new-game` skill in detail
-- [Miyoo Porting Guide](miyoo-porting-guide.md) -- What the `/check-rust` and
-  `/build-miyoo` skills verify
+- [Architecture](architecture.md) — how the project is structured
+- [Deployment Guide](deployment-guide.md) — what `/deploy` automates
+- [Adding New Games](adding-games.md) — the `/new-game` skill in detail
+- [Miyoo Porting Guide](miyoo-porting-guide.md) — what `/check-rust` verifies

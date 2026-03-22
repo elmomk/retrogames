@@ -5,7 +5,9 @@ tools:
   - Read
   - Edit
   - Write
+  - Bash
   - Grep
+model: sonnet
 ---
 
 You write compelling narratives for retro games and implement them in code.
@@ -31,3 +33,14 @@ Implementation in Miyoo ports (`miyoo/<game>/src/main.rs`):
 - Implement typewriter rendering with `draw_text()`
 - Add story state machine with callback-driven transitions
 - Match the web version's narrative exactly
+- New enum variants MUST appear in ALL match blocks (draw + update)
+
+## Verification
+
+After implementing story in the Miyoo port, always run:
+```bash
+cd miyoo/<game> && cargo check
+```
+Fix any errors — common issues:
+- E0004: New GameState variants missing from match blocks
+- E0499: Borrow checker — use index-based loops if accessing self in a loop body
