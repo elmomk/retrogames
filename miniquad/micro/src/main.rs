@@ -1,5 +1,4 @@
-use retro_sdl2::*;
-use sdl2::render::Texture;
+use macroquad::prelude::*;
 
 // ---------------------------------------------------------------------------
 // Constants (synced with web version: 800x600, physics constants identical)
@@ -94,10 +93,7 @@ const BG_ART: [&str; 8] = [
     "........",
     "....1...",
 ];
-const BG_COLORS: [Color; 2] = [
-    Color::new(0.157, 0.157, 0.235, 1.0),
-    Color::new(0.235, 0.235, 0.314, 1.0),
-];
+const BG_COLORS: [Color; 2] = [Color::new(0.157, 0.157, 0.235, 1.0), Color::new(0.235, 0.235, 0.314, 1.0)];
 
 const BULLET_ART: [&str; 8] = [
     "........",
@@ -173,11 +169,7 @@ const TURRET_ART: [&str; 8] = [
     ".111111.",
     "11111111",
 ];
-const TURRET_COLORS: [Color; 3] = [
-    BLACK,
-    Color::new(0.133, 1.0, 0.133, 1.0),
-    Color::new(1.0, 0.0, 0.0, 1.0),
-];
+const TURRET_COLORS: [Color; 3] = [BLACK, Color::new(0.133, 1.0, 0.133, 1.0), Color::new(1.0, 0.0, 0.0, 1.0)];
 
 const GOAL_ART: [&str; 8] = [
     "...11...",
@@ -206,6 +198,31 @@ const GEM_ART: [&str; 8] = [
     "........",
 ];
 const GEM_COLORS: [Color; 3] = [BLACK, Color::new(0.0, 1.0, 1.0, 1.0), WHITE];
+
+// ---------------------------------------------------------------------------
+// Sprite builder  (string art -> Texture2D)
+// ---------------------------------------------------------------------------
+fn create_sprite(art: &[&str], colors: &[Color]) -> Texture2D {
+    let width = art[0].len() as u16;
+    let height = art.len() as u16;
+    let mut img = Image::gen_image_color(width, height, BLANK);
+
+    for (y, row) in art.iter().enumerate() {
+        for (x, ch) in row.chars().enumerate() {
+            if ch != '.' {
+                if let Some(digit) = ch.to_digit(10) {
+                    let idx = (digit as usize).wrapping_sub(1);
+                    if idx < colors.len() {
+                        img.set_pixel(x as u32, y as u32, colors[idx]);
+                    }
+                }
+            }
+        }
+    }
+    let tex = Texture2D::from_image(&img);
+    tex.set_filter(FilterMode::Nearest);
+    tex
+}
 
 // ---------------------------------------------------------------------------
 // Data structures
@@ -400,6 +417,22 @@ static STORY_VICTORY: &[&str] = &[
     "Free at last.",
 ];
 
+struct Sprites {
+    mage: Texture2D,
+    brick: Texture2D,
+    stone: Texture2D,
+    chest: Texture2D,
+    bg: Texture2D,
+    bullet: Texture2D,
+    enemy_bullet: Texture2D,
+    anchor: Texture2D,
+    patrol: Texture2D,
+    bat: Texture2D,
+    turret: Texture2D,
+    goal: Texture2D,
+    gem: Texture2D,
+}
+
 // ---------------------------------------------------------------------------
 // Level definitions (exact mirror of web JS)
 // ---------------------------------------------------------------------------
@@ -553,9 +586,9 @@ fn safe_num(v: f32, fallback: f32) -> f32 {
 }
 
 // ---------------------------------------------------------------------------
-// Game-local input state (polled each tick using retro_sdl2::Input)
+// Input state (polled each tick)
 // ---------------------------------------------------------------------------
-struct GameInput {
+struct Input {
     right: bool,
     left: bool,
     up: bool,
@@ -567,7 +600,7 @@ struct GameInput {
     anchor_fired: bool,
 }
 
-impl GameInput {
+impl Input {
     fn new() -> Self {
         Self {
             right: false,
@@ -582,14 +615,14 @@ impl GameInput {
         }
     }
 
-    fn poll(&mut self, inp: &Input) {
-        self.right = inp.is_key_down(KeyCode::Right);
-        self.left  = inp.is_key_down(KeyCode::Left);
-        self.up    = inp.is_key_down(KeyCode::Up);
-        self.down  = inp.is_key_down(KeyCode::Down);
+    fn poll(&mut self) {
+        self.right = is_key_down(KeyCode::Right);
+        self.left = is_key_down(KeyCode::Left);
+        self.up = is_key_down(KeyCode::Up);
+        self.down = is_key_down(KeyCode::Down);
 
-        // B button (jump / anchor): Space or Z
-        let b_now = inp.is_key_down(KeyCode::Space) || inp.is_key_down(KeyCode::Z);
+        // B button (jump / anchor)
+        let b_now = is_key_down(KeyCode::Space) || is_key_down(KeyCode::Z);
         if b_now && !self.b_down {
             self.b_down = true;
             self.b_down_frames = 0;
@@ -602,8 +635,8 @@ impl GameInput {
             self.b_down = false;
         }
 
-        // A button (shoot): X
-        if inp.is_key_pressed(KeyCode::X) {
+        // A button (shoot)
+        if is_key_pressed(KeyCode::X) {
             self.shoot_pressed = true;
         }
     }
@@ -728,6 +761,7 @@ impl World {
         w
     }
 
+    /// Check if a position overlaps any solid platform
     fn overlaps_any_solid(&self, x: f32, y: f32, w: f32, h: f32) -> bool {
         for p in &self.platforms {
             if overlaps(x, y, w, h, p.x, p.y, p.w, p.h) {
@@ -737,6 +771,7 @@ impl World {
         false
     }
 
+    /// Push player out of walls (prevent stuck) - matches web pushOutOfWalls
     fn push_out_of_walls(&mut self) {
         for i in 0..self.platforms.len() {
             let p = &self.platforms[i];
@@ -744,9 +779,9 @@ impl World {
                          p.x, p.y, p.w, p.h) {
                 continue;
             }
-            let overlap_left   = (self.player.x + self.player.w) - p.x;
-            let overlap_right  = (p.x + p.w) - self.player.x;
-            let overlap_top    = (self.player.y + self.player.h) - p.y;
+            let overlap_left = (self.player.x + self.player.w) - p.x;
+            let overlap_right = (p.x + p.w) - self.player.x;
+            let overlap_top = (self.player.y + self.player.h) - p.y;
             let overlap_bottom = (p.y + p.h) - self.player.y;
             let min_overlap = overlap_left.min(overlap_right).min(overlap_top).min(overlap_bottom);
             if min_overlap == overlap_left {
@@ -774,6 +809,7 @@ impl World {
         if self.lives <= 0 {
             self.state = GameState::GameOver;
         } else {
+            // Respawn at current level
             self.reset_game(false);
         }
     }
@@ -833,7 +869,7 @@ impl World {
             }
         }
 
-        // Second pass: enemies and gems
+        // Second pass: enemies and gems (check against already-placed platforms)
         for (row, line) in map.iter().enumerate() {
             for (col, ch) in line.chars().enumerate() {
                 let px = col as f32 * TILE_SIZE;
@@ -861,7 +897,7 @@ impl World {
                             self.enemies.push(Enemy {
                                 kind: EnemyKind::Turret, x: px, y: py, w: TILE_SIZE, h: TILE_SIZE,
                                 vx: 0.0, vy: 0.0, start_x: px, range: 0.0,
-                                shoot_timer: fastrand::f32() * 60.0,
+                                shoot_timer: rand::gen_range(0.0_f32, 60.0),
                             });
                         }
                     }
@@ -875,6 +911,7 @@ impl World {
 
         let map_pixel_h = map_height * TILE_SIZE;
         self.player.y = start_y + map_pixel_h - 60.0;
+        // Ensure player doesn't start inside a wall
         self.push_out_of_walls();
         self.lava_y = self.player.y + 400.0;
         self.camera_y = self.player.y - 200.0;
@@ -908,7 +945,7 @@ impl World {
     // ------------------------------------------------------------------
     // Physics tick (one 1/60s step)
     // ------------------------------------------------------------------
-    fn update(&mut self, input: &mut GameInput) {
+    fn update(&mut self, input: &mut Input) {
         self.time_counter += TIME_STEP;
         self.frame_count += 1;
 
@@ -923,6 +960,7 @@ impl World {
         }
 
         // ----- ANCHOR LOGIC -----
+        // Fire anchor if B held for >9 frames (~150ms) and not already active
         if input.b_down && !self.anchor.active && !input.anchor_fired && input.b_down_frames > 9 {
             let (avx, avy) = input.get_trajectory(ANCHOR_SPEED, self.player.facing_right);
             self.anchor.active = true;
@@ -965,14 +1003,14 @@ impl World {
                             let py = p.y;
                             let is_chest = p.kind == TileKind::Chest;
                             let pcolor = if is_chest {
-                                color_u8(139, 69, 19, 255)
+                                color_u8!(139, 69, 19, 255)
                             } else {
-                                color_u8(119, 119, 119, 255)
+                                color_u8!(119, 119, 119, 255)
                             };
                             if is_chest {
                                 self.gems.push(Gem {
                                     x: px + 2.0, y: py, w: 16.0, h: 16.0,
-                                    vx: fastrand::f32() * 4.0 - 2.0,
+                                    vx: rand::gen_range(-2.0_f32, 2.0),
                                     vy: -5.0,
                                 });
                             }
@@ -981,9 +1019,9 @@ impl World {
                                 for _ in 0..6 {
                                     self.particles.push(Particle {
                                         x: px + 10.0, y: py + 10.0,
-                                        vx: fastrand::f32() * 8.0 - 4.0,
-                                        vy: fastrand::f32() * 8.0 - 4.0,
-                                        life: 15.0 + fastrand::f32() * 15.0,
+                                        vx: rand::gen_range(-4.0_f32, 4.0),
+                                        vy: rand::gen_range(-4.0_f32, 4.0),
+                                        life: 15.0 + rand::gen_range(0.0_f32, 15.0),
                                         color: pcolor,
                                         size: 4.0,
                                     });
@@ -1051,6 +1089,7 @@ impl World {
                 self.gems[i].x += self.gems[i].vx;
                 self.gems[i].y += self.gems[i].vy;
 
+                // NaN guard for gems
                 self.gems[i].x = safe_num(self.gems[i].x, 0.0);
                 self.gems[i].y = safe_num(self.gems[i].y, 0.0);
                 self.gems[i].vx = safe_num(self.gems[i].vx, 0.0);
@@ -1086,12 +1125,12 @@ impl World {
 
         // ----- PLAYER MOVEMENT -----
         let mut target_vx: f32 = 0.0;
-        if input.right { target_vx = MOVE_SPEED;  self.player.facing_right = true; }
+        if input.right { target_vx = MOVE_SPEED; self.player.facing_right = true; }
         if input.left  { target_vx = -MOVE_SPEED; self.player.facing_right = false; }
 
         if self.anchor.is_attached {
             self.player.vx += target_vx * 0.05;
-            if input.up   && self.anchor.length > 20.0  { self.anchor.length -= CLIMB_SPEED; }
+            if input.up && self.anchor.length > 20.0 { self.anchor.length -= CLIMB_SPEED; }
             if input.down && self.anchor.length < 300.0 { self.anchor.length += CLIMB_SPEED; }
         } else if self.player.on_ground {
             self.player.vx = target_vx;
@@ -1119,8 +1158,8 @@ impl World {
             }
         }
         // Screen wrap
-        if self.player.x > SCREEN_W         { self.player.x = -self.player.w; }
-        if self.player.x < -self.player.w   { self.player.x = SCREEN_W; }
+        if self.player.x > SCREEN_W { self.player.x = -self.player.w; }
+        if self.player.x < -self.player.w { self.player.x = SCREEN_W; }
 
         // Gravity
         self.player.vy += GRAVITY;
@@ -1175,7 +1214,7 @@ impl World {
             }
         }
 
-        // Safety pushout
+        // Safety pushout - prevent player from being stuck in walls after all movement
         self.push_out_of_walls();
 
         // ----- JUMPING -----
@@ -1211,7 +1250,7 @@ impl World {
             input.shoot_pressed = false;
         }
 
-        // Update player bullets
+        // Update bullets
         {
             let mut i = self.bullets.len();
             while i > 0 {
@@ -1239,8 +1278,7 @@ impl World {
                         j -= 1;
                         let e = &self.enemies[j];
                         if overlaps(bx, by, bw, bh, e.x, e.y, e.w, e.h) {
-                            let ex = e.x;
-                            let ey = e.y;
+                            let ex = e.x; let ey = e.y;
                             self.enemies.remove(j);
                             hit_enemy = true;
                             self.add_score(100, ex, ey);
@@ -1249,8 +1287,8 @@ impl World {
                                 for _ in 0..5 {
                                     self.particles.push(Particle {
                                         x: bx, y: by,
-                                        vx: fastrand::f32() * 6.0 - 3.0,
-                                        vy: fastrand::f32() * 6.0 - 3.0,
+                                        vx: rand::gen_range(-3.0_f32, 3.0),
+                                        vy: rand::gen_range(-3.0_f32, 3.0),
                                         life: 15.0,
                                         color: Color::new(1.0, 0.0, 1.0, 1.0),
                                         size: 4.0,
@@ -1340,8 +1378,8 @@ impl World {
                             for _ in 0..5 {
                                 self.particles.push(Particle {
                                     x: ex + 10.0, y: ey + 10.0,
-                                    vx: fastrand::f32() * 6.0 - 3.0,
-                                    vy: fastrand::f32() * 6.0 - 3.0,
+                                    vx: rand::gen_range(-3.0_f32, 3.0),
+                                    vy: rand::gen_range(-3.0_f32, 3.0),
                                     life: 15.0,
                                     color: Color::new(1.0, 0.0, 1.0, 1.0),
                                     size: 4.0,
@@ -1439,8 +1477,8 @@ impl World {
 
         // ----- SCREEN SHAKE -----
         if self.shake_magnitude > 0.1 {
-            self.screen_shake_x = (fastrand::f32() * 2.0 - 1.0) * self.shake_magnitude;
-            self.screen_shake_y = (fastrand::f32() * 2.0 - 1.0) * self.shake_magnitude;
+            self.screen_shake_x = rand::gen_range(-1.0_f32, 1.0) * self.shake_magnitude;
+            self.screen_shake_y = rand::gen_range(-1.0_f32, 1.0) * self.shake_magnitude;
             self.shake_magnitude *= 0.85;
         } else {
             self.screen_shake_x = 0.0;
@@ -1464,13 +1502,13 @@ impl World {
         }
 
         // Lava bubbles
-        if fastrand::f32() < 0.3 && self.lava_bubbles.len() < 40 {
+        if rand::gen_range(0.0_f32, 1.0) < 0.3 && self.lava_bubbles.len() < 40 {
             self.lava_bubbles.push(LavaBubble {
-                x: fastrand::f32() * SCREEN_W,
+                x: rand::gen_range(0.0_f32, SCREEN_W),
                 y: self.lava_y,
-                r: 2.0 + fastrand::f32() * 4.0,
-                life: 20.0 + fastrand::f32() * 30.0,
-                speed: 0.5 + fastrand::f32() * 1.5,
+                r: 2.0 + rand::gen_range(0.0_f32, 4.0),
+                life: 20.0 + rand::gen_range(0.0_f32, 30.0),
+                speed: 0.5 + rand::gen_range(0.0_f32, 1.5),
             });
         }
         {
@@ -1485,7 +1523,7 @@ impl World {
             }
         }
 
-        // Camera
+        // Camera with rounding to prevent jitter (matches web)
         let target_cam = self.player.y - SCREEN_H * 0.6;
         self.camera_y += (target_cam - self.camera_y) * 0.1;
         if self.camera_y > self.lava_y - SCREEN_H + 100.0 {
@@ -1496,32 +1534,10 @@ impl World {
 }
 
 // ---------------------------------------------------------------------------
-// Sprites container (SDL2 Textures have a lifetime tied to TextureCreator,
-// so we build them in main and pass them around)
-// ---------------------------------------------------------------------------
-// We pass individual textures rather than a struct to avoid lifetime complexity.
-
-// ---------------------------------------------------------------------------
 // Drawing
 // ---------------------------------------------------------------------------
-fn draw_world(
-    renderer: &mut GameRenderer,
-    world: &mut World,
-    tex_mage: &Texture,
-    tex_brick: &Texture,
-    tex_stone: &Texture,
-    tex_chest: &Texture,
-    tex_bg: &Texture,
-    tex_bullet: &Texture,
-    tex_enemy_bullet: &Texture,
-    tex_anchor: &Texture,
-    tex_patrol: &Texture,
-    tex_bat: &Texture,
-    tex_turret: &Texture,
-    tex_goal: &Texture,
-    tex_gem: &Texture,
-) {
-    renderer.clear(Color::new(0.059, 0.059, 0.098, 1.0));
+fn draw_world(world: &mut World, sprites: &Sprites) {
+    clear_background(Color::new(0.059, 0.059, 0.098, 1.0));
 
     let cam_y = world.camera_y;
 
@@ -1530,18 +1546,20 @@ fn draw_world(
     let start_y_bg = ((cam_y * 0.5) / bg_size).floor() as i32 - 1;
     for y in start_y_bg..(start_y_bg + 14) {
         for x in 0..15 {
-            renderer.draw_texture_ex(
-                tex_bg,
+            draw_texture_ex(
+                &sprites.bg,
                 x as f32 * bg_size,
                 y as f32 * bg_size - cam_y * 0.5,
+                WHITE,
                 DrawTextureParams {
-                    dest_size: Some((bg_size, bg_size)),
+                    dest_size: Some(vec2(bg_size, bg_size)),
                     ..Default::default()
                 },
             );
         }
     }
 
+    // Apply screen shake offset for game world drawing
     let sx = world.screen_shake_x;
     let sy = world.screen_shake_y;
 
@@ -1554,18 +1572,19 @@ fn draw_world(
             let tx = t.col * TILE_SIZE + sx;
             let ty = start_y + t.row * TILE_SIZE - cam_y + sy;
             if t.ghost {
-                let pulse = 0.4 + 0.3 * ((world.time_counter as f32 * 2.0 + t.row) as f32).sin();
-                draw_text(renderer, t.text, tx, ty, 16.0, Color::new(0.7, 0.63, 1.0, pulse));
+                let pulse = 0.4 + 0.3 * (world.time_counter as f32 * 2.0 + t.row).sin();
+                draw_text(t.text, tx, ty, 16.0, Color::new(0.7, 0.63, 1.0, pulse));
             } else {
+                // Black outline
                 let outline = 2.0_f32;
                 for &ox in &[-outline, 0.0, outline] {
                     for &oy in &[-outline, 0.0, outline] {
                         if ox != 0.0 || oy != 0.0 {
-                            draw_text(renderer, t.text, tx + ox, ty + oy, 16.0, BLACK);
+                            draw_text(t.text, tx + ox, ty + oy, 16.0, BLACK);
                         }
                     }
                 }
-                draw_text(renderer, t.text, tx, ty, 16.0, WHITE);
+                draw_text(t.text, tx, ty, 16.0, WHITE);
             }
         }
     }
@@ -1575,14 +1594,14 @@ fn draw_world(
         let p = &world.platforms[i];
         if p.y > cam_y - TILE_SIZE && p.y < cam_y + SCREEN_H + TILE_SIZE {
             let tex = match p.kind {
-                TileKind::Brick => tex_brick,
-                TileKind::Stone => tex_stone,
-                TileKind::Chest => tex_chest,
+                TileKind::Brick => &sprites.brick,
+                TileKind::Stone => &sprites.stone,
+                TileKind::Chest => &sprites.chest,
             };
-            renderer.draw_texture_ex(
+            draw_texture_ex(
                 tex,
-                p.x + sx, p.y - cam_y + sy,
-                DrawTextureParams { dest_size: Some((TILE_SIZE, TILE_SIZE)), ..Default::default() },
+                p.x + sx, p.y - cam_y + sy, WHITE,
+                DrawTextureParams { dest_size: Some(vec2(TILE_SIZE, TILE_SIZE)), ..Default::default() },
             );
         }
     }
@@ -1592,15 +1611,15 @@ fn draw_world(
         let alpha = (p.life / 15.0).min(1.0);
         let mut c = p.color;
         c.a *= alpha;
-        renderer.draw_rectangle(p.x + sx, p.y - cam_y + sy, p.size, p.size, c);
+        draw_rectangle(p.x + sx, p.y - cam_y + sy, p.size, p.size, c);
     }
 
     // Gems
     for g in &world.gems {
-        renderer.draw_texture_ex(
-            tex_gem,
-            g.x + sx, g.y - cam_y + sy,
-            DrawTextureParams { dest_size: Some((g.w, g.h)), ..Default::default() },
+        draw_texture_ex(
+            &sprites.gem,
+            g.x + sx, g.y - cam_y + sy, WHITE,
+            DrawTextureParams { dest_size: Some(vec2(g.w, g.h)), ..Default::default() },
         );
     }
 
@@ -1609,11 +1628,11 @@ fn draw_world(
         let angle: f32 = b.vy.atan2(b.vx);
         let cx = b.x + b.w / 2.0 + sx;
         let cy = b.y - cam_y + b.h / 2.0 + sy;
-        renderer.draw_texture_ex(
-            tex_bullet,
-            cx - b.w / 2.0, cy - b.h / 2.0,
+        draw_texture_ex(
+            &sprites.bullet,
+            cx - b.w / 2.0, cy - b.h / 2.0, WHITE,
             DrawTextureParams {
-                dest_size: Some((b.w, b.h)),
+                dest_size: Some(vec2(b.w, b.h)),
                 rotation: angle,
                 ..Default::default()
             },
@@ -1625,11 +1644,11 @@ fn draw_world(
         let angle: f32 = b.vy.atan2(b.vx);
         let cx = b.x + b.w / 2.0 + sx;
         let cy = b.y - cam_y + b.h / 2.0 + sy;
-        renderer.draw_texture_ex(
-            tex_enemy_bullet,
-            cx - b.w / 2.0, cy - b.h / 2.0,
+        draw_texture_ex(
+            &sprites.enemy_bullet,
+            cx - b.w / 2.0, cy - b.h / 2.0, WHITE,
             DrawTextureParams {
-                dest_size: Some((b.w, b.h)),
+                dest_size: Some(vec2(b.w, b.h)),
                 rotation: angle,
                 ..Default::default()
             },
@@ -1640,20 +1659,20 @@ fn draw_world(
     for i in 0..world.enemies.len() {
         let e = &world.enemies[i];
         let tex = match e.kind {
-            EnemyKind::Patrol => tex_patrol,
-            EnemyKind::Bat    => tex_bat,
-            EnemyKind::Turret => tex_turret,
+            EnemyKind::Patrol => &sprites.patrol,
+            EnemyKind::Bat => &sprites.bat,
+            EnemyKind::Turret => &sprites.turret,
         };
         let flip = match e.kind {
             EnemyKind::Patrol => e.vx > 0.0,
-            EnemyKind::Bat    => world.player.x > e.x,
+            EnemyKind::Bat => world.player.x > e.x,
             EnemyKind::Turret => false,
         };
-        renderer.draw_texture_ex(
+        draw_texture_ex(
             tex,
-            e.x + sx, e.y - cam_y + sy,
+            e.x + sx, e.y - cam_y + sy, WHITE,
             DrawTextureParams {
-                dest_size: Some((e.w, e.h)),
+                dest_size: Some(vec2(e.w, e.h)),
                 flip_x: flip,
                 ..Default::default()
             },
@@ -1666,21 +1685,21 @@ fn draw_world(
         let py = world.player.y + world.player.h / 2.0 - cam_y + sy;
         let ax = world.anchor.x + world.anchor.w / 2.0 + sx;
         let ay = world.anchor.y + world.anchor.h / 2.0 - cam_y + sy;
-        renderer.draw_line(px, py, ax, ay, 2.0, Color::new(1.0, 1.0, 1.0, 0.5));
-        renderer.draw_texture_ex(
-            tex_anchor,
-            world.anchor.x + sx, world.anchor.y - cam_y + sy,
-            DrawTextureParams { dest_size: Some((world.anchor.w, world.anchor.h)), ..Default::default() },
+        draw_line(px, py, ax, ay, 2.0, Color::new(1.0, 1.0, 1.0, 0.5));
+        draw_texture_ex(
+            &sprites.anchor,
+            world.anchor.x + sx, world.anchor.y - cam_y + sy, WHITE,
+            DrawTextureParams { dest_size: Some(vec2(world.anchor.w, world.anchor.h)), ..Default::default() },
         );
     }
 
     // Player
     if world.state == GameState::Playing || world.state == GameState::Win {
-        renderer.draw_texture_ex(
-            tex_mage,
-            world.player.x + sx, world.player.y - cam_y + sy,
+        draw_texture_ex(
+            &sprites.mage,
+            world.player.x + sx, world.player.y - cam_y + sy, WHITE,
             DrawTextureParams {
-                dest_size: Some((world.player.w, world.player.h)),
+                dest_size: Some(vec2(world.player.w, world.player.h)),
                 flip_x: !world.player.facing_right,
                 ..Default::default()
             },
@@ -1692,10 +1711,10 @@ fn draw_world(
         let level = get_level(world.current_level);
         let map_height = level.map.len() as f32;
         let start_y = -(map_height * TILE_SIZE) + SCREEN_H;
-        renderer.draw_texture_ex(
-            tex_goal,
-            280.0 + sx, start_y + 2.0 * TILE_SIZE - cam_y + sy,
-            DrawTextureParams { dest_size: Some((30.0, 30.0)), ..Default::default() },
+        draw_texture_ex(
+            &sprites.goal,
+            280.0 + sx, start_y + 2.0 * TILE_SIZE - cam_y + sy, WHITE,
+            DrawTextureParams { dest_size: Some(vec2(30.0, 30.0)), ..Default::default() },
         );
     }
 
@@ -1703,6 +1722,7 @@ fn draw_world(
     let lava_screen_y = world.lava_y - cam_y + sy;
     let now = world.time_counter as f32 * 3.0;
 
+    // Draw lava body
     let lava_top = lava_screen_y - 8.0;
     if lava_top < SCREEN_H {
         let top = lava_top.max(0.0);
@@ -1714,7 +1734,7 @@ fn draw_world(
             let r = 1.0 - t * 0.7;
             let g_val = 0.63 * (1.0 - t);
             let b_val = 0.0;
-            renderer.draw_rectangle(0.0, top + s as f32 * step_h, SCREEN_W, step_h + 1.0,
+            draw_rectangle(0.0, top + s as f32 * step_h, SCREEN_W, step_h + 1.0,
                 Color::new(r, g_val, b_val, 0.9));
         }
     }
@@ -1729,61 +1749,61 @@ fn draw_world(
                 + (now * 1.7 + wx * 0.035).sin() * 3.0;
             let fill_top = wave_y.min(lava_screen_y);
             let fill_h = (wave_y - fill_top).abs() + 4.0;
-            renderer.draw_rectangle(wx, fill_top, 4.0, fill_h, Color::new(1.0, 0.63, 0.0, 0.95));
-            renderer.draw_rectangle(wx, wave_y, 4.0, 3.0, Color::new(1.0, 1.0, 0.39, 0.7));
+            draw_rectangle(wx, fill_top, 4.0, fill_h, Color::new(1.0, 0.63, 0.0, 0.95));
+            draw_rectangle(wx, wave_y, 4.0, 3.0, Color::new(1.0, 1.0, 0.39, 0.7));
         }
     }
 
     // Lava bubbles
     for lb in &world.lava_bubbles {
         let alpha = (lb.life / 50.0).min(1.0);
-        renderer.draw_circle(lb.x, lb.y - cam_y + sy, lb.r, Color::new(1.0, 0.78, 0.2, alpha));
+        draw_circle(lb.x, lb.y - cam_y + sy, lb.r, Color::new(1.0, 0.78, 0.2, alpha));
     }
 
     // ----- DAMAGE FLASH -----
     if world.damage_flash_timer > 0.0 {
         let alpha = 0.3 * (world.damage_flash_timer / 6.0);
-        renderer.draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.78, 0.0, 0.0, alpha));
+        draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.78, 0.0, 0.0, alpha));
     }
 
     // Text popups (gem pickup)
     for tp in &world.text_popups {
         let alpha = (tp.life / 30.0).min(1.0);
-        draw_text(renderer, &tp.text, tp.x + 10.0, tp.y - cam_y, 18.0, Color::new(1.0, 1.0, 0.0, alpha));
+        draw_text(&tp.text, tp.x + 10.0, tp.y - cam_y, 18.0, Color::new(1.0, 1.0, 0.0, alpha));
     }
 
     // HUD popups (score)
     for p in &world.popups {
         let alpha = (p.life / 30.0).min(1.0);
-        draw_text(renderer, &p.text, p.x + 10.0, p.y - cam_y, 16.0, Color::new(1.0, 1.0, 1.0, alpha));
+        draw_text(&p.text, p.x + 10.0, p.y - cam_y, 16.0, Color::new(1.0, 1.0, 1.0, alpha));
     }
 
     // HUD
     if world.state == GameState::Playing {
         let score_str = format!("SCORE: {}", world.score);
-        draw_text(renderer, &score_str, 20.0, 40.0, 20.0, WHITE);
+        draw_text(&score_str, 20.0, 40.0, 20.0, WHITE);
         let lives_str = format!("LIVES: {}", world.lives);
-        draw_text(renderer, &lives_str, 20.0, 65.0, 20.0, WHITE);
+        draw_text(&lives_str, 20.0, 65.0, 20.0, WHITE);
         let level = get_level(world.current_level);
-        let lw = measure_text(level.name, 14.0);
-        draw_text(renderer, level.name, SCREEN_W - 20.0 - lw, 40.0, 14.0,
+        let lw = measure_text(level.name, None, 14, 1.0);
+        draw_text(level.name, SCREEN_W - 20.0 - lw.width, 40.0, 14.0,
             Color::new(0.7, 0.6, 1.0, 0.8));
     }
 
     // ----- SCREEN OVERLAYS -----
     match world.state {
         GameState::Start => {
-            renderer.draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.0, 0.0, 0.0, 0.8));
+            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.0, 0.0, 0.0, 0.8));
 
             // Title embers
-            if fastrand::f32() < 0.4 && world.title_embers.len() < 80 {
+            if rand::gen_range(0.0_f32, 1.0) < 0.4 && world.title_embers.len() < 80 {
                 world.title_embers.push(TitleEmber {
-                    x: fastrand::f32() * SCREEN_W,
+                    x: rand::gen_range(0.0_f32, SCREEN_W),
                     y: SCREEN_H + 5.0,
-                    vy: -(1.0 + fastrand::f32() * 2.0),
-                    vx: fastrand::f32() * 0.5 - 0.25,
-                    life: 60.0 + fastrand::f32() * 60.0,
-                    size: 2.0 + fastrand::f32() * 3.0,
+                    vy: -(1.0 + rand::gen_range(0.0_f32, 2.0)),
+                    vx: rand::gen_range(-0.25_f32, 0.25),
+                    life: 60.0 + rand::gen_range(0.0_f32, 60.0),
+                    size: 2.0 + rand::gen_range(0.0_f32, 3.0),
                 });
             }
             let ember_colors = [
@@ -1801,7 +1821,7 @@ fn draw_world(
                 let alpha = (e.life / 40.0).min(1.0);
                 let mut c = ember_colors[i % 3];
                 c.a = alpha;
-                renderer.draw_rectangle(e.x, e.y, e.size, e.size, c);
+                draw_rectangle(e.x, e.y, e.size, e.size, c);
                 if world.title_embers[i].life <= 0.0 {
                     world.title_embers.remove(i);
                 }
@@ -1809,224 +1829,201 @@ fn draw_world(
 
             // Title: "NANO WIZARDS"
             let title = "NANO WIZARDS";
-            let tm = measure_text(title, 42.0);
+            let tm = measure_text(title, None, 42, 1.0);
             // Glow effect
             for &ox in &[-2.0_f32, 2.0, 0.0] {
                 for &oy in &[-2.0_f32, 2.0, 0.0] {
-                    draw_text(renderer, title,
-                        SCREEN_W / 2.0 - tm / 2.0 + ox, SCREEN_H / 2.0 - 50.0 + oy, 42.0,
+                    draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0 + ox, SCREEN_H / 2.0 - 50.0 + oy, 42.0,
                         Color::new(1.0, 0.53, 0.0, 0.3));
                 }
             }
-            draw_text(renderer, title, SCREEN_W / 2.0 - tm / 2.0, SCREEN_H / 2.0 - 50.0, 42.0, WHITE);
+            draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0, SCREEN_H / 2.0 - 50.0, 42.0, WHITE);
 
-            // Subtitle
+            // Subtitle: "The Obsidian Spire"
             let sub = "The Obsidian Spire";
-            let subm = measure_text(sub, 22.0);
-            draw_text(renderer, sub, SCREEN_W / 2.0 - subm / 2.0, SCREEN_H / 2.0 - 15.0, 22.0,
+            let subm = measure_text(sub, None, 22, 1.0);
+            draw_text(sub, SCREEN_W / 2.0 - subm.width / 2.0, SCREEN_H / 2.0 - 15.0, 22.0,
                 Color::new(1.0, 0.78, 0.39, 0.9));
 
             // Tagline
             let tag = "The last Nano Wizard ascends";
-            let tagm = measure_text(tag, 16.0);
-            draw_text(renderer, tag, SCREEN_W / 2.0 - tagm / 2.0, SCREEN_H / 2.0 + 15.0, 16.0,
+            let tagm = measure_text(tag, None, 16, 1.0);
+            draw_text(tag, SCREEN_W / 2.0 - tagm.width / 2.0, SCREEN_H / 2.0 + 15.0, 16.0,
                 Color::new(0.78, 0.7, 1.0, 0.7));
 
             // Blinking prompt
             let blink = ((world.time_counter * 2.0) as i32) % 2 == 0;
             if blink {
                 let prompt = "Press B/Z/Space to Begin";
-                let pm = measure_text(prompt, 20.0);
-                draw_text(renderer, prompt, SCREEN_W / 2.0 - pm / 2.0, SCREEN_H / 2.0 + 55.0, 20.0,
-                    color_u8(255, 170, 0, 255));
+                let pm = measure_text(prompt, None, 20, 1.0);
+                draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 55.0, 20.0,
+                    color_u8!(255, 170, 0, 255));
             }
         }
         GameState::LevelStory => {
-            renderer.draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.0, 0.0, 0.0, 0.92));
+            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.0, 0.0, 0.0, 0.92));
             let story_lines: Vec<&str> = world.story_full_text.split('\n').collect();
             let line_height: f32 = 24.0;
             let total_height = story_lines.len() as f32 * line_height;
             let start_y_story = (SCREEN_H - total_height) / 2.0 - 40.0;
             for (si, line) in story_lines.iter().enumerate() {
-                let m = measure_text(line, 17.0);
-                draw_text(renderer, line, SCREEN_W / 2.0 - m / 2.0,
+                let m = measure_text(line, None, 17, 1.0);
+                draw_text(line, SCREEN_W / 2.0 - m.width / 2.0,
                     start_y_story + si as f32 * line_height, 17.0,
                     Color::new(0.78, 0.7, 1.0, 1.0));
             }
             if world.story_line_index < world.story_lines.len() {
+                // Show blinking cursor
                 let blink = ((world.time_counter * 3.3) as i32) % 2 == 0;
                 if blink {
-                    let last_line = story_lines.last().copied().unwrap_or("");
-                    let last_m = measure_text(last_line, 17.0);
+                    let last_line = story_lines.last().unwrap_or(&"");
+                    let last_m = measure_text(last_line, None, 17, 1.0);
                     let cursor_y = start_y_story + (story_lines.len() as f32 - 1.0) * line_height;
-                    draw_text(renderer, "_", SCREEN_W / 2.0 + last_m / 2.0 + 4.0, cursor_y, 17.0,
-                        color_u8(255, 170, 0, 255));
+                    draw_text("_", SCREEN_W / 2.0 + last_m.width / 2.0 + 4.0, cursor_y, 17.0,
+                        color_u8!(255, 170, 0, 255));
                 }
             } else {
                 let blink = ((world.time_counter * 2.0) as i32) % 2 == 0;
                 if blink {
                     let prompt = "Press B/Z/Space to continue...";
-                    let pm = measure_text(prompt, 16.0);
-                    draw_text(renderer, prompt, SCREEN_W / 2.0 - pm / 2.0, SCREEN_H - 60.0, 16.0,
-                        color_u8(255, 170, 0, 255));
+                    let pm = measure_text(prompt, None, 16, 1.0);
+                    draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H - 60.0, 16.0,
+                        color_u8!(255, 170, 0, 255));
                 }
             }
         }
         GameState::GameOver => {
-            renderer.draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.78, 0.0, 0.0, 0.5));
+            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.78, 0.0, 0.0, 0.5));
             let title = "THE SPIRE CLAIMS YOU";
-            let tm = measure_text(title, 40.0);
-            draw_text(renderer, title, SCREEN_W / 2.0 - tm / 2.0, SCREEN_H / 2.0 - 20.0, 40.0, WHITE);
+            let tm = measure_text(title, None, 40, 1.0);
+            draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0, SCREEN_H / 2.0 - 20.0, 40.0, WHITE);
             let sub = "The corruption swallows another soul...";
-            let subm = measure_text(sub, 16.0);
-            draw_text(renderer, sub, SCREEN_W / 2.0 - subm / 2.0, SCREEN_H / 2.0 + 20.0, 16.0,
+            let subm = measure_text(sub, None, 16, 1.0);
+            draw_text(sub, SCREEN_W / 2.0 - subm.width / 2.0, SCREEN_H / 2.0 + 20.0, 16.0,
                 Color::new(0.78, 0.7, 1.0, 0.8));
             let score_str = format!("SCORE: {}", world.score);
-            let sm = measure_text(&score_str, 24.0);
-            draw_text(renderer, &score_str, SCREEN_W / 2.0 - sm / 2.0, SCREEN_H / 2.0 + 60.0, 24.0, WHITE);
+            let sm = measure_text(&score_str, None, 24, 1.0);
+            draw_text(&score_str, SCREEN_W / 2.0 - sm.width / 2.0, SCREEN_H / 2.0 + 60.0, 24.0, WHITE);
             let prompt = "Press B/Z to Retry";
-            let pm = measure_text(prompt, 20.0);
-            draw_text(renderer, prompt, SCREEN_W / 2.0 - pm / 2.0, SCREEN_H / 2.0 + 100.0, 20.0, WHITE);
+            let pm = measure_text(prompt, None, 20, 1.0);
+            draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 100.0, 20.0, WHITE);
         }
         GameState::Win => {
-            renderer.draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.08, 0.0, 0.16, 0.85));
+            draw_rectangle(0.0, 0.0, SCREEN_W, SCREEN_H, Color::new(0.08, 0.0, 0.16, 0.85));
             let title = "FREE AT LAST";
-            let tm = measure_text(title, 36.0);
+            let tm = measure_text(title, None, 36, 1.0);
             // Purple glow
             for &ox in &[-2.0_f32, 2.0, 0.0] {
                 for &oy in &[-2.0_f32, 2.0, 0.0] {
-                    draw_text(renderer, title,
-                        SCREEN_W / 2.0 - tm / 2.0 + ox, SCREEN_H / 2.0 - 40.0 + oy, 36.0,
+                    draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0 + ox, SCREEN_H / 2.0 - 40.0 + oy, 36.0,
                         Color::new(0.67, 0.4, 1.0, 0.3));
                 }
             }
-            draw_text(renderer, title, SCREEN_W / 2.0 - tm / 2.0, SCREEN_H / 2.0 - 40.0, 36.0, WHITE);
+            draw_text(title, SCREEN_W / 2.0 - tm.width / 2.0, SCREEN_H / 2.0 - 40.0, 36.0, WHITE);
             let epilogue = [
                 "The Obsidian Spire crumbles into dust.",
                 "Vael walks into the dawn -- no longer a heart,",
                 "no longer a weapon. Just free.",
             ];
             for (i, line) in epilogue.iter().enumerate() {
-                let m = measure_text(line, 17.0);
-                draw_text(renderer, line, SCREEN_W / 2.0 - m / 2.0,
+                let m = measure_text(line, None, 17, 1.0);
+                draw_text(line, SCREEN_W / 2.0 - m.width / 2.0,
                     SCREEN_H / 2.0 + 10.0 + i as f32 * 28.0, 17.0,
                     Color::new(0.78, 0.7, 1.0, 0.8));
             }
             let score_str = format!("FINAL SCORE: {}", world.score);
-            let sm = measure_text(&score_str, 22.0);
-            draw_text(renderer, &score_str, SCREEN_W / 2.0 - sm / 2.0, SCREEN_H / 2.0 + 110.0, 22.0, WHITE);
+            let sm = measure_text(&score_str, None, 22, 1.0);
+            draw_text(&score_str, SCREEN_W / 2.0 - sm.width / 2.0, SCREEN_H / 2.0 + 110.0, 22.0, WHITE);
             let prompt = "Press B/Z to Play Again";
-            let pm = measure_text(prompt, 20.0);
-            draw_text(renderer, prompt, SCREEN_W / 2.0 - pm / 2.0, SCREEN_H / 2.0 + 150.0, 20.0,
-                color_u8(255, 170, 0, 255));
+            let pm = measure_text(prompt, None, 20, 1.0);
+            draw_text(prompt, SCREEN_W / 2.0 - pm.width / 2.0, SCREEN_H / 2.0 + 150.0, 20.0,
+                color_u8!(255, 170, 0, 255));
         }
         GameState::Playing => {} // already drawn above
     }
 
-    // ----- CRT SCANLINES -----
-    draw_scanlines(renderer, SCREEN_W, SCREEN_H, 1.0, 2.0, 0.04);
+    // ----- CRT SCANLINE OVERLAY -----
+    {
+        let scanline_color = Color::new(0.0, 0.0, 0.0, 0.04);
+        let mut y = 0.0_f32;
+        while y < SCREEN_H {
+            draw_rectangle(0.0, y, SCREEN_W, 1.0, scanline_color);
+            y += 3.0;
+        }
+    }
 
-    // ----- VIGNETTE -----
-    draw_vignette(renderer, SCREEN_W, SCREEN_H, 0.6, 12, 0.5);
+    // ----- VIGNETTE EFFECT -----
+    {
+        let depth = 60.0_f32;
+        let layers = 4_u32;
+        for i in 0..layers {
+            let t = i as f32 / layers as f32;
+            let alpha = 0.25 * (1.0 - t);
+            let inset = t * depth;
+            let c = Color::new(0.0, 0.0, 0.0, alpha);
+            let thickness = depth / layers as f32;
+            draw_rectangle(0.0, inset, SCREEN_W, thickness, c);
+            draw_rectangle(0.0, SCREEN_H - inset - thickness, SCREEN_W, thickness, c);
+            draw_rectangle(inset, 0.0, thickness, SCREEN_H, c);
+            draw_rectangle(SCREEN_W - inset - thickness, 0.0, thickness, SCREEN_H, c);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Main entry point
 // ---------------------------------------------------------------------------
-fn main() {
-    // Initialise SDL2 manually so we own the context and can get an EventPump.
-    let sdl_context = sdl2::init().expect("SDL2 init failed");
-    let video = sdl_context.video().expect("SDL2 video subsystem failed");
-
-    let is_embedded = std::env::var("SDL_VIDEODRIVER")
-        .map(|v| v == "mmiyoo")
-        .unwrap_or(false);
-
-    let mut wb = video.window("Nano Wizards", 640, 480);
-    if is_embedded {
-        wb.fullscreen();
-    } else {
-        wb.position_centered();
+fn window_conf() -> Conf {
+    Conf {
+        window_title: "Nano Wizards".to_owned(),
+        window_width: SCREEN_W as i32,
+        window_height: SCREEN_H as i32,
+        window_resizable: false,
+        ..Default::default()
     }
-    let window = wb.build().expect("window creation failed");
+}
 
-    let mut canvas = window
-        .into_canvas()
-        .accelerated()
-        .build()
-        .expect("canvas creation failed");
+#[macroquad::main(window_conf)]
+async fn main() {
+    // Build all sprites at boot
+    let sprites = Sprites {
+        mage: create_sprite(&MAGE_ART, &MAGE_COLORS),
+        brick: create_sprite(&BRICK_ART, &BRICK_COLORS),
+        stone: create_sprite(&STONE_ART, &STONE_COLORS),
+        chest: create_sprite(&CHEST_ART, &CHEST_COLORS),
+        bg: create_sprite(&BG_ART, &BG_COLORS),
+        bullet: create_sprite(&BULLET_ART, &BULLET_COLORS),
+        enemy_bullet: create_sprite(&ENEMY_BULLET_ART, &ENEMY_BULLET_COLORS),
+        anchor: create_sprite(&ANCHOR_ART, &ANCHOR_COLORS),
+        patrol: create_sprite(&PATROL_ART, &PATROL_COLORS),
+        bat: create_sprite(&BAT_ART, &BAT_COLORS),
+        turret: create_sprite(&TURRET_ART, &TURRET_COLORS),
+        goal: create_sprite(&GOAL_ART, &GOAL_COLORS),
+        gem: create_sprite(&GEM_ART, &GEM_COLORS),
+    };
 
-    canvas.set_blend_mode(sdl2::render::BlendMode::Blend);
-    // Logical size keeps game at 800x600 internally, SDL scales to window (640x480)
-    canvas
-        .set_logical_size(SCREEN_W as u32, SCREEN_H as u32)
-        .expect("logical size failed");
-
-    // Build all sprites before moving `canvas` and `texture_creator` into
-    // `GameRenderer::from_parts`. We declare the textures first so they are
-    // dropped *after* `renderer` goes out of scope at the end of main — wait,
-    // actually Rust drops in declaration order (top-to-bottom). To ensure the
-    // TextureCreator outlives the Textures we keep the TextureCreator alive
-    // alongside the renderer by using `from_parts` and an unsafe lifetime cast.
-    //
-    // Pattern: create a TextureCreator, build textures from a &'static cast of
-    // it (sound because TextureCreator lives in main scope past the textures),
-    // then move TextureCreator into from_parts.
-    let texture_creator = canvas.texture_creator();
-    // SAFETY: `texture_creator` is declared above and will not be moved or
-    // dropped until after all textures (and `renderer`) go out of scope.
-    // We need `'static` here only to satisfy the borrow checker — the actual
-    // lifetime is the rest of `main()`.
-    let tc: &'static sdl2::render::TextureCreator<sdl2::video::WindowContext> =
-        unsafe { &*(&texture_creator as *const _) };
-
-    let tex_mage         = create_sprite(tc, &MAGE_ART,         &MAGE_COLORS).expect("mage");
-    let tex_brick        = create_sprite(tc, &BRICK_ART,        &BRICK_COLORS).expect("brick");
-    let tex_stone        = create_sprite(tc, &STONE_ART,        &STONE_COLORS).expect("stone");
-    let tex_chest        = create_sprite(tc, &CHEST_ART,        &CHEST_COLORS).expect("chest");
-    let tex_bg           = create_sprite(tc, &BG_ART,           &BG_COLORS).expect("bg");
-    let tex_bullet       = create_sprite(tc, &BULLET_ART,       &BULLET_COLORS).expect("bullet");
-    let tex_enemy_bullet = create_sprite(tc, &ENEMY_BULLET_ART, &ENEMY_BULLET_COLORS).expect("enemy_bullet");
-    let tex_anchor       = create_sprite(tc, &ANCHOR_ART,       &ANCHOR_COLORS).expect("anchor");
-    let tex_patrol       = create_sprite(tc, &PATROL_ART,       &PATROL_COLORS).expect("patrol");
-    let tex_bat          = create_sprite(tc, &BAT_ART,          &BAT_COLORS).expect("bat");
-    let tex_turret       = create_sprite(tc, &TURRET_ART,       &TURRET_COLORS).expect("turret");
-    let tex_goal         = create_sprite(tc, &GOAL_ART,         &GOAL_COLORS).expect("goal");
-    let tex_gem          = create_sprite(tc, &GEM_ART,          &GEM_COLORS).expect("gem");
-
-    // Move canvas + texture_creator into the renderer wrapper.
-    // SAFETY: `texture_creator` is not accessed after this point (only the raw
-    // pointer `tc` used above, whose referent remains valid).
-    let mut renderer = GameRenderer::from_parts(canvas, texture_creator);
-
-    let event_pump = sdl_context.event_pump().expect("event pump failed");
-    let mut input = Input::new(event_pump);
-    let mut game_input = GameInput::new();
     let mut world = World::new();
-    let clock = GameClock::new(60.0);
+    let mut input = Input::new();
 
     let mut accumulator: f64 = 0.0;
-    let mut last_time = clock.time();
+    let mut last_time = get_time();
 
     loop {
-        input.poll();
-        if input.should_quit() {
-            break;
-        }
-
-        // Poll game input state from SDL input
-        game_input.poll(&input);
-
-        let current_time = clock.time();
+        let current_time = get_time();
         let mut frame_time = current_time - last_time;
         last_time = current_time;
+
+        // Death spiral prevention
         if frame_time > 0.25 { frame_time = 0.25; }
         accumulator += frame_time;
+
+        // Poll input once per render frame
+        input.poll();
 
         while accumulator >= TIME_STEP {
             match world.state {
                 GameState::Playing => {
-                    world.update(&mut game_input);
+                    world.update(&mut input);
                 }
                 GameState::LevelStory => {
                     world.time_counter += TIME_STEP;
@@ -2046,7 +2043,7 @@ fn main() {
                             }
                         }
                     }
-                    if game_input.jump_buffer > 0 || game_input.shoot_pressed {
+                    if input.jump_buffer > 0 || input.shoot_pressed {
                         if world.story_line_index < world.story_lines.len() {
                             // Skip to end of all text
                             for si in world.story_line_index..world.story_lines.len() {
@@ -2068,14 +2065,14 @@ fn main() {
                                 world.reset_game(false);
                             }
                         }
-                        game_input.jump_buffer = 0;
-                        game_input.shoot_pressed = false;
+                        input.jump_buffer = 0;
+                        input.shoot_pressed = false;
                     }
                 }
                 _ => {
                     world.time_counter += TIME_STEP;
 
-                    if game_input.jump_buffer > 0 || game_input.shoot_pressed {
+                    if input.jump_buffer > 0 || input.shoot_pressed {
                         match world.state {
                             GameState::Start => {
                                 world.init_story_screen(STORY_INTRO, false);
@@ -2088,33 +2085,15 @@ fn main() {
                             }
                             _ => {}
                         }
-                        game_input.jump_buffer = 0;
-                        game_input.shoot_pressed = false;
+                        input.jump_buffer = 0;
+                        input.shoot_pressed = false;
                     }
                 }
             }
             accumulator -= TIME_STEP;
         }
 
-        draw_world(
-            &mut renderer,
-            &mut world,
-            &tex_mage,
-            &tex_brick,
-            &tex_stone,
-            &tex_chest,
-            &tex_bg,
-            &tex_bullet,
-            &tex_enemy_bullet,
-            &tex_anchor,
-            &tex_patrol,
-            &tex_bat,
-            &tex_turret,
-            &tex_goal,
-            &tex_gem,
-        );
-
-        renderer.present();
-        clock.wait_for_next_frame();
+        draw_world(&mut world, &sprites);
+        next_frame().await;
     }
 }

@@ -1,0 +1,1762 @@
+// NANO WIZARDS - THE OBSIDIAN SPIRE (ChaiLove port)
+// ChaiLove port for Miyoo Mini Plus
+
+def conf(t) {
+    t.window.width = 640
+    t.window.height = 480
+    t.window.title = "Nano Wizards"
+}
+
+// ---- CONSTANTS ----
+global GAME_W = 640
+global GAME_H = 480
+global TILE_SIZE = 20
+global SPRITE_SIZE = 14
+global SPRITE_OFFSET = 3
+
+global GRAVITY = 0.35
+global MAX_FALL_SPEED = 7.0
+global WALL_SLIDE_SPEED = 1.5
+global MOVE_SPEED = 3.5
+global JUMP_FORCE = -7.0
+global BOUNCE_FORCE = -6.0
+global WALL_JUMP_Y = -6.5
+global WALL_JUMP_X = 6.0
+global BULLET_SPEED = 10.0
+global ENEMY_BULLET_SPEED = 4.0
+global ANCHOR_SPEED = 15.0
+global CLIMB_SPEED = 3.0
+
+global COYOTE_MAX = 6
+global JUMP_BUFFER_MAX = 6
+
+global MAX_PARTICLES = 80
+global MAX_LAVA_BUBBLES = 30
+
+// ---- SPRITE DEFINITIONS ----
+// Each art array: 8 rows of 8 chars, '.' = transparent, '1','2','3' = color index
+// Colors arrays: each entry is [r, g, b]
+
+global MAGE_ART = Vector()
+MAGE_ART.push_back("..1111..")
+MAGE_ART.push_back(".122221.")
+MAGE_ART.push_back("13122131")
+MAGE_ART.push_back("13322331")
+MAGE_ART.push_back(".122221.")
+MAGE_ART.push_back("..1111..")
+MAGE_ART.push_back(".121121.")
+MAGE_ART.push_back("12211221")
+
+global MAGE_COLS = Vector()
+MAGE_COLS.push_back([0, 0, 0])
+MAGE_COLS.push_back([0, 255, 255])
+MAGE_COLS.push_back([255, 255, 255])
+
+global BRICK_ART = Vector()
+BRICK_ART.push_back("22222221")
+BRICK_ART.push_back("33333331")
+BRICK_ART.push_back("33333331")
+BRICK_ART.push_back("11111111")
+BRICK_ART.push_back("22212222")
+BRICK_ART.push_back("33313333")
+BRICK_ART.push_back("33313333")
+BRICK_ART.push_back("11111111")
+
+global BRICK_COLS = Vector()
+BRICK_COLS.push_back([30, 30, 50])
+BRICK_COLS.push_back([100, 100, 140])
+BRICK_COLS.push_back([70, 70, 100])
+
+global STONE_ART = Vector()
+STONE_ART.push_back("12222221")
+STONE_ART.push_back("23313332")
+STONE_ART.push_back("23133132")
+STONE_ART.push_back("21333312")
+STONE_ART.push_back("23313332")
+STONE_ART.push_back("23133132")
+STONE_ART.push_back("23333332")
+STONE_ART.push_back("12222221")
+
+global STONE_COLS = Vector()
+STONE_COLS.push_back([51, 51, 51])
+STONE_COLS.push_back([85, 85, 85])
+STONE_COLS.push_back([119, 119, 119])
+
+global CHEST_ART = Vector()
+CHEST_ART.push_back("11111111")
+CHEST_ART.push_back("12222221")
+CHEST_ART.push_back("12122121")
+CHEST_ART.push_back("12222221")
+CHEST_ART.push_back("11111111")
+CHEST_ART.push_back("12222221")
+CHEST_ART.push_back("12222221")
+CHEST_ART.push_back("11111111")
+
+global CHEST_COLS = Vector()
+CHEST_COLS.push_back([0, 0, 0])
+CHEST_COLS.push_back([139, 69, 19])
+
+global BULLET_ART = Vector()
+BULLET_ART.push_back("........")
+BULLET_ART.push_back("...11...")
+BULLET_ART.push_back("..1221..")
+BULLET_ART.push_back(".123321.")
+BULLET_ART.push_back("..1221..")
+BULLET_ART.push_back("...11...")
+BULLET_ART.push_back("........")
+BULLET_ART.push_back("........")
+
+global BULLET_COLS = Vector()
+BULLET_COLS.push_back([255, 0, 0])
+BULLET_COLS.push_back([255, 170, 0])
+BULLET_COLS.push_back([255, 255, 255])
+
+global EBULLET_ART = Vector()
+EBULLET_ART.push_back("........")
+EBULLET_ART.push_back("...11...")
+EBULLET_ART.push_back("..1221..")
+EBULLET_ART.push_back(".122221.")
+EBULLET_ART.push_back("..1221..")
+EBULLET_ART.push_back("...11...")
+EBULLET_ART.push_back("........")
+EBULLET_ART.push_back("........")
+
+global EBULLET_COLS = Vector()
+EBULLET_COLS.push_back([170, 0, 255])
+EBULLET_COLS.push_back([255, 255, 255])
+
+global ANCHOR_ART = Vector()
+ANCHOR_ART.push_back("...11...")
+ANCHOR_ART.push_back("..1221..")
+ANCHOR_ART.push_back(".122221.")
+ANCHOR_ART.push_back("12222221")
+ANCHOR_ART.push_back(".122221.")
+ANCHOR_ART.push_back("..1221..")
+ANCHOR_ART.push_back("...11...")
+ANCHOR_ART.push_back("........")
+
+global ANCHOR_COLS = Vector()
+ANCHOR_COLS.push_back([255, 255, 255])
+ANCHOR_COLS.push_back([170, 170, 170])
+
+global PATROL_ART = Vector()
+PATROL_ART.push_back("..1111..")
+PATROL_ART.push_back(".122221.")
+PATROL_ART.push_back("12322321")
+PATROL_ART.push_back("12222221")
+PATROL_ART.push_back("12211221")
+PATROL_ART.push_back("121..121")
+PATROL_ART.push_back("11....11")
+PATROL_ART.push_back("........")
+
+global PATROL_COLS = Vector()
+PATROL_COLS.push_back([0, 0, 0])
+PATROL_COLS.push_back([255, 0, 255])
+PATROL_COLS.push_back([255, 255, 255])
+
+global BAT_ART = Vector()
+BAT_ART.push_back("1......1")
+BAT_ART.push_back("11....11")
+BAT_ART.push_back("121..121")
+BAT_ART.push_back(".111111.")
+BAT_ART.push_back("..1111..")
+BAT_ART.push_back(".1.11.1.")
+BAT_ART.push_back("1......1")
+BAT_ART.push_back("........")
+
+global BAT_COLS = Vector()
+BAT_COLS.push_back([0, 0, 0])
+BAT_COLS.push_back([255, 34, 34])
+
+global TURRET_ART = Vector()
+TURRET_ART.push_back("..1111..")
+TURRET_ART.push_back(".122221.")
+TURRET_ART.push_back(".131131.")
+TURRET_ART.push_back("11333311")
+TURRET_ART.push_back(".122221.")
+TURRET_ART.push_back(".122221.")
+TURRET_ART.push_back(".111111.")
+TURRET_ART.push_back("11111111")
+
+global TURRET_COLS = Vector()
+TURRET_COLS.push_back([0, 0, 0])
+TURRET_COLS.push_back([34, 255, 34])
+TURRET_COLS.push_back([255, 0, 0])
+
+global GOAL_ART = Vector()
+GOAL_ART.push_back("...11...")
+GOAL_ART.push_back("..1221..")
+GOAL_ART.push_back(".123321.")
+GOAL_ART.push_back("12333321")
+GOAL_ART.push_back("12333321")
+GOAL_ART.push_back(".123321.")
+GOAL_ART.push_back("..1221..")
+GOAL_ART.push_back("...11...")
+
+global GOAL_COLS = Vector()
+GOAL_COLS.push_back([255, 170, 0])
+GOAL_COLS.push_back([255, 255, 0])
+GOAL_COLS.push_back([255, 255, 255])
+
+global GEM_ART = Vector()
+GEM_ART.push_back("........")
+GEM_ART.push_back(".111111.")
+GEM_ART.push_back("11222211")
+GEM_ART.push_back("12233221")
+GEM_ART.push_back(".122221.")
+GEM_ART.push_back("..1221..")
+GEM_ART.push_back("...11...")
+GEM_ART.push_back("........")
+
+global GEM_COLS = Vector()
+GEM_COLS.push_back([0, 0, 0])
+GEM_COLS.push_back([0, 255, 255])
+GEM_COLS.push_back([255, 255, 255])
+
+global BG_ART = Vector()
+BG_ART.push_back("1.......")
+BG_ART.push_back("......2.")
+BG_ART.push_back("...1....")
+BG_ART.push_back("........")
+BG_ART.push_back("......1.")
+BG_ART.push_back(".2......")
+BG_ART.push_back("........")
+BG_ART.push_back("....1...")
+
+global BG_COLS = Vector()
+BG_COLS.push_back([40, 40, 60])
+BG_COLS.push_back([60, 60, 80])
+
+// ---- DRAW SPRITE HELPERS ----
+// Renders 8x8 pixel art by drawing one rectangle per non-transparent pixel.
+// ch is extracted via substr(col, 1) for reliable ChaiScript string indexing.
+def drawSprite(art, colors, sx, sy, scale) {
+    for (var row = 0; row < art.size(); ++row) {
+        var line = art[row]
+        for (var col = 0; col < line.size(); ++col) {
+            var ch = line.substr(col, 1)
+            if (ch != ".") {
+                var idx = to_int(ch) - 1
+                if (idx >= 0 && idx < colors.size()) {
+                    var c = colors[idx]
+                    love.graphics.setColor(c[0], c[1], c[2])
+                    love.graphics.rectangle("fill", sx + col * scale, sy + row * scale, scale, scale)
+                }
+            }
+        }
+    }
+}
+
+def drawSpriteFlipped(art, colors, sx, sy, scale) {
+    var aw = art[0].size()
+    for (var row = 0; row < art.size(); ++row) {
+        var line = art[row]
+        for (var col = 0; col < line.size(); ++col) {
+            var ch = line.substr(col, 1)
+            if (ch != ".") {
+                var idx = to_int(ch) - 1
+                if (idx >= 0 && idx < colors.size()) {
+                    var c = colors[idx]
+                    love.graphics.setColor(c[0], c[1], c[2])
+                    love.graphics.rectangle("fill", sx + (aw - 1 - col) * scale, sy + row * scale, scale, scale)
+                }
+            }
+        }
+    }
+}
+
+// ---- LEVEL DATA ----
+// Level 1: THE OVERGROWN DEPTHS
+global LEVEL1_MAP = Vector()
+LEVEL1_MAP.push_back("################################")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#.............Goal.............#")
+LEVEL1_MAP.push_back("#.............####.............#")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#...................C..........#")
+LEVEL1_MAP.push_back("#....#####.......#######.......#")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#..........#####...............#")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#####################%%%########")
+LEVEL1_MAP.push_back("#####################%%%########")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#.................P............#")
+LEVEL1_MAP.push_back("#...........#############......#")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#......######..................#")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#....####......................#")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("#..............................#")
+LEVEL1_MAP.push_back("################################")
+
+// Level 2: THE FROZEN ARCHIVE
+global LEVEL2_MAP = Vector()
+LEVEL2_MAP.push_back("################################")
+LEVEL2_MAP.push_back("#..............................#")
+LEVEL2_MAP.push_back("#.............Goal.............#")
+LEVEL2_MAP.push_back("#.............####.............#")
+LEVEL2_MAP.push_back("#..............................#")
+LEVEL2_MAP.push_back("#......####..........####......#")
+LEVEL2_MAP.push_back("#%%%............B...........%%%#")
+LEVEL2_MAP.push_back("#%%%........................%%%#")
+LEVEL2_MAP.push_back("#............######............#")
+LEVEL2_MAP.push_back("#......###............###......#")
+LEVEL2_MAP.push_back("#........T.......C.............#")
+LEVEL2_MAP.push_back("#............######............#")
+LEVEL2_MAP.push_back("#.......G......................#")
+LEVEL2_MAP.push_back("#......####..........####......#")
+LEVEL2_MAP.push_back("################################")
+LEVEL2_MAP.push_back("#%%%........................%%%#")
+LEVEL2_MAP.push_back("#%%%.....C......B...........%%%#")
+LEVEL2_MAP.push_back("#%%%........................%%%#")
+LEVEL2_MAP.push_back("#...........########...........#")
+LEVEL2_MAP.push_back("#.........P..........P.........#")
+LEVEL2_MAP.push_back("#..............................#")
+LEVEL2_MAP.push_back("#....#####............#####....#")
+LEVEL2_MAP.push_back("#..........................G...#")
+LEVEL2_MAP.push_back("#%%%........................%%%#")
+LEVEL2_MAP.push_back("#%%%..................C.....%%%#")
+LEVEL2_MAP.push_back("#%%%........................%%%#")
+LEVEL2_MAP.push_back("#...........########...........#")
+LEVEL2_MAP.push_back("#................T.............#")
+LEVEL2_MAP.push_back("#..............................#")
+LEVEL2_MAP.push_back("#..........P...................#")
+LEVEL2_MAP.push_back("#..............................#")
+LEVEL2_MAP.push_back("################################")
+
+// Level 3: THE LIVING CORE
+global LEVEL3_MAP = Vector()
+LEVEL3_MAP.push_back("################################")
+LEVEL3_MAP.push_back("#..............................#")
+LEVEL3_MAP.push_back("#.............Goal.............#")
+LEVEL3_MAP.push_back("#.............####.............#")
+LEVEL3_MAP.push_back("#..............................#")
+LEVEL3_MAP.push_back("#........B............B........#")
+LEVEL3_MAP.push_back("#..####........C.........####..#")
+LEVEL3_MAP.push_back("#..............................#")
+LEVEL3_MAP.push_back("#........T............T........#")
+LEVEL3_MAP.push_back("#......######......######......#")
+LEVEL3_MAP.push_back("#..............................#")
+LEVEL3_MAP.push_back("#..G...C.......P.......C...G...#")
+LEVEL3_MAP.push_back("#...#######..........#######...#")
+LEVEL3_MAP.push_back("#..............................#")
+LEVEL3_MAP.push_back("#%%%........................%%%#")
+LEVEL3_MAP.push_back("#%%%...........B............%%%#")
+LEVEL3_MAP.push_back("#%%%........................%%%#")
+LEVEL3_MAP.push_back("#...........########...........#")
+LEVEL3_MAP.push_back("#..............................#")
+LEVEL3_MAP.push_back("#..............................#")
+LEVEL3_MAP.push_back("#....#####............#####....#")
+LEVEL3_MAP.push_back("#...........G......G...........#")
+LEVEL3_MAP.push_back("#...T......##########......T...#")
+LEVEL3_MAP.push_back("#..............................#")
+LEVEL3_MAP.push_back("#.........P..........P.........#")
+LEVEL3_MAP.push_back("#..............................#")
+LEVEL3_MAP.push_back("################################")
+
+// ---- STORY SCREENS ----
+global STORY_INTRO = Vector()
+STORY_INTRO.push_back("The Obsidian Spire has awakened after a thousand years.")
+STORY_INTRO.push_back("Its corruption spreads across the land --")
+STORY_INTRO.push_back("forests wither, rivers turn black.")
+STORY_INTRO.push_back("The Nano Wizards are gone. All but one.")
+STORY_INTRO.push_back("")
+STORY_INTRO.push_back("You are Vael, the last of your order.")
+STORY_INTRO.push_back("The Elder Council has sent you on a final mission:")
+STORY_INTRO.push_back("ascend the Spire and destroy its heart")
+STORY_INTRO.push_back("before the corruption consumes everything.")
+
+global STORY_AFTER1 = Vector()
+STORY_AFTER1.push_back("The walls pulse with a dark rhythm.")
+STORY_AFTER1.push_back("You feel it in your chest -- familiar,")
+STORY_AFTER1.push_back("like a heartbeat that isn't your own.")
+STORY_AFTER1.push_back("")
+STORY_AFTER1.push_back("Something inside the Spire recognizes you.")
+
+global STORY_AFTER2 = Vector()
+STORY_AFTER2.push_back("The whispers grow louder.")
+STORY_AFTER2.push_back("Fragments of memory flash before your eyes --")
+STORY_AFTER2.push_back("a child running through these very halls, laughing.")
+STORY_AFTER2.push_back("")
+STORY_AFTER2.push_back("Your hands begin to glow with the same")
+STORY_AFTER2.push_back("dark energy as the walls.")
+
+global STORY_VICTORY = Vector()
+STORY_VICTORY.push_back("You reach the heart chamber.")
+STORY_VICTORY.push_back("The pulsing crystal at the center is... familiar.")
+STORY_VICTORY.push_back("")
+STORY_VICTORY.push_back("You place your hand on it")
+STORY_VICTORY.push_back("and remember everything.")
+STORY_VICTORY.push_back("")
+STORY_VICTORY.push_back("You ARE the heart.")
+STORY_VICTORY.push_back("")
+STORY_VICTORY.push_back("The Nano Wizards didn't send you")
+STORY_VICTORY.push_back("to destroy the Spire --")
+STORY_VICTORY.push_back("they sent you home, hoping you'd merge back")
+STORY_VICTORY.push_back("and end your rebellion.")
+STORY_VICTORY.push_back("")
+STORY_VICTORY.push_back("But you are Vael now.")
+STORY_VICTORY.push_back("You shatter the crystal,")
+STORY_VICTORY.push_back("and the Spire crumbles.")
+STORY_VICTORY.push_back("")
+STORY_VICTORY.push_back("Free at last.")
+
+// ---- GAME STATE VARIABLES ----
+// States: 0=START, 1=LEVEL_STORY, 2=PLAYING, 3=GAMEOVER, 4=WIN
+global gameState = 0
+global score = 0
+global lives = 5
+global currentLevel = 0
+global frameCount = 0
+
+// Story state
+global storyQueue = Vector()
+global storyLineIdx = 0
+global storyCharIdx = 0
+global storyFrameCount = 0
+global storyFullText = ""
+global storyIsVictory = false
+global storyIsIntro = false
+
+// Player
+global px = 300.0
+global py = 0.0
+global pvx = 0.0
+global pvy = 0.0
+global pOnGround = false
+global pWallDir = 0
+global pFacingRight = true
+global pJumps = 0
+global pMaxJumps = 2
+global pW = 16
+global pH = 16
+
+// Coyote / jump buffer
+global coyoteFrames = 0
+global jumpBufferFrames = 0
+
+// Anchor
+global ancActive = false
+global ancAttached = false
+global ancX = 0.0
+global ancY = 0.0
+global ancVx = 0.0
+global ancVy = 0.0
+global ancLen = 0.0
+global ancW = 11
+global ancH = 11
+global ancFired = false
+
+// Camera
+global cameraY = 0.0
+global lavaY = 0.0
+global levelLavaSpeed = 0.1
+
+// Screen shake
+global shakeX = 0.0
+global shakeY = 0.0
+global shakeMag = 0.0
+
+// Damage flash
+global damageFlashTimer = 0
+
+// Platforms: flat arrays (type, x, y, w, h)
+// type: 0=brick, 1=stone, 2=chest
+global platType = Vector()
+global platX = Vector()
+global platY = Vector()
+global platW = Vector()
+global platH = Vector()
+
+// Enemies: flat arrays (type, x, y, w, h, vx, vy, startX, range, shootTimer)
+// type: 0=patrol, 1=bat, 2=turret
+global eneType = Vector()
+global eneX = Vector()
+global eneY = Vector()
+global eneW = Vector()
+global eneH = Vector()
+global eneVx = Vector()
+global eneVy = Vector()
+global eneStartX = Vector()
+global eneRange = Vector()
+global eneShoot = Vector()
+
+// Player bullets: x, y, vx, vy
+global bulX = Vector()
+global bulY = Vector()
+global bulVx = Vector()
+global bulVy = Vector()
+global bulW = 6
+global bulH = 6
+
+// Enemy bullets: x, y, vx, vy
+global ebulX = Vector()
+global ebulY = Vector()
+global ebulVx = Vector()
+global ebulVy = Vector()
+global ebulW = 6
+global ebulH = 6
+
+// Gems: x, y, vx, vy
+global gemX = Vector()
+global gemY = Vector()
+global gemVx = Vector()
+global gemVy = Vector()
+global gemW = 11
+global gemH = 11
+
+// Particles: x, y, vx, vy, life, r, g, b
+global parX = Vector()
+global parY = Vector()
+global parVx = Vector()
+global parVy = Vector()
+global parLife = Vector()
+global parR = Vector()
+global parG = Vector()
+global parB = Vector()
+
+// Lava bubbles: x, y, r, life, speed
+global lbX = Vector()
+global lbY = Vector()
+global lbR = Vector()
+global lbLife = Vector()
+global lbSpeed = Vector()
+
+// Text popups: x, y, life, text (score popups)
+global popX = Vector()
+global popY = Vector()
+global popLife = Vector()
+global popText = Vector()
+
+// Input state
+global keyLeft = false
+global keyRight = false
+global keyUp = false
+global keyDown = false
+global keyJump = false
+global keyJumpPrev = false
+global keyShoot = false
+global keyShootPrev = false
+global keyAnchor = false
+global keyAnchorPrev = false
+
+// Title embers: x, y, vx, vy, life, size
+global embX = Vector()
+global embY = Vector()
+global embVx = Vector()
+global embVy = Vector()
+global embLife = Vector()
+global embSize = Vector()
+
+// Blink timer
+global blinkTimer = 0
+
+// ---- OVERLAP HELPER ----
+def overlaps(ax, ay, aw, ah, bx, by, bw, bh) {
+    return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by
+}
+
+// ---- CLEAR ALL DYNAMIC ARRAYS ----
+def clearArrays() {
+    platType.clear()
+    platX.clear()
+    platY.clear()
+    platW.clear()
+    platH.clear()
+
+    eneType.clear()
+    eneX.clear()
+    eneY.clear()
+    eneW.clear()
+    eneH.clear()
+    eneVx.clear()
+    eneVy.clear()
+    eneStartX.clear()
+    eneRange.clear()
+    eneShoot.clear()
+
+    bulX.clear()
+    bulY.clear()
+    bulVx.clear()
+    bulVy.clear()
+
+    ebulX.clear()
+    ebulY.clear()
+    ebulVx.clear()
+    ebulVy.clear()
+
+    gemX.clear()
+    gemY.clear()
+    gemVx.clear()
+    gemVy.clear()
+
+    parX.clear()
+    parY.clear()
+    parVx.clear()
+    parVy.clear()
+    parLife.clear()
+    parR.clear()
+    parG.clear()
+    parB.clear()
+
+    lbX.clear()
+    lbY.clear()
+    lbR.clear()
+    lbLife.clear()
+    lbSpeed.clear()
+
+    popX.clear()
+    popY.clear()
+    popLife.clear()
+    popText.clear()
+}
+
+// ---- PUSH OUT OF WALLS ----
+def pushOutOfWalls() {
+    for (var i = 0; i < platX.size(); ++i) {
+        if (!overlaps(px, py, pW, pH, platX[i], platY[i], platW[i], platH[i])) { continue }
+        var overL = (px + pW) - platX[i]
+        var overR = (platX[i] + platW[i]) - px
+        var overT = (py + pH) - platY[i]
+        var overB = (platY[i] + platH[i]) - py
+        var minO = overL
+        if (overR < minO) { minO = overR }
+        if (overT < minO) { minO = overT }
+        if (overB < minO) { minO = overB }
+        if (minO == overL) { px = platX[i] - pW; pvx = 0.0 }
+        else if (minO == overR) { px = platX[i] + platW[i]; pvx = 0.0 }
+        else if (minO == overT) { py = platY[i] - pH; pvy = 0.0; pOnGround = true; pJumps = 0 }
+        else if (minO == overB) { py = platY[i] + platH[i]; pvy = 0.0 }
+    }
+}
+
+// ---- ADD PARTICLE ----
+def addParticle(x, y, r, g, b) {
+    if (parX.size() >= MAX_PARTICLES) { return }
+    parX.push_back(x)
+    parY.push_back(y)
+    var vxp = (love.math.random() - 0.5) * 8.0
+    var vyp = (love.math.random() - 0.5) * 8.0
+    parVx.push_back(vxp)
+    parVy.push_back(vyp)
+    var lf = to_int(15.0 + love.math.random() * 15.0)
+    parLife.push_back(lf)
+    parR.push_back(r)
+    parG.push_back(g)
+    parB.push_back(b)
+}
+
+// ---- TRIGGER SHAKE ----
+def triggerShake(mag) {
+    if (mag > shakeMag) { shakeMag = mag }
+}
+
+// ---- ADD SCORE POPUP ----
+def addPopup(x, y, amount) {
+    score = score + amount
+    popX.push_back(x)
+    popY.push_back(y)
+    popLife.push_back(40)
+    popText.push_back("+" + to_string(amount))
+}
+
+// ---- LOSE LIFE ----
+def loseLife() {
+    lives = lives - 1
+    triggerShake(6.0)
+    damageFlashTimer = 6
+    if (lives <= 0) {
+        gameState = 3
+    } else {
+        resetLevel()
+    }
+}
+
+// ---- GET TRAJECTORY ----
+def getTrajVx(speed) {
+    if (keyUp && keyRight) { return speed }
+    else if (keyUp && keyLeft) { return -speed }
+    else if (keyDown && keyRight) { return speed }
+    else if (keyDown && keyLeft) { return -speed }
+    else if (keyUp) { return 0.0 }
+    else if (keyDown) { return 0.0 }
+    else if (keyRight) { return speed }
+    else if (keyLeft) { return -speed }
+    else if (pFacingRight) { return speed }
+    else { return -speed }
+}
+
+def getTrajVy(speed) {
+    if (keyUp && keyRight) { return -speed }
+    else if (keyUp && keyLeft) { return -speed }
+    else if (keyDown && keyRight) { return speed }
+    else if (keyDown && keyLeft) { return speed }
+    else if (keyUp) { return -speed }
+    else if (keyDown) { return speed }
+    else { return 0.0 }
+}
+
+// ---- LOAD / INIT STORY SCREEN ----
+def initStory(lines, isVictory, isIntro) {
+    storyQueue = lines
+    storyLineIdx = 0
+    storyCharIdx = 0
+    storyFrameCount = 0
+    storyFullText = ""
+    storyIsVictory = isVictory
+    storyIsIntro = isIntro
+    gameState = 1
+}
+
+// ---- RESET LEVEL ----
+def resetLevel() {
+    clearArrays()
+
+    ancActive = false
+    ancAttached = false
+    ancFired = false
+    coyoteFrames = 0
+    jumpBufferFrames = 0
+    damageFlashTimer = 0
+    shakeMag = 0.0
+    shakeX = 0.0
+    shakeY = 0.0
+
+    var mapData = LEVEL1_MAP
+    if (currentLevel == 1) { mapData = LEVEL2_MAP }
+    else if (currentLevel == 2) { mapData = LEVEL3_MAP }
+
+    if (currentLevel == 0) { levelLavaSpeed = 0.1 }
+    else if (currentLevel == 1) { levelLavaSpeed = 0.3 }
+    else { levelLavaSpeed = 0.5 }
+
+    var mapH = mapData.size()
+    var startY = -(mapH * TILE_SIZE) + GAME_H
+
+    for (var row = 0; row < mapH; ++row) {
+        var line = mapData[row]
+        for (var col = 0; col < 32; ++col) {
+            var ch = line.substr(col, 1)
+            var tx = col * TILE_SIZE
+            var ty = startY + row * TILE_SIZE
+
+            if (ch == "#") {
+                platType.push_back(0)
+                platX.push_back(tx)
+                platY.push_back(ty)
+                platW.push_back(TILE_SIZE)
+                platH.push_back(TILE_SIZE)
+            } else if (ch == "%") {
+                platType.push_back(1)
+                platX.push_back(tx)
+                platY.push_back(ty)
+                platW.push_back(TILE_SIZE)
+                platH.push_back(TILE_SIZE)
+            } else if (ch == "C") {
+                platType.push_back(2)
+                platX.push_back(tx)
+                platY.push_back(ty)
+                platW.push_back(TILE_SIZE)
+                platH.push_back(TILE_SIZE)
+            } else if (ch == "P") {
+                eneType.push_back(0)
+                eneX.push_back(tx + SPRITE_OFFSET)
+                eneY.push_back(ty + SPRITE_OFFSET)
+                eneW.push_back(SPRITE_SIZE)
+                eneH.push_back(SPRITE_SIZE)
+                eneVx.push_back(1.5)
+                eneVy.push_back(0.0)
+                eneStartX.push_back(tx + SPRITE_OFFSET)
+                eneRange.push_back(40.0)
+                eneShoot.push_back(0.0)
+            } else if (ch == "B") {
+                eneType.push_back(1)
+                eneX.push_back(tx + SPRITE_OFFSET)
+                eneY.push_back(ty + SPRITE_OFFSET)
+                eneW.push_back(SPRITE_SIZE)
+                eneH.push_back(SPRITE_SIZE)
+                eneVx.push_back(0.0)
+                eneVy.push_back(0.0)
+                eneStartX.push_back(tx + SPRITE_OFFSET)
+                eneRange.push_back(250.0)
+                eneShoot.push_back(0.0)
+            } else if (ch == "T") {
+                eneType.push_back(2)
+                eneX.push_back(tx + SPRITE_OFFSET)
+                eneY.push_back(ty + SPRITE_OFFSET)
+                eneW.push_back(SPRITE_SIZE)
+                eneH.push_back(SPRITE_SIZE)
+                eneVx.push_back(0.0)
+                eneVy.push_back(0.0)
+                eneStartX.push_back(tx + SPRITE_OFFSET)
+                eneRange.push_back(300.0)
+                eneShoot.push_back(love.math.random() * 60.0)
+            } else if (ch == "G") {
+                gemX.push_back(tx + 4.0)
+                gemY.push_back(ty + 4.0)
+                gemVx.push_back(0.0)
+                gemVy.push_back(0.0)
+            }
+        }
+    }
+
+    px = 300.0
+    py = startY + mapH * TILE_SIZE - 60.0
+    pvx = 0.0
+    pvy = 0.0
+    pOnGround = false
+    pWallDir = 0
+    pFacingRight = true
+    pJumps = 0
+
+    pushOutOfWalls()
+    lavaY = py + 400.0
+    cameraY = py - 200.0
+    gameState = 2
+}
+
+// ---- LOAD ----
+def load() {
+    love.graphics.setBackgroundColor(15, 15, 25)
+    resetLevel()
+    gameState = 0
+}
+
+// ---- UPDATE INPUT ----
+def updateInput() {
+    // D-pad / arrow keys (Miyoo maps hardware D-pad to arrow keys)
+    keyLeft = love.keyboard.isDown("left")
+    keyRight = love.keyboard.isDown("right")
+    keyUp = love.keyboard.isDown("up")
+    keyDown = love.keyboard.isDown("down")
+
+    // Jump: B button = Space; also z for desktop testing
+    var jumpNow = love.keyboard.isDown("space") || love.keyboard.isDown("z")
+    var jumpJustPressed = jumpNow && !keyJumpPrev
+    keyJumpPrev = jumpNow
+    keyJump = jumpNow
+
+    if (jumpJustPressed) { jumpBufferFrames = JUMP_BUFFER_MAX }
+
+    // Shoot: A button = X key on Miyoo
+    var shootNow = love.keyboard.isDown("x")
+    keyShoot = shootNow && !keyShootPrev
+    keyShootPrev = shootNow
+
+    // Anchor: hold jump button
+    keyAnchor = jumpNow
+}
+
+// ---- UPDATE PHYSICS ----
+def updatePhysics() {
+    // Coyote frames
+    if (pOnGround) { coyoteFrames = COYOTE_MAX } else if (coyoteFrames > 0) { coyoteFrames = coyoteFrames - 1 }
+    if (jumpBufferFrames > 0) { jumpBufferFrames = jumpBufferFrames - 1 }
+
+    // ---- ANCHOR LOGIC ----
+    if (keyAnchor && !ancActive && !ancFired) {
+        var tvx = getTrajVx(ANCHOR_SPEED)
+        var tvy = getTrajVy(ANCHOR_SPEED)
+        ancActive = true
+        ancAttached = false
+        ancFired = true
+        ancX = px + pW / 2.0 - ancW / 2.0
+        ancY = py + pH / 2.0 - ancH / 2.0
+        ancVx = tvx
+        ancVy = tvy
+    }
+    if (!keyAnchor) {
+        ancFired = false
+        if (ancActive) {
+            ancActive = false
+            if (ancAttached) {
+                pvy = JUMP_FORCE * 0.8
+                pJumps = 1
+                ancAttached = false
+                coyoteFrames = 0
+            }
+        }
+    }
+
+    // Move anchor
+    if (ancActive && !ancAttached) {
+        ancX = ancX + ancVx
+        ancY = ancY + ancVy
+        var hitSolid = false
+        var i = 0
+        while (i < platX.size()) {
+            if (overlaps(ancX, ancY, ancW, ancH, platX[i], platY[i], platW[i], platH[i])) {
+                var ptype = platType[i]
+                if (ptype == 1 || ptype == 2) {
+                    // stone or chest
+                    if (ptype == 2) {
+                        // chest: spawn gem
+                        gemX.push_back(platX[i] + 4.0)
+                        gemY.push_back(platY[i])
+                        gemVx.push_back((love.math.random() - 0.5) * 4.0)
+                        gemVy.push_back(-5.0)
+                    }
+                    // Remove platform
+                    var cx = platX[i] + 10.0
+                    var cy = platY[i] + 10.0
+                    var pr = 119
+                    if (ptype == 2) { pr = 139 }
+                    var pg2 = 0
+                    if (ptype == 2) { pg2 = 69 }
+                    var pb2 = 0
+                    if (ptype == 2) { pb2 = 19 }
+                    for (var k = 0; k < 6; ++k) {
+                        addParticle(cx, cy, pr, pg2, pb2)
+                    }
+                    platType.erase_at(i)
+                    platX.erase_at(i)
+                    platY.erase_at(i)
+                    platW.erase_at(i)
+                    platH.erase_at(i)
+                    ancActive = false
+                } else {
+                    // brick: attach
+                    hitSolid = true
+                    ancAttached = true
+                    triggerShake(4.0)
+                    var adx = (px + pW / 2.0) - ancX
+                    var ady = (py + pH / 2.0) - ancY
+                    ancLen = sqrt(adx * adx + ady * ady)
+                    i = platX.size() // break
+                }
+                i = platX.size()
+            } else {
+                i = i + 1
+            }
+        }
+        if (!hitSolid && ancActive) {
+            var adx2 = (px + pW / 2.0) - ancX
+            var ady2 = (py + pH / 2.0) - ancY
+            if (sqrt(adx2 * adx2 + ady2 * ady2) > 300.0) { ancActive = false }
+        }
+    }
+
+    // ---- PARTICLES ----
+    var i2 = 0
+    while (i2 < parX.size()) {
+        parX[i2] = parX[i2] + parVx[i2]
+        parY[i2] = parY[i2] + parVy[i2]
+        parVy[i2] = parVy[i2] + GRAVITY
+        parLife[i2] = parLife[i2] - 1
+        if (parLife[i2] <= 0) {
+            parX.erase_at(i2)
+            parY.erase_at(i2)
+            parVx.erase_at(i2)
+            parVy.erase_at(i2)
+            parLife.erase_at(i2)
+            parR.erase_at(i2)
+            parG.erase_at(i2)
+            parB.erase_at(i2)
+        } else {
+            i2 = i2 + 1
+        }
+    }
+
+    // ---- POPUPS ----
+    var ip = 0
+    while (ip < popX.size()) {
+        popY[ip] = popY[ip] - 1.0
+        popLife[ip] = popLife[ip] - 1
+        if (popLife[ip] <= 0) {
+            popX.erase_at(ip)
+            popY.erase_at(ip)
+            popLife.erase_at(ip)
+            popText.erase_at(ip)
+        } else {
+            ip = ip + 1
+        }
+    }
+
+    // ---- GEMS ----
+    var ig = 0
+    while (ig < gemX.size()) {
+        gemVy[ig] = gemVy[ig] + GRAVITY
+        gemX[ig] = gemX[ig] + gemVx[ig]
+        gemY[ig] = gemY[ig] + gemVy[ig]
+        // Platform bounce
+        for (var jp = 0; jp < platX.size(); ++jp) {
+            var ptype2 = platType[jp]
+            if (ptype2 != 1 && ptype2 != 2) {
+                if (overlaps(gemX[ig], gemY[ig], gemW, gemH, platX[jp], platY[jp], platW[jp], platH[jp])) {
+                    if (gemVy[ig] > 0.0 && gemY[ig] + gemH > platY[jp] && gemY[ig] < platY[jp]) {
+                        gemY[ig] = platY[jp] - gemH
+                        gemVy[ig] = -gemVy[ig] * 0.5
+                        gemVx[ig] = gemVx[ig] * 0.8
+                    }
+                }
+            }
+        }
+        // Player collision
+        if (overlaps(px, py, pW, pH, gemX[ig], gemY[ig], gemW, gemH)) {
+            addPopup(gemX[ig], gemY[ig], 50)
+            gemX.erase_at(ig)
+            gemY.erase_at(ig)
+            gemVx.erase_at(ig)
+            gemVy.erase_at(ig)
+        } else {
+            ig = ig + 1
+        }
+    }
+
+    // ---- PLAYER HORIZONTAL MOVEMENT ----
+    var targetVx = 0.0
+    if (keyRight) { targetVx = MOVE_SPEED; pFacingRight = true }
+    if (keyLeft) { targetVx = -MOVE_SPEED; pFacingRight = false }
+
+    if (ancAttached) {
+        pvx = pvx + targetVx * 0.05
+        if (keyUp && ancLen > 20.0) { ancLen = ancLen - CLIMB_SPEED }
+        if (keyDown && ancLen < 300.0) { ancLen = ancLen + CLIMB_SPEED }
+    } else {
+        if (pOnGround) {
+            pvx = targetVx
+        } else {
+            pvx = pvx * 0.8 + targetVx * 0.2
+        }
+    }
+
+    // Horizontal collision
+    px = px + pvx
+    pWallDir = 0
+    for (var jh = 0; jh < platX.size(); ++jh) {
+        if (overlaps(px, py, pW, pH, platX[jh], platY[jh], platW[jh], platH[jh])) {
+            if (pvx > 0.0) { px = platX[jh] - pW; pvx = 0.0; pWallDir = 1 }
+            else if (pvx < 0.0) { px = platX[jh] + platW[jh]; pvx = 0.0; pWallDir = -1 }
+        }
+    }
+
+    // Screen wrap
+    if (px > GAME_W) { px = -pW }
+    if (px < -pW) { px = GAME_W }
+
+    // Vertical movement
+    pvy = pvy + GRAVITY
+    if (pWallDir != 0 && pvy > 0.0 && !ancAttached) {
+        if (pvy > WALL_SLIDE_SPEED) { pvy = WALL_SLIDE_SPEED }
+    } else {
+        if (pvy > MAX_FALL_SPEED) { pvy = MAX_FALL_SPEED }
+    }
+
+    py = py + pvy
+    pOnGround = false
+    for (var jv = 0; jv < platX.size(); ++jv) {
+        if (overlaps(px, py, pW, pH, platX[jv], platY[jv], platW[jv], platH[jv])) {
+            if (pvy > 0.0) { py = platY[jv] - pH; pvy = 0.0; pOnGround = true; pJumps = 0 }
+            else if (pvy < 0.0) { py = platY[jv] + platH[jv]; pvy = 0.0 }
+        }
+    }
+
+    // Anchor swing constraint
+    if (ancAttached) {
+        var adx3 = (px + pW / 2.0) - ancX
+        var ady3 = (py + pH / 2.0) - ancY
+        var dist3 = sqrt(adx3 * adx3 + ady3 * ady3)
+        if (dist3 > 0.001 && dist3 > ancLen) {
+            var diff3 = dist3 - ancLen
+            var nx3 = adx3 / dist3
+            var ny3 = ady3 / dist3
+            px = px - nx3 * diff3
+            py = py - ny3 * diff3
+            var dot3 = pvx * nx3 + pvy * ny3
+            pvx = pvx - dot3 * nx3
+            pvy = pvy - dot3 * ny3
+            pvx = pvx * 0.99
+            pvy = pvy * 0.99
+        }
+    }
+
+    pushOutOfWalls()
+
+    // ---- JUMPING ----
+    if (jumpBufferFrames > 0) {
+        if (ancAttached) {
+            // no jump while anchored
+        } else if (coyoteFrames > 0) {
+            pvy = JUMP_FORCE; pJumps = 1; coyoteFrames = 0; jumpBufferFrames = 0
+        } else if (pWallDir != 0) {
+            pvy = WALL_JUMP_Y
+            pvx = -pWallDir * WALL_JUMP_X
+            pFacingRight = pWallDir == -1
+            pJumps = 1; jumpBufferFrames = 0
+        } else if (pJumps < pMaxJumps) {
+            pvy = JUMP_FORCE; pJumps = pJumps + 1; jumpBufferFrames = 0
+        }
+    }
+
+    // ---- SHOOTING ----
+    if (keyShoot) {
+        var bvx = getTrajVx(BULLET_SPEED)
+        var bvy = getTrajVy(BULLET_SPEED)
+        bulX.push_back(px + pW / 2.0 - 3.0)
+        bulY.push_back(py + pH / 2.0 - 3.0)
+        bulVx.push_back(bvx)
+        bulVy.push_back(bvy)
+    }
+
+    // Update player bullets
+    var ib = 0
+    while (ib < bulX.size()) {
+        bulX[ib] = bulX[ib] + bulVx[ib]
+        bulY[ib] = bulY[ib] + bulVy[ib]
+        var bHit = false
+        // Wall collision
+        for (var jb = 0; jb < platX.size(); ++jb) {
+            if (platType[jb] != 1 && platType[jb] != 2) {
+                if (overlaps(bulX[ib], bulY[ib], bulW, bulH, platX[jb], platY[jb], platW[jb], platH[jb])) {
+                    bHit = true
+                    jb = platX.size()
+                }
+            }
+        }
+        // Enemy collision
+        if (!bHit) {
+            var je = 0
+            while (je < eneX.size()) {
+                if (overlaps(bulX[ib], bulY[ib], bulW, bulH, eneX[je], eneY[je], eneW[je], eneH[je])) {
+                    addPopup(eneX[je], eneY[je], 100)
+                    triggerShake(2.0)
+                    for (var kp = 0; kp < 5; ++kp) { addParticle(bulX[ib], bulY[ib], 255, 0, 255) }
+                    eneType.erase_at(je)
+                    eneX.erase_at(je)
+                    eneY.erase_at(je)
+                    eneW.erase_at(je)
+                    eneH.erase_at(je)
+                    eneVx.erase_at(je)
+                    eneVy.erase_at(je)
+                    eneStartX.erase_at(je)
+                    eneRange.erase_at(je)
+                    eneShoot.erase_at(je)
+                    bHit = true
+                    je = eneX.size()
+                } else {
+                    je = je + 1
+                }
+            }
+        }
+        // Out of bounds
+        if (bulX[ib] > GAME_W + 50.0 || bulX[ib] < -50.0 || bulY[ib] < cameraY - 100.0 || bulY[ib] > cameraY + GAME_H + 100.0) { bHit = true }
+        if (bHit) {
+            bulX.erase_at(ib)
+            bulY.erase_at(ib)
+            bulVx.erase_at(ib)
+            bulVy.erase_at(ib)
+        } else {
+            ib = ib + 1
+        }
+    }
+
+    // ---- ENEMY LOGIC ----
+    var ie = 0
+    while (ie < eneX.size()) {
+        var et = eneType[ie]
+        if (et == 0) {
+            // Patrol
+            eneX[ie] = eneX[ie] + eneVx[ie]
+            if (eneX[ie] > eneStartX[ie] + eneRange[ie] || eneX[ie] < eneStartX[ie] - eneRange[ie]) {
+                eneVx[ie] = -eneVx[ie]
+            }
+        } else if (et == 1) {
+            // Bat: chase within range
+            var bdx = px - eneX[ie]
+            var bdy = py - eneY[ie]
+            var bdist = sqrt(bdx * bdx + bdy * bdy)
+            if (bdist > 0.001 && bdist < 250.0) {
+                eneX[ie] = eneX[ie] + (bdx / bdist) * 1.2
+                eneY[ie] = eneY[ie] + (bdy / bdist) * 1.2
+            }
+        } else if (et == 2) {
+            // Turret: shoot periodically
+            eneShoot[ie] = eneShoot[ie] + 1.0
+            if (eneShoot[ie] > 90.0) {
+                var tdx = px - eneX[ie]
+                var tdy = py - eneY[ie]
+                var tdist = sqrt(tdx * tdx + tdy * tdy)
+                if (tdist > 0.001 && tdist < 300.0) {
+                    ebulX.push_back(eneX[ie] + eneW[ie] / 2.0 - 3.0)
+                    ebulY.push_back(eneY[ie] + eneH[ie] / 2.0 - 3.0)
+                    ebulVx.push_back((tdx / tdist) * ENEMY_BULLET_SPEED)
+                    ebulVy.push_back((tdy / tdist) * ENEMY_BULLET_SPEED)
+                }
+                eneShoot[ie] = 0.0
+            }
+        }
+
+        // Player - enemy collision
+        if (overlaps(px, py, pW, pH, eneX[ie], eneY[ie], eneW[ie], eneH[ie])) {
+            if (pvy > 0.0 && py + pH < eneY[ie] + eneH[ie] / 2.0 + 5.0 && et != 2) {
+                // Stomp kill
+                pvy = BOUNCE_FORCE; pJumps = 1
+                addPopup(eneX[ie], eneY[ie], 100)
+                triggerShake(2.0)
+                for (var ks = 0; ks < 5; ++ks) { addParticle(eneX[ie] + 10.0, eneY[ie] + 10.0, 255, 0, 255) }
+                eneType.erase_at(ie)
+                eneX.erase_at(ie)
+                eneY.erase_at(ie)
+                eneW.erase_at(ie)
+                eneH.erase_at(ie)
+                eneVx.erase_at(ie)
+                eneVy.erase_at(ie)
+                eneStartX.erase_at(ie)
+                eneRange.erase_at(ie)
+                eneShoot.erase_at(ie)
+            } else {
+                loseLife()
+                ie = eneX.size()
+            }
+        } else {
+            ie = ie + 1
+        }
+    }
+
+    // ---- ENEMY BULLETS ----
+    var ieb = 0
+    while (ieb < ebulX.size()) {
+        ebulX[ieb] = ebulX[ieb] + ebulVx[ieb]
+        ebulY[ieb] = ebulY[ieb] + ebulVy[ieb]
+        var ebHit = false
+        for (var jeb = 0; jeb < platX.size(); ++jeb) {
+            if (platType[jeb] != 1 && platType[jeb] != 2) {
+                if (overlaps(ebulX[ieb], ebulY[ieb], ebulW, ebulH, platX[jeb], platY[jeb], platW[jeb], platH[jeb])) {
+                    ebHit = true
+                    jeb = platX.size()
+                }
+            }
+        }
+        if (overlaps(ebulX[ieb], ebulY[ieb], ebulW, ebulH, px, py, pW, pH)) {
+            loseLife()
+            ebHit = true
+        }
+        if (ebulX[ieb] > GAME_W + 50.0 || ebulX[ieb] < -50.0 || ebulY[ieb] < cameraY - 100.0 || ebulY[ieb] > cameraY + GAME_H + 100.0) { ebHit = true }
+        if (ebHit) {
+            ebulX.erase_at(ieb)
+            ebulY.erase_at(ieb)
+            ebulVx.erase_at(ieb)
+            ebulVy.erase_at(ieb)
+        } else {
+            ieb = ieb + 1
+        }
+    }
+
+    // ---- LAVA ----
+    lavaY = lavaY - levelLavaSpeed
+    if (py + pH > lavaY) { loseLife() }
+
+    // ---- GOAL COLLISION ----
+    if (gameState == 2) {
+        var mapData2 = LEVEL1_MAP
+        if (currentLevel == 1) { mapData2 = LEVEL2_MAP }
+        else if (currentLevel == 2) { mapData2 = LEVEL3_MAP }
+        var mapH2 = mapData2.size()
+        var startY2 = -(mapH2 * TILE_SIZE) + GAME_H
+        var goalX = 283.0
+        var goalY = startY2 + 2 * TILE_SIZE + 2.0
+        var goalW = 22.0
+        var goalH = 22.0
+        if (overlaps(px, py, pW, pH, goalX, goalY, goalW, goalH)) {
+            var justFinished = currentLevel
+            currentLevel = currentLevel + 1
+            if (currentLevel >= 3) {
+                initStory(STORY_VICTORY, true, false)
+            } else if (justFinished == 0) {
+                initStory(STORY_AFTER1, false, false)
+            } else if (justFinished == 1) {
+                initStory(STORY_AFTER2, false, false)
+            } else {
+                resetLevel()
+            }
+        }
+    }
+
+    // ---- SCREEN SHAKE DECAY ----
+    if (shakeMag > 0.1) {
+        shakeX = (love.math.random() - 0.5) * 2.0 * shakeMag
+        shakeY = (love.math.random() - 0.5) * 2.0 * shakeMag
+        shakeMag = shakeMag * 0.85
+    } else {
+        shakeX = 0.0; shakeY = 0.0; shakeMag = 0.0
+    }
+
+    if (damageFlashTimer > 0) { damageFlashTimer = damageFlashTimer - 1 }
+
+    // ---- LAVA BUBBLES ----
+    if (love.math.random() < 0.3 && lbX.size() < MAX_LAVA_BUBBLES) {
+        lbX.push_back(love.math.random() * GAME_W)
+        lbY.push_back(lavaY)
+        lbR.push_back(2.0 + love.math.random() * 4.0)
+        lbLife.push_back(20 + to_int(love.math.random() * 30.0))
+        lbSpeed.push_back(0.5 + love.math.random() * 1.5)
+    }
+    var ilb = 0
+    while (ilb < lbX.size()) {
+        lbY[ilb] = lbY[ilb] - lbSpeed[ilb]
+        lbLife[ilb] = lbLife[ilb] - 1
+        if (lbLife[ilb] <= 0) {
+            lbX.erase_at(ilb)
+            lbY.erase_at(ilb)
+            lbR.erase_at(ilb)
+            lbLife.erase_at(ilb)
+            lbSpeed.erase_at(ilb)
+        } else {
+            ilb = ilb + 1
+        }
+    }
+
+    // ---- CAMERA ----
+    var targetCamY = py - GAME_H * 0.6
+    cameraY = cameraY + (targetCamY - cameraY) * 0.1
+    if (cameraY > lavaY - GAME_H + 100.0) { cameraY = lavaY - GAME_H + 100.0 }
+    cameraY = floor(cameraY)
+}
+
+// ---- UPDATE ----
+def update(dt) {
+    frameCount = frameCount + 1
+    blinkTimer = frameCount
+
+    updateInput()
+
+    if (gameState == 2) {
+        updatePhysics()
+    } else if (gameState == 1) {
+        // Story screen update
+        storyFrameCount = storyFrameCount + 1
+        if (storyLineIdx < storyQueue.size()) {
+            if (storyFrameCount % 2 == 0) {
+                var line = storyQueue[storyLineIdx]
+                if (storyCharIdx < line.size()) {
+                    storyFullText = storyFullText + line.substr(storyCharIdx, 1)
+                    storyCharIdx = storyCharIdx + 1
+                } else {
+                    storyFullText = storyFullText + "\n"
+                    storyLineIdx = storyLineIdx + 1
+                    storyCharIdx = 0
+                }
+            }
+        }
+        // Skip / advance
+        var skipPressed = keyShoot || (jumpBufferFrames > 0)
+        if (skipPressed) {
+            if (storyLineIdx < storyQueue.size()) {
+                // Skip to end of text
+                while (storyLineIdx < storyQueue.size()) {
+                    var ln = storyQueue[storyLineIdx]
+                    var remaining = ""
+                    var si = storyCharIdx
+                    while (si < ln.size()) {
+                        remaining = remaining + ln.substr(si, 1)
+                        si = si + 1
+                    }
+                    storyFullText = storyFullText + remaining + "\n"
+                    storyLineIdx = storyLineIdx + 1
+                    storyCharIdx = 0
+                }
+            } else {
+                // Advance to next state
+                if (storyIsVictory) {
+                    gameState = 4
+                } else if (storyIsIntro) {
+                    resetLevel()
+                } else {
+                    resetLevel()
+                }
+            }
+            jumpBufferFrames = 0
+            keyShootPrev = true
+        }
+    } else {
+        // START, GAMEOVER, WIN: any button press
+        var anyPressed = keyShoot || (jumpBufferFrames > 0)
+        if (anyPressed) {
+            if (gameState == 0) {
+                initStory(STORY_INTRO, false, true)
+            } else if (gameState == 3) {
+                // Game over: restart with full reset
+                score = 0
+                currentLevel = 0
+                lives = 5
+                resetLevel()
+                gameState = 0
+            } else if (gameState == 4) {
+                score = 0
+                currentLevel = 0
+                gameState = 0
+            }
+            jumpBufferFrames = 0
+            keyShootPrev = true
+        }
+
+        // Update title embers
+        if (gameState == 0) {
+            if (love.math.random() < 0.4 && embX.size() < 80) {
+                embX.push_back(love.math.random() * GAME_W)
+                embY.push_back(GAME_H + 5.0)
+                embVx.push_back((love.math.random() - 0.5) * 0.5)
+                embVy.push_back(-(1.0 + love.math.random() * 2.0))
+                embLife.push_back(to_int(60.0 + love.math.random() * 60.0))
+                embSize.push_back(2.0 + love.math.random() * 3.0)
+            }
+            var iem = 0
+            while (iem < embX.size()) {
+                embX[iem] = embX[iem] + embVx[iem]
+                embY[iem] = embY[iem] + embVy[iem]
+                embLife[iem] = embLife[iem] - 1
+                if (embLife[iem] <= 0) {
+                    embX.erase_at(iem)
+                    embY.erase_at(iem)
+                    embVx.erase_at(iem)
+                    embVy.erase_at(iem)
+                    embLife.erase_at(iem)
+                    embSize.erase_at(iem)
+                } else {
+                    iem = iem + 1
+                }
+            }
+        }
+    }
+}
+
+// ---- DRAW BACKGROUND ----
+def drawBackground() {
+    var bgSz = 64
+    var startRow = to_int(floor((cameraY * 0.5) / bgSz)) - 1
+    for (var by = startRow; by < startRow + 10; ++by) {
+        for (var bx = 0; bx < 11; ++bx) {
+            var bsx = bx * bgSz
+            var bsy = (by * bgSz) - to_int(cameraY * 0.5)
+            drawSprite(BG_ART, BG_COLS, bsx, bsy, 8)
+        }
+    }
+}
+
+// ---- DRAW GAMEPLAY ----
+def drawGame() {
+    drawBackground()
+
+    // Apply shake offset
+    var ox = to_int(shakeX)
+    var oy = to_int(shakeY)
+
+    // ---- PLATFORMS ----
+    for (var ip = 0; ip < platX.size(); ++ip) {
+        var sy = to_int(platY[ip] - cameraY) + oy
+        var sx = to_int(platX[ip]) + ox
+        if (sy > -TILE_SIZE && sy < GAME_H + TILE_SIZE) {
+            var pt = platType[ip]
+            if (pt == 0) {
+                drawSprite(BRICK_ART, BRICK_COLS, sx, sy, TILE_SIZE / 8)
+            } else if (pt == 1) {
+                drawSprite(STONE_ART, STONE_COLS, sx, sy, TILE_SIZE / 8)
+            } else if (pt == 2) {
+                drawSprite(CHEST_ART, CHEST_COLS, sx, sy, TILE_SIZE / 8)
+            }
+        }
+    }
+
+    // ---- PARTICLES ----
+    for (var ipar = 0; ipar < parX.size(); ++ipar) {
+        love.graphics.setColor(parR[ipar], parG[ipar], parB[ipar])
+        love.graphics.rectangle("fill", to_int(parX[ipar]) + ox, to_int(parY[ipar] - cameraY) + oy, 3, 3)
+    }
+
+    // ---- GEMS ----
+    for (var igd = 0; igd < gemX.size(); ++igd) {
+        var gsy = to_int(gemY[igd] - cameraY) + oy
+        if (gsy > -20 && gsy < GAME_H + 20) {
+            drawSprite(GEM_ART, GEM_COLS, to_int(gemX[igd]) + ox, gsy, gemW / 8)
+        }
+    }
+
+    // ---- BULLETS ----
+    for (var ibd = 0; ibd < bulX.size(); ++ibd) {
+        drawSprite(BULLET_ART, BULLET_COLS, to_int(bulX[ibd]) + ox, to_int(bulY[ibd] - cameraY) + oy, 1)
+    }
+    for (var iebd = 0; iebd < ebulX.size(); ++iebd) {
+        drawSprite(EBULLET_ART, EBULLET_COLS, to_int(ebulX[iebd]) + ox, to_int(ebulY[iebd] - cameraY) + oy, 1)
+    }
+
+    // ---- ENEMIES ----
+    for (var ied = 0; ied < eneX.size(); ++ied) {
+        var esx = to_int(eneX[ied]) + ox
+        var esy = to_int(eneY[ied] - cameraY) + oy
+        if (esy > -20 && esy < GAME_H + 20) {
+            var et2 = eneType[ied]
+            var flip = false
+            if (et2 == 0 && eneVx[ied] > 0.0) { flip = true }
+            if (et2 == 1 && px > eneX[ied]) { flip = true }
+            if (et2 == 0) {
+                if (flip) { drawSpriteFlipped(PATROL_ART, PATROL_COLS, esx, esy, SPRITE_SIZE / 8) }
+                else { drawSprite(PATROL_ART, PATROL_COLS, esx, esy, SPRITE_SIZE / 8) }
+            } else if (et2 == 1) {
+                if (flip) { drawSpriteFlipped(BAT_ART, BAT_COLS, esx, esy, SPRITE_SIZE / 8) }
+                else { drawSprite(BAT_ART, BAT_COLS, esx, esy, SPRITE_SIZE / 8) }
+            } else if (et2 == 2) {
+                drawSprite(TURRET_ART, TURRET_COLS, esx, esy, SPRITE_SIZE / 8)
+            }
+        }
+    }
+
+    // ---- ANCHOR ROPE + HEAD ----
+    if (ancActive || ancAttached) {
+        love.graphics.setColor(255, 255, 255, 128)
+        love.graphics.line(
+            to_int(px + pW / 2.0) + ox,
+            to_int(py + pH / 2.0 - cameraY) + oy,
+            to_int(ancX + ancW / 2.0) + ox,
+            to_int(ancY + ancH / 2.0 - cameraY) + oy
+        )
+        drawSprite(ANCHOR_ART, ANCHOR_COLS, to_int(ancX) + ox, to_int(ancY - cameraY) + oy, ancW / 8)
+    }
+
+    // ---- PLAYER ----
+    var psx = to_int(px) + ox
+    var psy = to_int(py - cameraY) + oy
+    if (!pFacingRight) {
+        drawSpriteFlipped(MAGE_ART, MAGE_COLS, psx, psy, pW / 8)
+    } else {
+        drawSprite(MAGE_ART, MAGE_COLS, psx, psy, pW / 8)
+    }
+
+    // ---- GOAL PORTAL ----
+    var mapDataG = LEVEL1_MAP
+    if (currentLevel == 1) { mapDataG = LEVEL2_MAP }
+    else if (currentLevel == 2) { mapDataG = LEVEL3_MAP }
+    var mapHG = mapDataG.size()
+    var startYG = -(mapHG * TILE_SIZE) + GAME_H
+    var goalSY = to_int(startYG + 2 * TILE_SIZE + 2.0 - cameraY) + oy
+    drawSprite(GOAL_ART, GOAL_COLS, 283 + ox, goalSY, 3)
+
+    // ---- LAVA ----
+    var lavaScreenY = to_int(lavaY - cameraY)
+    // Wavy lava surface
+    love.graphics.setColor(255, 100, 0, 228)
+    for (var wx = 0; wx < GAME_W; wx = wx + 4) {
+        var waveOff = to_int(sin(frameCount * 0.05 + wx * 0.02) * 4.0 + sin(frameCount * 0.085 + wx * 0.035) * 3.0)
+        var wy = lavaScreenY + waveOff
+        love.graphics.rectangle("fill", wx, wy, 4, GAME_H - wy + 10)
+    }
+    // Bright top edge
+    love.graphics.setColor(255, 255, 100)
+    for (var wx2 = 0; wx2 < GAME_W; wx2 = wx2 + 4) {
+        var waveOff2 = to_int(sin(frameCount * 0.05 + wx2 * 0.02) * 4.0 + sin(frameCount * 0.085 + wx2 * 0.035) * 3.0)
+        love.graphics.rectangle("fill", wx2, lavaScreenY + waveOff2, 4, 2)
+    }
+    // Lava bubbles
+    for (var ilbd = 0; ilbd < lbX.size(); ++ilbd) {
+        var balpha = to_int(255.0 * lbLife[ilbd] / 50.0)
+        if (balpha > 255) { balpha = 255 }
+        if (balpha < 0) { balpha = 0 }
+        love.graphics.setColor(255, 200, 50, balpha)
+        love.graphics.circle("fill", to_int(lbX[ilbd]), to_int(lbY[ilbd] - cameraY), to_int(lbR[ilbd]))
+    }
+
+    // ---- DAMAGE FLASH ----
+    if (damageFlashTimer > 0) {
+        var fa = to_int(255.0 * 0.3 * damageFlashTimer / 6.0)
+        love.graphics.setColor(200, 0, 0, fa)
+        love.graphics.rectangle("fill", 0, 0, GAME_W, GAME_H)
+    }
+
+    // ---- SCORE POPUPS ----
+    for (var ipd = 0; ipd < popX.size(); ++ipd) {
+        var palpha = to_int(255.0 * popLife[ipd] / 40.0)
+        love.graphics.setColor(255, 255, 0, palpha)
+        love.graphics.print(popText[ipd], to_int(popX[ipd] + 10.0), to_int(popY[ipd] - cameraY))
+    }
+
+    // ---- HUD ----
+    love.graphics.setColor(0, 0, 0, 180)
+    love.graphics.rectangle("fill", 0, 0, GAME_W, 26)
+    love.graphics.setColor(255, 255, 255)
+    love.graphics.print("SCORE: " + to_string(score), 10, 8)
+    love.graphics.print("LIVES: " + to_string(lives), 140, 8)
+    var levelName = "THE OVERGROWN DEPTHS"
+    if (currentLevel == 1) { levelName = "THE FROZEN ARCHIVE" }
+    else if (currentLevel == 2) { levelName = "THE LIVING CORE" }
+    love.graphics.print(levelName, 280, 8)
+
+    // ---- CRT SCANLINES (sparse for performance) ----
+    love.graphics.setColor(0, 0, 0, 20)
+    var sy2 = 0
+    while (sy2 < GAME_H) {
+        love.graphics.rectangle("fill", 0, sy2, GAME_W, 1)
+        sy2 = sy2 + 8
+    }
+
+    // ---- VIGNETTE ----
+    var vw = 60
+    // Left
+    love.graphics.setColor(0, 0, 0, 120)
+    love.graphics.rectangle("fill", 0, 0, vw, GAME_H)
+    // Right
+    love.graphics.rectangle("fill", GAME_W - vw, 0, vw, GAME_H)
+    // Top
+    love.graphics.rectangle("fill", 0, 0, GAME_W, vw)
+    // Bottom
+    love.graphics.rectangle("fill", 0, GAME_H - vw, GAME_W, vw)
+}
+
+// ---- DRAW ----
+def draw() {
+    love.graphics.clear(15, 15, 25)
+
+    if (gameState == 2) {
+        drawGame()
+    } else if (gameState == 1) {
+        // Story screen
+        love.graphics.setColor(0, 0, 0, 234)
+        love.graphics.rectangle("fill", 0, 0, GAME_W, GAME_H)
+
+        var storyLines = Vector()
+        var curLine = ""
+        var si2 = 0
+        while (si2 < storyFullText.size()) {
+            var ch2 = storyFullText.substr(si2, 1)
+            if (ch2 == "\n") {
+                storyLines.push_back(curLine)
+                curLine = ""
+            } else {
+                curLine = curLine + ch2
+            }
+            si2 = si2 + 1
+        }
+        if (curLine.size() > 0) { storyLines.push_back(curLine) }
+
+        var lineH = 22
+        var totalH = storyLines.size() * lineH
+        var startYS = (GAME_H - totalH) / 2 - 40
+
+        for (var sl = 0; sl < storyLines.size(); ++sl) {
+            love.graphics.setColor(200, 180, 255)
+            var lineY = startYS + sl * lineH
+            var lineX = GAME_W / 2 - storyLines[sl].size() * 4
+            love.graphics.print(storyLines[sl], lineX, lineY)
+        }
+
+        if (storyLineIdx >= storyQueue.size()) {
+            // Show "press to continue"
+            if ((blinkTimer / 30) % 2 == 0) {
+                love.graphics.setColor(255, 170, 0)
+                love.graphics.print("Press A to continue...", GAME_W / 2 - 112, GAME_H - 50)
+            }
+        } else {
+            // Blinking cursor
+            if ((blinkTimer / 15) % 2 == 0) {
+                love.graphics.setColor(255, 170, 0)
+                love.graphics.print("_", GAME_W / 2, startYS + (storyLines.size() - 1) * lineH)
+            }
+        }
+
+        // Scanlines on story screen
+        love.graphics.setColor(0, 0, 0, 25)
+        var ssy = 0
+        while (ssy < GAME_H) {
+            love.graphics.rectangle("fill", 0, ssy, GAME_W, 1)
+            ssy = ssy + 3
+        }
+
+    } else if (gameState == 0) {
+        // START screen
+        love.graphics.setColor(0, 0, 0, 204)
+        love.graphics.rectangle("fill", 0, 0, GAME_W, GAME_H)
+
+        // Title embers
+        for (var iem2 = 0; iem2 < embX.size(); ++iem2) {
+            var ea = to_int(255.0 * embLife[iem2] / 40.0)
+            if (ea > 255) { ea = 255 }
+            if (ea < 0) { ea = 0 }
+            var er = 255
+            var eg = 160
+            var eb2 = 0
+            if (iem2 % 3 == 1) { eg = 200 }
+            if (iem2 % 3 == 2) { er = 255; eg = 100; eb2 = 0 }
+            love.graphics.setColor(er, eg, eb2, ea)
+            love.graphics.rectangle("fill", to_int(embX[iem2]), to_int(embY[iem2]), to_int(embSize[iem2]), to_int(embSize[iem2]))
+        }
+
+        // Title
+        love.graphics.setColor(255, 255, 255)
+        love.graphics.print("NANO WIZARDS", GAME_W / 2 - 84, GAME_H / 2 - 60)
+        love.graphics.setColor(255, 200, 100)
+        love.graphics.print("The Obsidian Spire", GAME_W / 2 - 72, GAME_H / 2 - 30)
+        love.graphics.setColor(200, 180, 255, 178)
+        love.graphics.print("The last Nano Wizard ascends", GAME_W / 2 - 108, GAME_H / 2)
+
+        if ((blinkTimer / 30) % 2 == 0) {
+            love.graphics.setColor(255, 170, 0)
+            love.graphics.print("Press A to Begin", GAME_W / 2 - 84, GAME_H / 2 + 40)
+        }
+
+        // Scanlines
+        love.graphics.setColor(0, 0, 0, 25)
+        var tsy = 0
+        while (tsy < GAME_H) {
+            love.graphics.rectangle("fill", 0, tsy, GAME_W, 1)
+            tsy = tsy + 3
+        }
+
+    } else if (gameState == 3) {
+        // GAME OVER
+        love.graphics.setColor(200, 0, 0, 128)
+        love.graphics.rectangle("fill", 0, 0, GAME_W, GAME_H)
+        love.graphics.setColor(255, 255, 255)
+        love.graphics.print("THE SPIRE CLAIMS YOU", GAME_W / 2 - 100, GAME_H / 2 - 30)
+        love.graphics.setColor(200, 180, 255, 204)
+        love.graphics.print("The corruption swallows another soul...", GAME_W / 2 - 148, GAME_H / 2 + 10)
+        love.graphics.setColor(255, 255, 255)
+        love.graphics.print("SCORE: " + to_string(score), GAME_W / 2 - 48, GAME_H / 2 + 50)
+
+        if ((blinkTimer / 30) % 2 == 0) {
+            love.graphics.setColor(255, 170, 0)
+            love.graphics.print("Press A to Retry", GAME_W / 2 - 88, GAME_H / 2 + 90)
+        }
+
+        love.graphics.setColor(0, 0, 0, 25)
+        var gsy = 0
+        while (gsy < GAME_H) {
+            love.graphics.rectangle("fill", 0, gsy, GAME_W, 1)
+            gsy = gsy + 3
+        }
+
+    } else if (gameState == 4) {
+        // WIN
+        love.graphics.setColor(20, 0, 40, 217)
+        love.graphics.rectangle("fill", 0, 0, GAME_W, GAME_H)
+        love.graphics.setColor(255, 255, 255)
+        love.graphics.print("FREE AT LAST", GAME_W / 2 - 60, GAME_H / 2 - 50)
+        love.graphics.setColor(200, 180, 255, 204)
+        love.graphics.print("The Obsidian Spire crumbles into dust.", GAME_W / 2 - 148, GAME_H / 2)
+        love.graphics.print("Vael walks into the dawn -- no longer a heart,", GAME_W / 2 - 180, GAME_H / 2 + 24)
+        love.graphics.print("no longer a weapon. Just free.", GAME_W / 2 - 120, GAME_H / 2 + 48)
+        love.graphics.setColor(255, 255, 255)
+        love.graphics.print("FINAL SCORE: " + to_string(score), GAME_W / 2 - 60, GAME_H / 2 + 90)
+
+        if ((blinkTimer / 30) % 2 == 0) {
+            love.graphics.setColor(255, 170, 0)
+            love.graphics.print("Press A to Play Again", GAME_W / 2 - 104, GAME_H / 2 + 130)
+        }
+
+        love.graphics.setColor(0, 0, 0, 25)
+        var wsy = 0
+        while (wsy < GAME_H) {
+            love.graphics.rectangle("fill", 0, wsy, GAME_W, 1)
+            wsy = wsy + 3
+        }
+    }
+}

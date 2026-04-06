@@ -1,20 +1,20 @@
 # Retro Arcade
 
-A collection of retro browser games playable on any device, with native ports for the Miyoo Mini Plus handheld. Installable as a PWA for offline play.
+A collection of retro browser games playable on any device, with TIC-80 ports for the Miyoo Mini Plus handheld. Installable as a PWA for offline play.
 
 ## Games
 
-| Game | Genre | Web | Miyoo |
-|------|-------|:---:|:-----:|
-| Nano Wizards | Platformer | [Play](web/micro/) | [Port](miyoo/micro/) |
-| Neon Defender | Shoot 'em Up | [Play](web/space/) | [Port](miyoo/space/) |
-| Shadow Blade | Action Platformer | [Play](web/shadow/) | [Port](miyoo/shadow/) |
-| Arena Blitz | Twin-Stick Shooter | [Play](web/arena/) | [Port](miyoo/arena/) |
-| Dragon Fury | Beat 'em Up | [Play](web/dragon/) | [Port](miyoo/dragon/) |
-| Pixel Knight | Mario-like Platformer | [Play](web/mariolike/) | [Port](miyoo/mariolike/) |
-| Nova Evader | Bullet Hell | [Play](web/nova/) | — |
-| Chrome Viper | Cyberpunk Shooter | [Play](web/cyber/) | [Port](miyoo/cyber/) |
-| Neon Runner | Cyberpunk Platformer | [Play](web/neon/) | [Port](miyoo/neon/) |
+| Game | Genre | Web | Miyoo (TIC-80) |
+|------|-------|:---:|:--------------:|
+| Nano Wizards | Platformer | [Play](web/micro/) | [Port](tic80/micro/) |
+| Neon Defender | Shoot 'em Up | [Play](web/space/) | [Port](tic80/space/) |
+| Shadow Blade | Action Platformer | [Play](web/shadow/) | [Port](tic80/shadow/) |
+| Arena Blitz | Twin-Stick Shooter | [Play](web/arena/) | [Port](tic80/arena/) |
+| Dragon Fury | Beat 'em Up | [Play](web/dragon/) | [Port](tic80/dragon/) |
+| Pixel Knight | Mario-like Platformer | [Play](web/mariolike/) | [Port](tic80/mariolike/) |
+| Nova Evader | Bullet Hell | [Play](web/nova/) | [Port](tic80/nova/) |
+| Chrome Viper | Cyberpunk Shooter | [Play](web/cyber/) | [Port](tic80/cyber/) |
+| Neon Runner | Cyberpunk Platformer | [Play](web/neon/) | [Port](tic80/neon/) |
 
 ### Screenshots
 
@@ -29,12 +29,12 @@ A collection of retro browser games playable on any device, with native ports fo
 
 ## Features
 
-- Single-file HTML5 Canvas games — no dependencies, no build step
-- Fullscreen mobile with floating touch joystick (Brawl Stars-style)
+- Single-file HTML5 Canvas games -- no dependencies, no build step
+- Fullscreen mobile with floating touch joystick
 - Installable as a PWA with offline caching
 - Procedural pixel-art sprites and Web Audio API sound effects
 - CRT scanline overlay and retro aesthetic
-- Miyoo Mini Plus native ports in Rust/Macroquad
+- All 9 games ported to TIC-80 Lua for the Miyoo Mini Plus (via tic80_libretro RetroArch core)
 
 ## Quick Start
 
@@ -44,34 +44,33 @@ cd web && python3 -m http.server 8000
 # Open http://localhost:8000
 ```
 
+### Build TIC-80 cartridges
+```bash
+python3 tic80/build_tic.py --all          # build all 9 games
+python3 tic80/build_tic.py micro          # build one game
+```
+
+No TIC-80 PRO CLI needed -- `build_tic.py` generates `.tic` binary cartridges directly from Lua source.
+
+### Deploy to Miyoo Mini Plus (TIC-80)
+```bash
+sh miyoo/install/install.sh              # build & deploy all games
+sh miyoo/install/install.sh --run micro  # build, deploy, and launch one
+```
+
+Requires `sshpass` and the Miyoo on the network (OnionOS with SSH enabled). Cartridges are deployed to `/mnt/SDCARD/Roms/TIC/` and run via the `tic80_libretro.so` RetroArch core.
+
 ### Deploy with Docker + Tailscale
 ```bash
 cp .env.example .env  # Add your TS_AUTHKEY
 ./scripts/deploy.sh
 ```
 
-### Build Miyoo ports
-```bash
-./scripts/build-miyoo.sh all --native    # Desktop testing
-./scripts/build-miyoo.sh all --arm       # Cross-compile for Miyoo
-```
-
-## Scripts
-
-| Script | Description |
-|--------|-------------|
-| `scripts/deploy.sh` | Build & deploy Docker containers |
-| `scripts/status.sh` | Check deployment health |
-| `scripts/logs.sh` | View container logs |
-| `scripts/test.sh` | Run Playwright smoke tests |
-| `scripts/check-rust.sh` | Cargo check all Miyoo ports |
-| `scripts/build-miyoo.sh` | Build Miyoo binaries |
-
-## Architecture
+## Directory Structure
 
 ```
 retrogames/
-├── web/              # Browser games (HTML5 Canvas)
+├── web/              # Browser games (HTML5 Canvas, single-file)
 │   ├── index.html    # Arcade launcher
 │   ├── micro/        # Nano Wizards
 │   ├── space/        # Neon Defender
@@ -84,58 +83,87 @@ retrogames/
 │   ├── neon/         # Neon Runner
 │   ├── sw.js         # Service worker (PWA)
 │   └── manifest.json # PWA manifest
-├── miyoo/            # Miyoo Mini Plus ports (Rust/Macroquad)
+├── tic80/            # TIC-80 Miyoo ports (primary Miyoo target)
+│   ├── build_tic.py  # Cartridge builder (Lua -> .tic binary)
+│   ├── micro/        # Nano Wizards
+│   ├── space/        # Neon Defender
+│   ├── shadow/       # Shadow Blade
+│   ├── arena/        # Arena Blitz
+│   ├── dragon/       # Dragon Fury
+│   ├── mariolike/    # Pixel Knight
+│   ├── nova/         # Nova Evader
+│   ├── cyber/        # Chrome Viper
+│   ├── neon/         # Neon Runner
+│   ├── imgs/         # TIC-80 game screenshots
+│   └── test/         # TIC-80 hello world test
+├── miyoo/            # Miyoo tooling + experimental Rust SDL2 ports
+│   ├── install/      # OnionOS deploy scripts (install.sh)
+│   ├── retro-sdl2/   # Shared Rust SDL2 rendering crate
+│   ├── micro/        # Nano Wizards Rust SDL2 port (experimental)
+│   └── LEARN_RUST.md # Rust tutorial (2943 lines)
+├── chailove/         # Experimental ChaiLove/ChaiScript ports
+│   └── LEARN_CHAILOVE.md
+├── zig/              # Experimental Zig SDL2 ports
+│   ├── common/       # Shared Zig SDL2 module
+│   ├── micro/        # Nano Wizards Zig port
+│   └── LEARN_ZIG.md  # Zig tutorial (2487 lines)
+├── miniquad/         # Original Rust Macroquad ports (archived)
 ├── scripts/          # Automation scripts
-├── docs/             # Comprehensive documentation
+├── docs/             # Guides and post-mortems
 ├── .claude/          # Claude Code skills & agents
 ├── Dockerfile        # busybox httpd static server
 └── docker-compose.yml # Tailscale + app stack
 ```
 
-## Documentation
+## Scripts
 
-Detailed guides in [`docs/`](docs/):
-
-- [Architecture](docs/architecture.md) — system design and data flow
-- [Game Engine Patterns](docs/game-engine-patterns.md) — game loop, sprites, physics
-- [Deployment Guide](docs/deployment-guide.md) — Docker + Tailscale setup
-- [Adding Games](docs/adding-games.md) — step-by-step tutorial
-- [Mobile Optimization](docs/mobile-optimization.md) — touch controls, viewport
-- [Miyoo Porting Guide](docs/miyoo-porting-guide.md) — Rust/Macroquad patterns
-- [Skills & Agents](docs/skills-and-agents.md) — Claude Code automation
-
-## Building for Miyoo Mini Plus
-
-Each game under `miyoo/<game>/` is an independent Rust/Macroquad project targeting `armv7-unknown-linux-gnueabihf`.
-
-```bash
-rustup target add armv7-unknown-linux-gnueabihf
-sudo apt-get install gcc-arm-linux-gnueabihf
-
-cd miyoo/<game>
-CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER=arm-linux-gnueabihf-gcc \
-  cargo build --release --target armv7-unknown-linux-gnueabihf
-```
-
-## CI/CD
-
-GitHub Actions (`.github/workflows/build-and-publish-release.yml`) auto-discovers `miyoo/*/` subdirectories, cross-compiles each in parallel, and publishes to GitHub Releases on `v*` tags.
-
-```bash
-git tag v2.1.0
-git push origin v2.1.0
-```
+| Script | Description |
+|--------|-------------|
+| `tic80/build_tic.py` | Build `.tic` cartridges from Lua sources |
+| `miyoo/install/install.sh` | Build and deploy cartridges to Miyoo via SCP |
+| `scripts/deploy.sh` | Build and deploy Docker containers |
+| `scripts/status.sh` | Check deployment health |
+| `scripts/logs.sh` | View container logs |
+| `scripts/test.sh` | Run Playwright smoke tests |
+| `scripts/check-rust.sh` | Cargo check all Rust ports |
+| `scripts/build-miyoo.sh` | Cross-compile Rust SDL2 ports |
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
 | Browser games | HTML5 Canvas, Web Audio API, vanilla JS |
-| Miyoo ports | Rust 2024, Macroquad 0.4.14 |
+| Miyoo ports | TIC-80 Lua via tic80_libretro RetroArch core |
+| Experimental native | Rust 2024 + SDL2, Zig + SDL2 |
 | Deploy | Docker (busybox httpd), Tailscale Serve |
 | CI/CD | GitHub Actions |
 | Testing | Playwright (headless Chromium) |
 | PWA | Service worker, Web App Manifest |
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](docs/architecture.md) | System design and data flow |
+| [Game Engine Patterns](docs/game-engine-patterns.md) | Game loop, sprites, physics |
+| [Deployment Guide](docs/deployment-guide.md) | Docker + Tailscale setup |
+| [Adding Games](docs/adding-games.md) | Step-by-step tutorial |
+| [Mobile Optimization](docs/mobile-optimization.md) | Touch controls, viewport |
+| [Miyoo Porting Guide](docs/miyoo-porting-guide.md) | ChaiLove and native patterns |
+| [Skills and Agents](docs/skills-and-agents.md) | Claude Code automation |
+| [AAR: Miyoo Porting](docs/AAR-miyoo-porting.md) | Post-mortem: 4 approaches tried |
+| [Learn Rust](miyoo/LEARN_RUST.md) | Rust tutorial (2943 lines) |
+| [Learn Zig](zig/LEARN_ZIG.md) | Zig tutorial (2487 lines) |
+| [Learn ChaiLove](chailove/LEARN_CHAILOVE.md) | ChaiLove tutorial |
+
+## CI/CD
+
+GitHub Actions auto-discovers `tic80/*/` directories, builds `.tic` cartridges with `build_tic.py`, and publishes to GitHub Releases on `v*` tags. Rust cross-compilation runs when `miyoo/` files change.
+
+```bash
+git tag v3.0.0
+git push origin v3.0.0
+```
 
 ## License
 

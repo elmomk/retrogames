@@ -6,14 +6,16 @@ on:
       - 'v*'
     paths:
       - 'miyoo/**'
+      - 'tic80/**'
   workflow_dispatch:
 
 jobs:
-  check-miyoo-changes:
-    name: Check Miyoo Changes
+  check-changes:
+    name: Check Changes
     runs-on: ubuntu-latest
     outputs:
-      should_run: ${{ steps.filter.outputs.should_run }}
+      miyoo_should_run: ${{ steps.filter.outputs.miyoo_should_run }}
+      tic80_should_run: ${{ steps.filter.outputs.tic80_should_run }}
 
     steps:
       - name: Checkout Code
@@ -21,31 +23,43 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Detect Miyoo Changes
+      - name: Detect Changes
         id: filter
         shell: bash
         run: |
           set -euo pipefail
 
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "miyoo_should_run=true" >> "$GITHUB_OUTPUT"
+            echo "tic80_should_run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
           changed_files="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA")"
+
           if grep -q '^miyoo/' <<< "$changed_files"; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "miyoo_should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No miyoo/ changes detected for $GITHUB_SHA"
+            echo "miyoo_should_run=false" >> "$GITHUB_OUTPUT"
           fi
 
-          echo "No miyoo/ changes detected for $GITHUB_SHA"
-          echo "should_run=false" >> "$GITHUB_OUTPUT"
+          if grep -q '^tic80/' <<< "$changed_files"; then
+            echo "tic80_should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No tic80/ changes detected for $GITHUB_SHA"
+            echo "tic80_should_run=false" >> "$GITHUB_OUTPUT"
+          fi
 
-  discover-games:
+  # ---------------------------------------------------------------------------
+  # Miyoo (Rust/Macroquad) pipeline
+  # ---------------------------------------------------------------------------
+
+  discover-miyoo-games:
     name: Discover Miyoo Games
     runs-on: ubuntu-latest
-    needs: check-miyoo-changes
-    if: needs.check-miyoo-changes.outputs.should_run == 'true'
+    needs: check-changes
+    if: needs.check-changes.outputs.miyoo_should_run == 'true'
     outputs:
       matrix: ${{ steps.discover.outputs.matrix }}
       game_count: ${{ steps.discover.outputs.game_count }}
@@ -80,10 +94,10 @@ jobs:
   build-miyoo:
     name: Build ${{ matrix.game }} Miyoo Binary
     runs-on: ubuntu-latest
-    needs: discover-games
+    needs: discover-miyoo-games
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.discover-games.outputs.matrix) }}
+      matrix: ${{ fromJson(needs.discover-miyoo-games.outputs.matrix) }}
 
     steps:
       - name: Checkout Code
@@ -170,11 +184,109 @@ jobs:
           path: ${{ steps.package.outputs.artifact_path }}
           if-no-files-found: error
 
+  # ---------------------------------------------------------------------------
+  # TIC-80 cartridge pipeline
+  # ---------------------------------------------------------------------------
+
+  discover-tic80-games:
+    name: Discover TIC-80 Games
+    runs-on: ubuntu-latest
+    needs: check-changes
+    if: needs.check-changes.outputs.tic80_should_run == 'true'
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
+      game_count: ${{ steps.discover.outputs.game_count }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Discover Game Directories
+        id: discover
+        shell: bash
+        run: |
+          python3 <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import pathlib
+          import sys
+
+          tic80_root = pathlib.Path("tic80")
+          if not tic80_root.is_dir():
+              print("::error::Expected a tic80 directory containing one subdirectory per game.")
+              sys.exit(1)
+
+          games = sorted(path.name for path in tic80_root.iterdir() if path.is_dir())
+          if not games:
+              print("::error::No game directories found under tic80/.")
+              sys.exit(1)
+
+          print(f"matrix={json.dumps({'game': games})}")
+          print(f"game_count={len(games)}")
+          PY
+
+  build-tic80:
+    name: Build ${{ matrix.game }} TIC-80 Cartridge
+    runs-on: ubuntu-latest
+    needs: discover-tic80-games
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.discover-tic80-games.outputs.matrix) }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build TIC-80 Cartridge
+        id: package
+        shell: bash
+        env:
+          GAME_NAME: ${{ matrix.game }}
+        run: |
+          set -euo pipefail
+
+          game_dir="tic80/$GAME_NAME"
+          lua_file="$game_dir/${GAME_NAME}.lua"
+
+          if [[ ! -f "$lua_file" ]]; then
+            echo "::error::Expected $lua_file for game $GAME_NAME"
+            exit 1
+          fi
+
+          python3 tic80/build_tic.py "$GAME_NAME"
+
+          built_cartridge="$game_dir/${GAME_NAME}.tic"
+          if [[ ! -f "$built_cartridge" ]]; then
+            echo "::error::Built cartridge not found at $built_cartridge"
+            exit 1
+          fi
+
+          staged_dir="$RUNNER_TEMP/release-assets"
+          mkdir -p "$staged_dir"
+          cp "$built_cartridge" "$staged_dir/${GAME_NAME}.tic"
+
+          echo "artifact_path=$staged_dir/${GAME_NAME}.tic" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tic80-${{ matrix.game }}
+          path: ${{ steps.package.outputs.artifact_path }}
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # Publish release (collects artifacts from both pipelines)
+  # ---------------------------------------------------------------------------
+
   publish-release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
-    needs: build-miyoo
-    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build-miyoo, build-tic80]
+    if: |
+      always() &&
+      startsWith(github.ref, 'refs/tags/') &&
+      (needs.build-miyoo.result == 'success' || needs.build-miyoo.result == 'skipped') &&
+      (needs.build-tic80.result == 'success' || needs.build-tic80.result == 'skipped') &&
+      (needs.build-miyoo.result == 'success' || needs.build-tic80.result == 'success')
     permissions:
       contents: write
 
@@ -182,7 +294,7 @@ jobs:
       - name: Download Build Artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: miyoo-*
+          pattern: '{miyoo-*,tic80-*}'
           path: release-artifacts
           merge-multiple: true
 

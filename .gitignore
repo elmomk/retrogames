@@ -11,3 +11,19 @@ node_modules/
 *~
 .DS_Store
 todo/
+
+# Zig build artifacts
+zig/*/.zig-cache/
+zig/*/zig-out/
+
+# Rust build artifacts
+**/target/
+
+# TIC-80 built cartridges (rebuilt from .lua sources)
+tic80/*/*.tic
+
+# Cargo lock files for experimental ports
+miniquad/*/Cargo.lock
+miyoo/*/Cargo.lock
+miyoo/retro-sdl2/Cargo.lock
+

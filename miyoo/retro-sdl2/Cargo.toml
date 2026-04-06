@@ -1,0 +1,7 @@
+[package]
+name = "retro-sdl2"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+sdl2 = { version = "0.37", features = [] }

@@ -4,4 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-macroquad = "0.4.14"
+retro-sdl2 = { path = "../retro-sdl2" }
+sdl2 = { version = "0.37", features = [] }
+fastrand = "2"
+
+[profile.release]
+lto = true
+strip = true
